@@ -156,17 +156,17 @@ export default function HomeRetosScreen() {
 
     if (cargando) {
         return (
-            <View style={[global.container, {alignItems: 'center', justifyContent: 'center'}]}>
+            <View style={[{alignItems: 'center', justifyContent: 'center', flex: 1}]}>
                 <ActivityIndicator size="large"/>
-                <Text style={{marginTop: 12}}>Cargando retos…</Text>
+                <Text style={{marginTop: 20}}>Cargando retos…</Text>
             </View>
         );
     }
 
     if (error) {
         return (
-            <View style={[global.container, {alignItems: 'center', justifyContent: 'center'}]}>
-                <Text style={{marginBottom: 12}}>Uy, se cayó esto: {error}</Text>
+            <View style={[{alignItems: 'center', justifyContent: 'center', flex: 1}]}>
+                <Text style={{marginBottom: 12, paddingHorizontal: 60}}>Uy, se cayó esto: {error}</Text>
                 <Pressable onPress={listarRetos} style={{padding: 12, backgroundColor: '#e5e7eb', borderRadius: 8}}>
                     <Text>Reintentar</Text>
                 </Pressable>
@@ -181,7 +181,7 @@ export default function HomeRetosScreen() {
 
                 <Animated.ScrollView
                     showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: EXTRA_SCROLL_PAD }}  // más espacio vs footer
+                    // contentContainerStyle={{ paddingBottom: EXTRA_SCROLL_PAD }}  // más espacio vs footer
                 >
                     {/* Camino en S */}
                     <View style={{height: totalHeight}}>
