@@ -121,7 +121,7 @@ export default function StoreItemCard({
             <Pressable onPress={onPress}>
                 <View style={s.sectionBar2}/>
 
-                <Pressable style={[s.cardPotenciador, s.shadow, {borderColor: accentColor}]}>
+                <View style={[s.cardPotenciador, s.shadow, {borderColor: accentColor}]}>
 
                     {/* cabecera/badge */}
                     <View style={[s.ribbon, {backgroundColor: accentColor}]}>
@@ -149,7 +149,7 @@ export default function StoreItemCard({
                         </Text>
                         <FontAwesome5 name="chevron-right" size={14} color="#6B7280"/>
                     </View>
-                </Pressable>
+                </View>
             </Pressable>
 
         );
@@ -172,7 +172,6 @@ const s = StyleSheet.create({
         overflow: 'visible',
         alignSelf: 'center',
         width: 15,
-        zIndex: 2,
         outlineColor: '#a5afc4',
         outlineWidth: 2,
         backgroundColor: "red",

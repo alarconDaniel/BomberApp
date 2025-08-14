@@ -12,6 +12,8 @@ import {
 import {useRouter} from 'expo-router';
 import {FontAwesome5} from '@expo/vector-icons';
 
+import DetailsStoreItemModal from '../components/DetailsStoreItemModal';
+
 import HeaderOperario from '../components/HeaderOperario';
 import FadeWrapper from '../components/FadeWrapper';
 
@@ -43,11 +45,33 @@ function toItemTienda(raw: any): ItemTienda {
     );
 }
 
+
+
 export default function StoreScreen() {
     const router = useRouter();
     const [items, setItems] = useState<ItemTienda[]>([]);
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // Para los detalles
+    const [selected, setSelected] = useState<ItemTienda | null>(null);
+    const [detailsOpen, setDetailsOpen] = useState(false);
+
+    const openDetails = (it: ItemTienda) => {
+        setSelected(it);
+        setDetailsOpen(true);
+    };
+    const closeDetails = () => {
+        setDetailsOpen(false);
+        // opcional: limpia el item luego de la animación
+        setTimeout(() => setSelected(null), 200);
+    };
+
+    const handleBuy = (it: ItemTienda, qty: number) => {
+        // aquí invocas tu servicio de compra / carrito
+        console.log('Comprar', it.nombreItem, 'x', qty);
+        closeDetails();
+    };
 
     const listarItems = async () => {
         try {
@@ -132,12 +156,7 @@ export default function StoreScreen() {
                                             renderItem={({item}) => (
                                                 <StoreItemCard
                                                     item={item}
-                                                    onPress={() =>
-                                                        router.push({
-                                                            pathname: '/tienda/[id]',
-                                                            params: {id: String(item.codItem)},
-                                                        })
-                                                    }
+                                                    onPress={() => openDetails(item)}
                                                     // toques de UI distintos por sección
                                                     accentColor={
                                                         sec.key === 'POTENCIADOR'
@@ -174,12 +193,7 @@ export default function StoreScreen() {
                                             renderItem={({item}) => (
                                                 <StoreItemCard
                                                     item={item}
-                                                    onPress={() =>
-                                                        router.push({
-                                                            pathname: '/tienda/[id]',
-                                                            params: {id: String(item.codItem)},
-                                                        })
-                                                    }
+                                                    onPress={() => openDetails(item)}
                                                     // toques de UI distintos por sección
                                                     accentColor={
                                                         sec.key === 'POTENCIADOR'
@@ -217,12 +231,7 @@ export default function StoreScreen() {
                                             renderItem={({ item }) => (
                                                 <StoreItemCard
                                                     item={item}
-                                                    onPress={() =>
-                                                        router.push({
-                                                            pathname: '/tienda/[id]',
-                                                            params: { id: String(item.codItem) },
-                                                        })
-                                                    }
+                                                    onPress={() => openDetails(item)}
                                                     accentColor={
                                                         sec.key === 'POTENCIADOR'
                                                             ? '#3B5BDB'
@@ -242,6 +251,21 @@ export default function StoreScreen() {
                     }
                 </ScrollView>
             </View>
+            <DetailsStoreItemModal
+                visible={detailsOpen}
+                item={selected}
+                onClose={closeDetails}
+                onBuy={handleBuy}
+                accentColor={
+                    selected
+                        ? (String(selected.tipoItem).toUpperCase() === 'POTENCIADOR'
+                            ? '#3B5BDB'
+                            : String(selected.tipoItem).toUpperCase() === 'COFRE'
+                                ? '#0EA5E9'
+                                : '#10B981')
+                        : '#3B5BDB'
+                }
+            />
         </FadeWrapper>
     );
 }
