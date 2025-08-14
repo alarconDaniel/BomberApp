@@ -1,4 +1,3 @@
-// components/CustomFooter.tsx
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -33,19 +32,21 @@ export default function CustomFooter({ state, descriptors, navigation }: BottomT
 
         const onPress = () => {
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-          if (!focused && !event.defaultPrevented) navigation.navigate(route.name as never);
+          if (!focused && !event.defaultPrevented) {
+            navigation.navigate(route.name as never);
+          }
         };
-        const onLongPress = () => navigation.emit({ type: 'tabLongPress', target: route.key });
 
         return (
           <TouchableOpacity
             key={route.key}
             accessibilityRole="button"
             onPress={onPress}
-            onLongPress={onLongPress}
+            onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
             style={styles.tab}
             activeOpacity={0.9}
           >
+            {/* placeholder de icono */}
             <View style={[styles.iconBox, focused ? styles.iconActive : styles.iconInactive]} />
             <Text style={[styles.label, focused && styles.labelActive]}>{label}</Text>
             <View style={[styles.indicator, focused && styles.indicatorOn]} />
