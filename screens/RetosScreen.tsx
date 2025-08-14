@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import FadeWrapper from '../components/FadeWrapper';
 import HeaderOperario from '../components/HeaderOperario';
-import FooterOperario from '../components/FooterOperario';
+import CustomFooter from '../components/CustomFooter';
 import { colors } from '../styles/globalStyles1';
 
 const FOOTER_HEIGHT = 64;

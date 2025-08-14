@@ -1,7 +1,7 @@
 import React from 'react';
 import { SafeAreaView, View, Text, StyleSheet, ScrollView } from 'react-native';
 import HeaderOperario from '../components/HeaderOperario';
-import FooterOperario from '../components/FooterOperario';
+import CustomFooter from '../components/CustomFooter';
 import FadeWrapper from '../components/FadeWrapper';
 import { colors } from '../styles/globalStyles1';
 
