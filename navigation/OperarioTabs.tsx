@@ -1,23 +1,37 @@
+import React from 'react';
+import {
+  createBottomTabNavigator,
+  BottomTabBarProps,
+} from '@react-navigation/bottom-tabs';
 
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from '../screens/HomeScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import ReportsScreen from '../screens/StoreScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import CustomFooter from '../components/FooterOperario';
+import RetosScreen from '../screens/RetosScreen';
+import OperariosScreen from '../screens/OperariosScreen';
+import ReportesScreen from '../screens/ReportesScreen';
+import PerfilScreen from '../screens/PerfilScreen';
+import CustomFooter from '../components/CustomFooter';
 
-const Tab = createBottomTabNavigator();
+export type RootTabParamList = {
+  Home: undefined;
+  Retos: undefined;
+  Operarios: undefined;
+  Reportes: undefined;
+  Perfil: undefined;
+};
+
+const Tab = createBottomTabNavigator<RootTabParamList>();
 
 export default function OperarioTabs() {
-    return (
-        <Tab.Navigator
-            screenOptions={{ headerShown: false }}
-            tabBar={(props) => <CustomFooter {...props} />}
-        >
-            <Tab.Screen name="Home" component={HomeScreen} />
-            <Tab.Screen name="Profile" component={ProfileScreen} />
-            <Tab.Screen name="Store" component={ReportsScreen} />
-            <Tab.Screen name="Settings" component={SettingsScreen} />
-        </Tab.Navigator>
-    );
+  return (
+    <Tab.Navigator
+      screenOptions={{ headerShown: false }}
+      tabBar={(props: BottomTabBarProps) => <CustomFooter {...props} />}
+    >
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Retos" component={RetosScreen} />
+      <Tab.Screen name="Operarios" component={OperariosScreen} />
+      <Tab.Screen name="Reportes" component={ReportesScreen} />
+      <Tab.Screen name="Perfil" component={PerfilScreen} />
+    </Tab.Navigator>
+  );
 }

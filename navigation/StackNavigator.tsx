@@ -1,23 +1,20 @@
-
+import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import StoreScreen from '../screens/StoreScreen';
-import OperarioTabs from "./OperarioTabs";
+import OperarioTabs from './OperarioTabs';
 
-const Stack = createNativeStackNavigator();
+export type RootStackParamList = {
+  Login: undefined;
+  OperarioTabs: undefined;
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function StackNavigator() {
-    return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="Profile" component={ProfileScreen} />
-            <Stack.Screen name="Store" component={StoreScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="OperarioTabs" component={OperarioTabs} options={{ headerShown: false }} />
-        </Stack.Navigator>
-    );
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="OperarioTabs" component={OperarioTabs} />
+    </Stack.Navigator>
+  );
 }
