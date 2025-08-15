@@ -2,8 +2,30 @@
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import {styles} from "../styles/globalStyles";
+import {useState} from "react";
 
 export default function Footer({ state, descriptors, navigation }: BottomTabBarProps) {
+
+    var tum;
+    const [tral, setTral] = useState(2);
+
+    setTral(3);
+
+    function traeretos(url: string): any  {
+        console.log("La url es" + url);
+        return 2;
+    }
+
+    if (tral == 2){
+        return (
+            <View>
+                <Text>
+                    hola
+                </Text>
+            </View>
+        )
+    }
+
     return (
         <View style={styles.container}>
             {state.routes.map((route, index) => {
