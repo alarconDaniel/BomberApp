@@ -14,6 +14,8 @@ export default function Footer({ state, descriptors, navigation }: BottomTabBarP
                         ? optionLabel
                         : route.name;
 
+
+
                 const onPress = () => {
                     const event = navigation.emit({
                         type: 'tabPress',
