@@ -14,6 +14,7 @@ import FadeWrapper from "../components/FadeWrapper";
 import {Reto} from '../models/Reto';
 import {ServicioGet} from '../services/ServicioGet';
 import {styles as global} from "../styles/globalStyles";
+import {useAuth} from "../auth/AuthContext";
 
 const {width: SCREEN_W, height: SCREEN_H} = Dimensions.get('window');
 
@@ -22,6 +23,10 @@ const NODE_SIZE = 84;
 const STEP_Y = 120;
 const AMPLITUDE = Math.min(120, SCREEN_W * 0.3);
 const PERIOD_PX = 320;
+
+// >>> Extensión solo de la curva (no cambia nodos ni layout)
+const EXTRA_CURVE_TOP = 240;     // cuánto se extiende hacia ARRIBA para que no se vea el final
+const EXTRA_CURVE_BOTTOM = 240;    // puedes dejar 0 o poner, p.ej., 120 si quieres un poco abajo
 
 // Popover
 const POPOVER_W = 240;
@@ -40,13 +45,27 @@ function xOnS(yPx: number) {
     return centerX + AMPLITUDE * Math.sin((2 * Math.PI * yPx) / PERIOD_PX);
 }
 
-// Camino
+// Camino (original, sin extensión) — lo dejo por si lo quieres usar en otro lado
 function buildPolylinePoints(totalHeight: number) {
     const points: string[] = [];
     const step = 8;
     for (let y = 0; y <= totalHeight; y += step) {
         const x = xOnS(y);
         points.push(`${x},${y}`);
+    }
+    return points.join(' ');
+}
+
+// Camino extendido: dibuja desde yLocal=0 hasta total+extras,
+// pero calculando x con yMundo = yLocal - EXTRA_CURVE_TOP para mantener alineación con los nodos.
+function buildPolylinePointsExtended(totalHeight: number, extraTop: number, extraBottom: number) {
+    const points: string[] = [];
+    const step = 8;
+    const totalLocal = totalHeight + extraTop + extraBottom; // espacio que ocupa el SVG
+    for (let yLocal = 0; yLocal <= totalLocal; yLocal += step) {
+        const yWorld = yLocal - extraTop; // corrige fase para que el trazo coincida con nodos existentes
+        const x = xOnS(yWorld);
+        points.push(`${x},${yLocal}`);
     }
     return points.join(' ');
 }
@@ -64,8 +83,10 @@ function formatTiempo(ms: number) {
     return `${minutos}m`;
 }
 
-
 export default function HomeRetosScreen() {
+
+    const { fetchJson, baseUrl } = useAuth();
+
     const router = useRouter();
     const [retos, setRetos] = useState<Reto[]>([]);
     const [cargando, setCargando] = useState(true);
@@ -90,15 +111,14 @@ export default function HomeRetosScreen() {
             setCargando(true);
             setError(null);
 
-            const urlServicio = 'http://192.168.20.20:3550/reto/listar';
-            const resultado = await ServicioGet.peticionGet(urlServicio);
+            const resultado = await fetchJson<any[]>('/reto/listar');
 
             const mapeados: Reto[] = (resultado ?? []).map((item: any) =>
                 new Reto(
                     item.codReto ?? item.cod ?? 0,
                     item.nombreReto ?? item.nombre ?? 'Reto',
                     item.descripcionReto ?? item.descripcion ?? '',
-                    item.tiempoReto ?? item.tiempo ?? 0,
+                    item.tiempoEstimadoSegReto ?? item.tiempo ?? 0,
                     item.fechaInicioReto ?? item.fechaInicio ?? '',
                     item.fechaFinReto ?? item.fechaFin ?? '',
                 )
@@ -118,7 +138,12 @@ export default function HomeRetosScreen() {
 
     // Geometría
     const totalHeight = Math.max(SCREEN_H, (retos.length + 1) * STEP_Y);
-    const polylinePoints = useMemo(() => buildPolylinePoints(totalHeight), [totalHeight]);
+
+    // Puntos extendidos: la curva “sigue” por arriba (y opcionalmente por abajo)
+    const polylinePoints = useMemo(
+        () => buildPolylinePointsExtended(totalHeight, EXTRA_CURVE_TOP, EXTRA_CURVE_BOTTOM),
+        [totalHeight]
+    );
 
     const nodes = useMemo(
         () =>
@@ -185,7 +210,12 @@ export default function HomeRetosScreen() {
                 >
                     {/* Camino en S */}
                     <View style={{height: totalHeight}}>
-                        <Svg height={totalHeight} width={SCREEN_W} style={{position: 'absolute', top: 0, left: 0}}>
+                        <Svg
+                            // SVG más alto y desplazado hacia arriba para cubrir el “pull to overscroll”
+                            height={totalHeight + EXTRA_CURVE_TOP + EXTRA_CURVE_BOTTOM}
+                            width={SCREEN_W}
+                            style={{position: 'absolute', top: -EXTRA_CURVE_TOP, left: 0}}
+                        >
                             <Polyline
                                 points={polylinePoints}
                                 fill="none"
@@ -292,9 +322,8 @@ export default function HomeRetosScreen() {
                                                 {active.reto.nombreReto}
                                             </Text>
                                             <Text style={stylesPopover.subtitle}>
-                                                (Aprox {formatTiempo(active.reto.tiempoReto)})
+                                                (Aprox {formatTiempo(active.reto.tiempoEstimadoSegReto)})
                                             </Text>
-
 
                                             <Pressable
                                                 onPress={() =>

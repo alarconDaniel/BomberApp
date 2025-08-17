@@ -3,7 +3,7 @@ export class Reto{
     public codReto: number;
     public nombreReto: string;
     public descripcionReto: string;
-    public tiempoReto: number;
+    public tiempoEstimadoSegReto: number;
     public fechaInicioReto: Date;
     public fechaFinReto: Date;
 
@@ -11,7 +11,7 @@ export class Reto{
         this.codReto = cod;
         this.nombreReto = nombre;
         this.descripcionReto = desc;
-        this.tiempoReto = tiempo;
+        this.tiempoEstimadoSegReto = tiempo;
         this.fechaInicioReto = fechaInicio;
         this.fechaFinReto = fechaFin;
     }
