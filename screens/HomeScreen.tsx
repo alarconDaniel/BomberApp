@@ -85,7 +85,7 @@ function formatTiempo(ms: number) {
 
 export default function HomeRetosScreen() {
 
-    const { fetchJson, baseUrl } = useAuth();
+    const {fetchJson, baseUrl} = useAuth();
 
     const router = useRouter();
     const [retos, setRetos] = useState<Reto[]>([]);
@@ -111,7 +111,7 @@ export default function HomeRetosScreen() {
             setCargando(true);
             setError(null);
 
-            const resultado = await fetchJson<any[]>('/reto/listar');
+            const resultado = await fetchJson<any[]>('/mis-retos/listar');
 
             const mapeados: Reto[] = (resultado ?? []).map((item: any) =>
                 new Reto(
@@ -121,6 +121,7 @@ export default function HomeRetosScreen() {
                     item.tiempoEstimadoSegReto ?? item.tiempo ?? 0,
                     item.fechaInicioReto ?? item.fechaInicio ?? '',
                     item.fechaFinReto ?? item.fechaFin ?? '',
+                    item.completadoReto ?? item.completado ?? false,
                 )
             );
 
@@ -158,7 +159,7 @@ export default function HomeRetosScreen() {
     // Animar abrir/cerrar según expandedId
     useEffect(() => {
         if (expandedId == null) {
-            Animated.timing(popAnim, { toValue: 0, duration: 140, useNativeDriver: true }).start();
+            Animated.timing(popAnim, {toValue: 0, duration: 140, useNativeDriver: true}).start();
         } else {
             popAnim.setValue(0);
             Animated.spring(popAnim, {
@@ -220,7 +221,7 @@ export default function HomeRetosScreen() {
                                 points={polylinePoints}
                                 fill="none"
                                 stroke="#001780"
-                                strokeWidth={16}
+                                strokeWidth={24}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 opacity={0.35}
@@ -238,12 +239,17 @@ export default function HomeRetosScreen() {
                                     onPress={() => openFor(reto.codReto)}
                                     style={[
                                         stylesNode.node,
-                                        { left, top }
+                                        {left, top}
                                     ]}
                                 >
-                                    <View style={stylesNode.nodeInner}>
-                                        <FontAwesome5 name="flag" size={24} color="#3B5BDB" />
-                                    </View>
+                                    {reto.completadoReto ? (
+                                            <View style={[stylesNode.nodeInner, {backgroundColor: 'lightgreen'}]}>
+                                                <FontAwesome5 name="check" size={24} color="green"/>
+                                            </View>) :
+                                        <View style={stylesNode.nodeInner}>
+                                            <FontAwesome5 name="flag" size={24} color="#3B5BDB"/>
+                                        </View>}
+
                                 </Pressable>
                             );
                         })}
@@ -263,12 +269,12 @@ export default function HomeRetosScreen() {
                                 style={[
                                     stylesPopover.container,
                                     // z-index bien alto y elevation para Android
-                                    { zIndex: 999, elevation: 20 },
+                                    {zIndex: 999, elevation: 20},
                                     // posición calculada
                                     (() => {
                                         // ¿abre abajo o arriba?
                                         const isLast = active.idx === retos.length - 1;
-                                        const preferDown = active.y + NODE_SIZE/2 + GAP_NODE_POPOVER + POPOVER_EST_H <= totalHeight - 16;
+                                        const preferDown = active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER + POPOVER_EST_H <= totalHeight - 16;
                                         const openDown = preferDown && !isLast ? true : false;
 
                                         const popLeft = clamp(active.x - POPOVER_W / 2, 10, SCREEN_W - POPOVER_W - 10);
@@ -282,10 +288,15 @@ export default function HomeRetosScreen() {
                                         };
                                     })(),
                                     {
-                                        opacity: popAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+                                        opacity: popAnim.interpolate({inputRange: [0, 1], outputRange: [0, 1]}),
                                         transform: [
-                                            { scale: popAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) },
-                                            { translateY: popAnim.interpolate({ inputRange: [0, 1], outputRange: [-4, 0] }) },
+                                            {scale: popAnim.interpolate({inputRange: [0, 1], outputRange: [0.95, 1]})},
+                                            {
+                                                translateY: popAnim.interpolate({
+                                                    inputRange: [0, 1],
+                                                    outputRange: [-4, 0]
+                                                })
+                                            },
                                         ],
                                     },
                                 ]}
@@ -293,27 +304,27 @@ export default function HomeRetosScreen() {
                                 {/* punta/triángulo */}
                                 {(() => {
                                     const isLast = active.idx === retos.length - 1;
-                                    const preferDown = active.y + NODE_SIZE/2 + GAP_NODE_POPOVER + POPOVER_EST_H <= totalHeight - 16;
+                                    const preferDown = active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER + POPOVER_EST_H <= totalHeight - 16;
                                     const openDown = preferDown && !isLast ? true : false;
 
                                     // popLeft usado arriba (recalcular aquí igual)
                                     const popLeft = clamp(active.x - POPOVER_W / 2, 10, SCREEN_W - POPOVER_W - 10);
                                     // Alinear la punta con el centro del nodo
-                                    const arrowLeft = clamp(active.x - popLeft - ARROW/2, 8, POPOVER_W - ARROW - 8);
+                                    const arrowLeft = clamp(active.x - popLeft - ARROW / 2, 8, POPOVER_W - ARROW - 8);
 
                                     return (
                                         <View
                                             style={[
                                                 stylesPopover.body,
-                                                openDown ? { paddingTop: 14 } : { paddingBottom: 14 },
+                                                openDown ? {paddingTop: 14} : {paddingBottom: 14},
                                             ]}
                                         >
                                             {/* flechita */}
                                             <View
                                                 style={[
                                                     stylesPopover.arrow,
-                                                    openDown ? { top: -ARROW/2 } : { bottom: -ARROW/2 },
-                                                    { left: arrowLeft },
+                                                    openDown ? {top: -ARROW / 2} : {bottom: -ARROW / 2},
+                                                    {left: arrowLeft},
                                                 ]}
                                             />
 
@@ -329,7 +340,7 @@ export default function HomeRetosScreen() {
                                                 onPress={() =>
                                                     router.push({
                                                         pathname: '/reto/[id]',
-                                                        params: { id: String(active.reto.codReto) },
+                                                        params: {id: String(active.reto.codReto)},
                                                     })
                                                 }
                                                 style={stylesPopover.cta}
@@ -388,7 +399,7 @@ const stylesPopover = StyleSheet.create({
         alignItems: 'center',
         shadowColor: '#000',
         shadowOpacity: 0.15,
-        shadowOffset: { width: 0, height: 6 },
+        shadowOffset: {width: 0, height: 6},
         shadowRadius: 10,
         elevation: 6,
     },
@@ -397,11 +408,11 @@ const stylesPopover = StyleSheet.create({
         width: ARROW,
         height: ARROW,
         backgroundColor: '#CFCFD4',
-        transform: [{ rotate: '45deg' }],
+        transform: [{rotate: '45deg'}],
         borderRadius: 3,
     },
-    title: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
-    subtitle: { fontSize: 12, opacity: 0.8, marginTop: 2 },
+    title: {fontSize: 14, fontWeight: '600', textAlign: 'center'},
+    subtitle: {fontSize: 12, opacity: 0.8, marginTop: 2},
     cta: {
         marginTop: 10,
         paddingVertical: 8,
@@ -409,5 +420,5 @@ const stylesPopover = StyleSheet.create({
         backgroundColor: '#9CA3AF',
         borderRadius: 999,
     },
-    ctaText: { color: 'white', fontSize: 14, fontWeight: '600' },
+    ctaText: {color: 'white', fontSize: 14, fontWeight: '600'},
 });
