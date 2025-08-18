@@ -33,7 +33,7 @@ export const styles = StyleSheet.create({
         backgroundColor: '#c5e1f5'
     },
     icon: {
-        fontSize: 20,
+        fontSize: 28,
         fontWeight: 'bold',
         color: '#444'
     },

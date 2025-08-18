@@ -1,8 +1,10 @@
-// src/auth/AuthContext.tsx
+// auth/AuthContext.tsx
 import React, {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
 import * as SecureStore from 'expo-secure-store';
 
-type User = { id: number; email: string } | null;
+type Rol = 'admin' | 'operario';
+
+type User = { id: number; email: string; rol: Rol } | null; // <-- AÑADIMOS rol
 
 type Tokens = {
     access_token: string;
@@ -15,21 +17,17 @@ type AuthContextShape = {
     loading: boolean;
     login: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
-    // fetch con Bearer + refresh automático
     fetchJson: <T=any>(path: string, init?: RequestInit & { noAuth?: boolean }) => Promise<T>;
     baseUrl: string;
 };
 
 const AuthContext = createContext<AuthContextShape | null>(null);
-
-// 👉 Ajusta tu base URL aquí
 const BASE_URL = 'http://192.168.20.20:3550';
 
 const ACCESS_KEY = 'auth_access_token';
 const REFRESH_KEY = 'auth_refresh_token';
 const USER_KEY   = 'auth_user';
 
-// --- Error tipado para mensajes bonitos en la UI ---
 class ApiError extends Error {
     status: number;
     body?: any;
@@ -39,6 +37,14 @@ class ApiError extends Error {
         this.status = status;
         this.body = body;
     }
+}
+
+// --- Normalizador de rol ---
+function normalizeRol(raw: any): Rol {
+    const s = String(raw ?? '').toLowerCase().trim();
+    if (['admin', 'administrator', 'administrador', 'adm'].includes(s)) return 'admin';
+    if (['operario', 'operador', 'worker', 'user', 'empleado'].includes(s)) return 'operario';
+    return 'operario';
 }
 
 async function saveTokens(tokens: Tokens, user: User) {
@@ -57,15 +63,20 @@ async function loadTokens(): Promise<{tokens: Tokens, user: User}> {
     const access = await SecureStore.getItemAsync(ACCESS_KEY);
     const refresh = await SecureStore.getItemAsync(REFRESH_KEY);
     const userStr = await SecureStore.getItemAsync(USER_KEY);
+    let user: User = userStr ? JSON.parse(userStr) : null;
+
+    // por si guardaste usuarios sin rol en el pasado:
+    if (user && !(user as any).rol) {
+        user = { ...user, rol: 'operario' } as User;
+    }
     return {
         tokens: (access && refresh) ? { access_token: access, refresh_token: refresh } : null,
-        user: userStr ? JSON.parse(userStr) : null
+        user
     };
 }
 
-// helper para parsear cuerpo de error
 async function parseBody(res: Response) {
-    const text = await res.text().catch(()=>'');
+    const text = await res.text().catch(()=> '');
     try { return text ? JSON.parse(text) : undefined; } catch { return text; }
 }
 
@@ -73,8 +84,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) 
     const [tokens, setTokens] = useState<Tokens>(null);
     const [user, setUser] = useState<User>(null);
     const [loading, setLoading] = useState(true);
-
-    // Evitar múltiples refresh simultáneos
     const refreshingRef = useRef<Promise<Tokens | null> | null>(null);
 
     useEffect(() => {
@@ -92,20 +101,22 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) 
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ email, password }),
         });
-
         if (!res.ok) {
             const body = await parseBody(res);
-            // Log para dev
-            console.log('[HTTP ERROR][LOGIN]', res.status, '/auth/login', body);
-            // Mensaje amigable (401: credenciales)
-            const msg = body?.message || (res.status === 401 ? 'Correo o contraseña inválidos' : `Error ${res.status}`);
+            const msg = (body as any)?.message || (res.status === 401 ? 'Correo o contraseña inválidos' : `Error ${res.status}`);
             throw new ApiError(res.status, msg, body);
         }
-
         const data = await res.json();
-        // data = { user: { id, email }, access_token, refresh_token }
+        // Esperado del backend:
+        // { user: { id, email, rol }, access_token, refresh_token }
         const nextTokens = { access_token: data.access_token, refresh_token: data.refresh_token };
-        const nextUser = data.user as User;
+        const rawUser = data.user || {};
+        const nextUser = {
+            id: rawUser.id,
+            email: rawUser.email,
+            rol: normalizeRol(rawUser.rol), // <-- aquí normalizamos
+        } as User;
+
         setTokens(nextTokens);
         setUser(nextUser);
         await saveTokens(nextTokens, nextUser);
@@ -118,9 +129,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) 
     }, []);
 
     const doRefresh = useCallback(async (): Promise<Tokens | null> => {
-        if (refreshingRef.current) {
-            return refreshingRef.current;
-        }
+        if (refreshingRef.current) return refreshingRef.current;
         if (!tokens?.refresh_token) return null;
 
         refreshingRef.current = (async () => {
@@ -132,7 +141,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) 
                 });
                 if (!res.ok) {
                     const body = await parseBody(res);
-                    console.log('[Auth][Refresh] falló', res.status, body);
+                    console.log('[Auth][Refresh] fallo', res.status, body);
                     await logout();
                     return null;
                 }
@@ -142,7 +151,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) 
                     refresh_token: data.refresh_token,
                 };
                 setTokens(newTokens);
-                await saveTokens(newTokens, user);
+                await saveTokens(newTokens, user); // user ya persistido con rol
                 return newTokens;
             } catch (e) {
                 console.log('[Auth][Refresh] error', e);
@@ -156,7 +165,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) 
         return refreshingRef.current;
     }, [tokens?.refresh_token, user, logout]);
 
-    // fetch con Authorization y refresh automático (retry 1 vez si 401) + ApiError
     const fetchJson = useCallback(async <T=any,>(path: string, init: RequestInit & { noAuth?: boolean } = {}): Promise<T> => {
         const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
         const headers = new Headers(init.headers || {});
@@ -171,7 +179,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) 
         const doRequest = async (h: Headers) => {
             const res = await fetch(url, {...init, headers: h});
             if (!res.ok) {
-                // Si 401 y tenemos refresh, intentamos una vez
                 if (res.status === 401 && !init.noAuth && tokens?.refresh_token) {
                     const refreshed = await doRefresh();
                     if (refreshed?.access_token) {
@@ -181,16 +188,14 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) 
                         const retry = await fetch(url, {...init, headers: h2});
                         if (!retry.ok) {
                             const body2 = await parseBody(retry);
-                            console.log('[HTTP RETRY ERROR]', retry.status, url, body2);
-                            const msg2 = body2?.message || `Error ${retry.status}`;
+                            const msg2 = (body2 as any)?.message || `Error ${retry.status}`;
                             throw new ApiError(retry.status, msg2, body2);
                         }
                         return retry;
                     }
                 }
                 const body = await parseBody(res);
-                console.log('[HTTP ERROR]', res.status, url, body);
-                const msg = body?.message || `Error ${res.status}`;
+                const msg = (body as any)?.message || `Error ${res.status}`;
                 throw new ApiError(res.status, msg, body);
             }
             return res;
@@ -199,7 +204,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) 
         const r = await doRequest(headers);
         const ct = r.headers.get('content-type') || '';
         if (ct.includes('application/json')) return r.json() as Promise<T>;
-        // si no es json, devuelve texto como string
         return (r.text() as unknown) as T;
     }, [tokens?.access_token, tokens?.refresh_token, doRefresh]);
 

@@ -1,7 +1,7 @@
 import {View, Text, Button} from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
-import FooterOperario from '../components/FooterOperario'
-import FadeWrapper from "../components/FadeWrapper";
+import FooterOperario from '../../components/FooterOperario'
+import FadeWrapper from "../../components/FadeWrapper";
 
 
 export default function HomeScreen({navigation}: any) {
