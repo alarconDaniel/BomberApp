@@ -1,7 +1,8 @@
 import {Text, View} from "react-native";
 import {styles} from "../styles/globalStyles";
 import {FontAwesome5} from "@expo/vector-icons";
-import React, {use, useEffect, useState} from "react";
+import { useFocusEffect } from 'expo-router';
+import React, { useEffect, useState, useCallback } from 'react';
 import {useAuth} from "../auth/AuthContext";
 import {StatsUsuario} from "../models/StatsUsuario";
 
@@ -24,6 +25,12 @@ export default function headerOperario() {
     useEffect(() => {
         listarStats();
     }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            listarStats();
+        }, [])
+    );
 
     return (
         <View style={styles.containerHeader}>

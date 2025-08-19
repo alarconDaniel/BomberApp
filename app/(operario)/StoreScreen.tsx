@@ -11,16 +11,24 @@ import {
 } from 'react-native';
 import {useRouter} from 'expo-router';
 import {FontAwesome5} from '@expo/vector-icons';
+import {ItemTienda} from "../../models/ItemTienda";
+import FadeWrapper from "../../components/FadeWrapper";
+import StoreItemCard from "../../components/StoreItemCard";
+import DetailsStoreItemModal from "../../components/DetailsStoreItemModal";
+import {useAuth} from "../../auth/AuthContext";
+import {StatsUsuario} from "../../models/StatsUsuario";
+import PurchaseSuccessOverlay from '../../components/PurchaseSuccessOverlay';
+import { useToast } from '../../components/ToastProvider';
 
-import DetailsStoreItemModal from '../components/DetailsStoreItemModal';
+// import DetailsStoreItemModal from '../components/DetailsStoreItemModal';
 
-import HeaderOperario from '../components/HeaderOperario';
-import FadeWrapper from '../components/FadeWrapper';
+// import HeaderOperario from '../components/HeaderOperario';
+// import FadeWrapper from '../components/FadeWrapper';
 
-import {ItemTienda} from '../models/ItemTienda';
-import {ServicioGet} from '../services/ServicioGet';
-import {styles as global} from '../styles/globalStyles';
-import StoreItemCard from '../components/StoreItemCard';
+// import {ItemTienda} from '../models/ItemTienda';
+// import {ServicioGet} from '../services/ServicioGet';
+// import {styles as global} from '../styles/globalStyles';
+// import StoreItemCard from '../components/StoreItemCard';
 
 const {width: SCREEN_W} = Dimensions.get('window');
 
@@ -45,9 +53,27 @@ function toItemTienda(raw: any): ItemTienda {
     );
 }
 
-
+// trae stats locales
+type Stats = { codUsuario: number; racha: number; monedas: number; xp: number; nivel: number };
 
 export default function StoreScreen() {
+
+    const toast = useToast();
+    const [successInfo, setSuccessInfo] = useState<{name: string; qty: number} | null>(null);
+    const [showSuccess, setShowSuccess] = useState(false);
+
+    const [stats, setStats] = useState<StatsUsuario>({codUsuario: 0, racha: 0, monedas: 0, xp: 0, nivel: 0});
+
+    const {fetchJson, baseUrl} = useAuth();
+    const [comprando, setComprando] = useState(false);
+
+    const listarStats = async () => {
+        try {
+            const data = await fetchJson<Stats>('/mis-stats/listar');
+            if (data) setStats(data);
+        } catch {}
+    };
+
     const router = useRouter();
     const [items, setItems] = useState<ItemTienda[]>([]);
     const [cargando, setCargando] = useState(true);
@@ -67,22 +93,36 @@ export default function StoreScreen() {
         setTimeout(() => setSelected(null), 200);
     };
 
-    const handleBuy = (it: ItemTienda, qty: number) => {
-        // aquí invocas tu servicio de compra / carrito
-        console.log('Comprar', it.nombreItem, 'x', qty);
-        closeDetails();
+
+    const handleBuy = async (it: ItemTienda, qty: number) => {
+        try {
+            setComprando(true);
+            await fetchJson('/item-tienda/comprar', { method:'POST', body: JSON.stringify({ codItem: it.codItem, cantidad: qty }) });
+            await listarStats();
+
+            // 1) cierra el details primero
+            closeDetails();
+
+            // 2) espera su fade (tu setTimeout de 200ms) y luego muestra overlay
+            setTimeout(() => {
+                setSuccessInfo({ name: it.nombreItem, qty });
+                setShowSuccess(true);
+            }, 240);
+        } catch (e: any) {
+            // tu toast/error aquí
+            alert(e?.message ?? 'No se pudo completar la compra');
+        } finally {
+            setComprando(false);
+        }
     };
 
     const listarItems = async () => {
         try {
             setCargando(true);
             setError(null);
-
-            const resultado = await ServicioGet.peticionGet(URL_LISTAR_ITEMS);
+            const resultado = await fetchJson<any[]>('/item-tienda/listar');
             const mapeados: ItemTienda[] = (resultado ?? []).map(toItemTienda);
-
             setItems(mapeados);
-
         } catch (e: any) {
             setError(e?.message || 'Error cargando tienda');
         } finally {
@@ -91,7 +131,7 @@ export default function StoreScreen() {
     };
 
     useEffect(() => {
-        listarItems();
+        Promise.all([listarItems(), listarStats()]).then();
     }, []);
 
     const sections: Section[] = useMemo(() => {
@@ -250,22 +290,31 @@ export default function StoreScreen() {
                     )
                     }
                 </ScrollView>
+                <DetailsStoreItemModal
+                    visible={detailsOpen}
+                    item={selected}
+                    onClose={closeDetails}
+                    onBuy={handleBuy}
+                    userCoins={stats.monedas}
+                    buying={comprando}
+                    accentColor={
+                        selected
+                            ? (String(selected.tipoItem).toUpperCase() === 'POTENCIADOR'
+                                ? '#3B5BDB'
+                                : String(selected.tipoItem).toUpperCase() === 'COFRE'
+                                    ? '#0EA5E9'
+                                    : '#10B981')
+                            : '#3B5BDB'
+                    }
+                />
+                <PurchaseSuccessOverlay
+                    visible={showSuccess}
+                    itemName={successInfo?.name ?? ''}
+                    qty={successInfo?.qty ?? 1}
+                    onClose={() => setShowSuccess(false)}
+                    autoCloseMs={1800}  // opcional
+                />
             </View>
-            <DetailsStoreItemModal
-                visible={detailsOpen}
-                item={selected}
-                onClose={closeDetails}
-                onBuy={handleBuy}
-                accentColor={
-                    selected
-                        ? (String(selected.tipoItem).toUpperCase() === 'POTENCIADOR'
-                            ? '#3B5BDB'
-                            : String(selected.tipoItem).toUpperCase() === 'COFRE'
-                                ? '#0EA5E9'
-                                : '#10B981')
-                        : '#3B5BDB'
-                }
-            />
         </FadeWrapper>
     );
 }

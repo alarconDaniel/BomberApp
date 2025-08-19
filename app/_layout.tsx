@@ -2,6 +2,8 @@
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
+import {ToastProvider} from "../components/ToastProvider";
+
 
 function AuthGate() {
     const router   = useRouter();
@@ -46,8 +48,10 @@ function AuthGate() {
 
 export default function RootLayout() {
     return (
+        <ToastProvider>
         <AuthProvider>
             <AuthGate />
         </AuthProvider>
+        </ToastProvider>
     );
 }
