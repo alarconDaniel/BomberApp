@@ -1,57 +1,46 @@
 // app/_layout.tsx
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
-import {ToastProvider} from "../components/ToastProvider";
-
+import { ToastProvider } from '../components/ToastProvider'; // déjalo, no debe romper nada
 
 function AuthGate() {
-    const router   = useRouter();
-    const segments = useSegments();            // p.ej. ['(auth)','login'] | ['(operario)','home'] | undefined
+    const router = useRouter();
+    const segments = useSegments();            // p.ej. ['(auth)','login'] | ['(operario)','HomeScreen']
     const navState = useRootNavigationState(); // listo cuando tiene key
     const { user, loading } = useAuth();
-    const routedRef = useRef(false);           // evita doble replace
 
     useEffect(() => {
-        if (routedRef.current) return;
-        if (loading || !navState?.key) return;
+        if (loading || !navState?.key) return;   // espera a tener auth y nav listos
+        const group = segments?.[0];
 
-        const first      = segments[0];
-        const inAuth     = first === '(auth)';
-        const inOperario = first === '(operario)';
-        const inAdmin    = first === '(admin)';
-
-        // Sin sesión -> siempre empuja a login (estés donde estés)
-        if (!user && !inAuth) {
-            routedRef.current = true;
-            router.replace('/(auth)/login');
+        // Sin sesión => manda siempre a login si no estás en (auth)
+        if (!user) {
+            if (group !== '(auth)') router.replace('/(auth)/login');
             return;
         }
 
-        // Con sesión -> lleva al grupo correcto si aún no estás en él
-        if (user?.rol === 'operario' && !inOperario) {
-            routedRef.current = true;
+        // Con sesión => asegúrate de caer en el grupo correcto
+        if (user.rol === 'operario' && group !== '(operario)') {
             router.replace('/(operario)/HomeScreen');
             return;
         }
-        if (user?.rol === 'admin' && !inAdmin) {
-            routedRef.current = true;
+        if (user.rol === 'admin' && group !== '(admin)') {
             router.replace('/(admin)');
             return;
         }
-        // Si ya estás en el grupo correcto, no hacemos nada
-
-    }, [user, loading, segments, navState?.key]);
+        // si ya estás en el grupo correcto, no hacemos nada
+    }, [user, loading, navState?.key, segments]);
 
     return <Stack screenOptions={{ headerShown: false }} />;
 }
 
 export default function RootLayout() {
     return (
-        <ToastProvider>
         <AuthProvider>
-            <AuthGate />
+            <ToastProvider>
+                <AuthGate />
+            </ToastProvider>
         </AuthProvider>
-        </ToastProvider>
     );
 }
