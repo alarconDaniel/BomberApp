@@ -3,7 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, SafeAreaView, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { useAuth } from '../../../auth/AuthContext'; // ajusta el path si difiere
+import { useAuth } from '../../../auth/AuthContext';
+import { markModalClosed } from '../../../navigation/ModalTracker';
+import {useMarkModalOnClose} from "../../../navigation/useMarkModalOnClose"; // ajusta el path si difiere
+
 
 type RetoDetalle = {
     codReto: number;
@@ -23,6 +26,8 @@ function formatTiempo(ms: number) {
 }
 
 export default function DetalleRetoScreen() {
+    useMarkModalOnClose();
+
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const { fetchJson } = useAuth();
@@ -58,7 +63,7 @@ export default function DetalleRetoScreen() {
         <SafeAreaView style={styles.safe}>
             {/* Botón volver */}
             <View style={styles.headerRow}>
-                <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={10}>
+                <Pressable onPress={() => {markModalClosed(); router.back()}} style={styles.backBtn} hitSlop={10}>
                     <FontAwesome5 name="chevron-left" size={18} />
                     <Text style={styles.backTxt}>Volver</Text>
                 </Pressable>

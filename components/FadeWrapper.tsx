@@ -2,6 +2,7 @@
 import { ReactNode, useRef, useEffect } from 'react';
 import { Animated } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
+import { wasModalClosedRecently } from '../navigation/ModalTracker';
 
 interface FadeWrapperProps {
     children: ReactNode;
@@ -20,6 +21,12 @@ export default function FadeWrapper({
 
     useEffect(() => {
         if (isFocused) {
+            // Si acabamos de cerrar un modal, no animes: deja visible al tiro.
+            if (wasModalClosedRecently()) {
+                fadeAnim.setValue(1);
+                hasRun.current = true;
+                return;
+            }
             // Evita relanzar mientras la pantalla ya está enfocada
             if (!hasRun.current) {
                 fadeAnim.setValue(0);
@@ -28,16 +35,15 @@ export default function FadeWrapper({
                     duration,
                     delay,
                     useNativeDriver: true,
-                }).start(() => { hasRun.current = true; });
+                }).start(() => {
+                    hasRun.current = true;
+                });
             }
         } else {
-            hasRun.current = false; // se permite animar de nuevo la próxima vez que entre
+            // La próxima vez que entre (salvo regreso de modal), sí animará
+            hasRun.current = false;
         }
     }, [isFocused, duration, delay, fadeAnim]);
 
-    return (
-        <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-            {children}
-        </Animated.View>
-    );
+    return <Animated.View style={{ flex: 1, opacity: fadeAnim }}>{children}</Animated.View>;
 }
