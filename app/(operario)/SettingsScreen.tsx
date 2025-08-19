@@ -95,7 +95,7 @@ export default function SettingsScreen() {
 
                     {/* --------- Otros --------- */}
                     <Section title="Otros">
-                        <Pressable onPress={() => setPolicyOpen(true)}>
+                        <Pressable onPress={() => router.push('/(modals)/privacy')}>
                             <SettingRow
                                 icon={<MaterialCommunityIcons name="shield-check-outline" size={22} />}
                                 label="Política de privacidad"
