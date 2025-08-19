@@ -54,6 +54,20 @@ function resolveBaseUrl(): string {
 export const BASE_URL = resolveBaseUrl();
 
 export const API = {
-  listar: `${BASE_URL}/reto/listar`,
-  crear: `${BASE_URL}/reto/crear`,
+
+   reto:{
+    listar: `${BASE_URL}/reto/listar`,
+    crear: `${BASE_URL}/reto/crear`,
+    modificar: `${BASE_URL}/reto/modificar`,
+    borrar: (cod: number | string) => `${BASE_URL}/reto/borrar/${cod}`,
+   },
+ 
+  usuario: {
+    listar: `${BASE_URL}/usuario/listar`,
+    crear: `${BASE_URL}/usuario/crear`,
+    modificar: `${BASE_URL}/usuario/modificar`,
+    borrar: (cod: number | string) => `${BASE_URL}/usuario/borrar/${cod}`,
+  },
 };
+
+

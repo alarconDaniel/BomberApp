@@ -1,3 +1,4 @@
+// screens/RetosScreen.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView, View, Text, StyleSheet, ScrollView, TextInput,
@@ -5,9 +6,7 @@ import {
 } from 'react-native';
 import FadeWrapper from '../components/FadeWrapper';
 import HeaderOperario from '../components/HeaderOperario';
-import FooterOperario from '../components/CustomFooter';
 import { colors } from '../styles/globalStyles1';
-
 import { API } from '../config/api';
 
 const FOOTER_HEIGHT = 64;
@@ -47,14 +46,41 @@ export default function RetosScreen() {
   const listarRetos = async () => {
     try {
       setCargando(true);
-      const res = await fetch(API.listar);
+      const res = await fetch(API.reto.listar);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: RetoDTO[] = await res.json();
       setRetos(Array.isArray(json) ? json : []);
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'No se pudo cargar la lista de retos');
     } finally {
       setCargando(false);
     }
+  };
+
+  // Borrar reto
+  const borrar = (id: string | number) => {
+    Alert.alert('Confirmar', '¿Deseas borrar este reto?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Borrar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setCargando(true);
+            const res = await fetch(API.reto.borrar(id), { method: 'DELETE' });
+            if (!res.ok) {
+              const txt = await res.text();
+              throw new Error(txt || `HTTP ${res.status}`);
+            }
+            await listarRetos();
+          } catch (e: any) {
+            Alert.alert('Error', e?.message ?? 'No se pudo borrar');
+          } finally {
+            setCargando(false);
+          }
+        },
+      },
+    ]);
   };
 
   const crearReto = async () => {
@@ -73,8 +99,7 @@ export default function RetosScreen() {
 
     try {
       setCargando(true);
-      console.log('POST →', API.crear);
-      const res = await fetch(API.crear, {
+      const res = await fetch(API.reto.crear, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -106,9 +131,10 @@ export default function RetosScreen() {
     'Señales de advertencia',
   ];
 
-  const dataHistorial = useMemo(() => {
-    const src = retos.length ? retos.map(r => r.nombreReto) : dataHistorialBase;
-    return src.filter((t) => t.toLowerCase().includes(query.toLowerCase()));
+  // Filtra por búsqueda cuando hay datos reales
+  const retosFiltrados = useMemo(() => {
+    const q = query.toLowerCase();
+    return retos.filter(r => (r.nombreReto || '').toLowerCase().includes(q));
   }, [query, retos]);
 
   return (
@@ -175,9 +201,8 @@ export default function RetosScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Historial / Lista */}
+          {/* Buscador lista */}
           <Text style={styles.historyTitle}>Historial de retos</Text>
-
           <View style={styles.searchWrap}>
             <TextInput
               value={query}
@@ -188,18 +213,34 @@ export default function RetosScreen() {
             />
           </View>
 
-          <FlatList
-            data={dataHistorial}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => <HistoryItem title={item} />}
-            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-            scrollEnabled={false}
-            style={{ marginTop: 8 }}
-          />
+          {/* Lista real con borrar; si no hay datos, fallback a placeholders */}
+          {retos.length > 0 ? (
+            <FlatList
+              data={retosFiltrados}
+              keyExtractor={(item) => String(item.codReto)}
+              renderItem={({ item }) => (
+                <RetoItem
+                  item={item}
+                  onDelete={() => borrar(item.codReto)}
+                />
+              )}
+              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              scrollEnabled={false}
+              style={{ marginTop: 8 }}
+            />
+          ) : (
+            <FlatList
+              data={dataHistorialBase.filter(t =>
+                t.toLowerCase().includes(query.toLowerCase())
+              )}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => <HistoryItem title={item} />}
+              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              scrollEnabled={false}
+              style={{ marginTop: 8 }}
+            />
+          )}
         </ScrollView>
-
-        {/* (opcional) footer si lo usas */}
-        {/* <FooterOperario /> */}
       </SafeAreaView>
     </FadeWrapper>
   );
@@ -232,15 +273,43 @@ function Chip({ label, active, onPress }: { label: string; active?: boolean; onP
     </TouchableOpacity>
   );
 }
+
+function Square({ onPress, danger = false }: { onPress?: () => void; danger?: boolean }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.8}
+      style={[styles.square, danger && { backgroundColor: '#ff6b6b' }]}
+    />
+  );
+}
+
+function RetoItem({
+  item,
+  onDelete,
+}: {
+  item: RetoDTO;
+  onDelete: () => void;
+}) {
+  return (
+    <View style={styles.historyItem}>
+      <Text style={styles.historyText} numberOfLines={1}>
+        {item.nombreReto}
+      </Text>
+      <View style={styles.historyActions}>
+        <Square onPress={() => { /* TODO: editar */ }} />
+        {/* 2º botón: borrar */}
+        <Square danger onPress={onDelete} />
+      </View>
+    </View>
+  );
+}
+
 function HistoryItem({ title }: { title: string }) {
   return (
     <View style={styles.historyItem}>
       <Text style={styles.historyText}>{title}</Text>
-      <View style={styles.historyActions}>
-        <View style={styles.square} />
-        <View style={styles.square} />
-        <View style={styles.square} />
-      </View>
+      {/* placeholder sin acciones */}
     </View>
   );
 }
@@ -264,6 +333,7 @@ const styles = StyleSheet.create({
     color: '#1F2937', textAlignVertical: 'top',
   },
   counter: { position: 'absolute', right: 8, bottom: 6, fontSize: 12, color: '#8A93A0' },
+
   radioRow: { flexDirection: 'row', gap: 16, alignItems: 'center' },
   radioItem: { flexDirection: 'row', alignItems: 'center' },
   radioOuter: {
@@ -272,24 +342,29 @@ const styles = StyleSheet.create({
   },
   radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.blue },
   radioLabel: { color: colors.navy },
+
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   chip: { paddingHorizontal: 12, height: 34, borderRadius: 16, borderWidth: 1, justifyContent: 'center' },
   chipText: { fontWeight: '700', color: colors.navy },
+
   actionsRow: { flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' },
   actionBtn: { backgroundColor: colors.orange, paddingHorizontal: 14, height: 36, borderRadius: 10, justifyContent: 'center' },
   actionText: { color: colors.white, fontWeight: '800' },
+
   historyTitle: { fontSize: 18, fontWeight: '800', marginTop: 18, color: colors.navy },
   searchWrap: {
     marginTop: 8, borderWidth: 1, borderColor: '#D2D8DE',
     borderRadius: 8, backgroundColor: '#F8FAFC',
   },
   searchInput: { height: 38, paddingHorizontal: 12, color: '#1F2937' },
+
   historyItem: {
     backgroundColor: '#D9D9D9', borderRadius: 8, paddingHorizontal: 12, height: 42,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  historyText: { fontWeight: '600', color: '#2A2A2A' },
+  historyText: { fontWeight: '600', color: '#2A2A2A', flex: 1, marginRight: 8 },
   historyActions: { flexDirection: 'row', gap: 6 },
+
   square: { width: 20, height: 20, backgroundColor: '#BDBDBD', borderRadius: 4 },
 
   saveBtn: {
