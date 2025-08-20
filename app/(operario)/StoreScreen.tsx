@@ -1,3 +1,4 @@
+// app/(tabs)/StoreScreen.tsx
 import React, {useEffect, useMemo, useState} from 'react';
 import {
     View,
@@ -10,39 +11,25 @@ import {
     Dimensions,
 } from 'react-native';
 import {useRouter} from 'expo-router';
-import {FontAwesome5} from '@expo/vector-icons';
-import {ItemTienda} from "../../models/ItemTienda";
-import FadeWrapper from "../../components/FadeWrapper";
-import StoreItemCard from "../../components/StoreItemCard";
-import DetailsStoreItemModal from "../../components/DetailsStoreItemModal";
-import {useAuth} from "../../auth/AuthContext";
-import {StatsUsuario} from "../../models/StatsUsuario";
+import {ItemTienda} from '../../models/ItemTienda';
+import FadeWrapper from '../../components/FadeWrapper';
+import StoreItemCard from '../../components/StoreItemCard';
+import DetailsStoreItemModal from '../../components/DetailsStoreItemModal';
+import {useAuth} from '../../auth/AuthContext';
+import {StatsUsuario} from '../../models/StatsUsuario';
 import PurchaseSuccessOverlay from '../../components/PurchaseSuccessOverlay';
-import { useToast } from '../../components/ToastProvider';
-
-// import DetailsStoreItemModal from '../components/DetailsStoreItemModal';
-
-// import HeaderOperario from '../components/HeaderOperario';
-// import FadeWrapper from '../components/FadeWrapper';
-
-// import {ItemTienda} from '../models/ItemTienda';
-// import {ServicioGet} from '../services/ServicioGet';
-// import {styles as global} from '../styles/globalStyles';
-// import StoreItemCard from '../components/StoreItemCard';
+import {useToast} from '../../components/ToastProvider';
+import {useTheme} from '../../theme/ThemeProvider';
 
 const {width: SCREEN_W} = Dimensions.get('window');
-
-// Ajusta estos valores a lo que te entregue tu API
-const URL_LISTAR_ITEMS = 'http://192.168.20.20:3550/item-tienda/listar';
 
 type SectionKey = 'POTENCIADOR' | 'COFRE' | 'ROPA';
 type Section = { key: SectionKey; title: string; items: ItemTienda[] };
 
 function toItemTienda(raw: any): ItemTienda {
-    const meta =
-        typeof raw.metadataItem === 'string'
-            ? JSON.parse(raw.metadataItem)
-            : raw.metadataItem ?? {};
+    const meta = typeof raw.metadataItem === 'string'
+        ? JSON.parse(raw.metadataItem)
+        : raw.metadataItem ?? {};
     return new ItemTienda(
         raw.codItem ?? raw.cod ?? 0,
         raw.nombreItem ?? raw.nombre ?? 'Item',
@@ -57,15 +44,17 @@ function toItemTienda(raw: any): ItemTienda {
 type Stats = { codUsuario: number; racha: number; monedas: number; xp: number; nivel: number };
 
 export default function StoreScreen() {
-
     const toast = useToast();
-    const [successInfo, setSuccessInfo] = useState<{name: string; qty: number} | null>(null);
+    const [successInfo, setSuccessInfo] = useState<{ name: string; qty: number } | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
 
-    const [stats, setStats] = useState<StatsUsuario>({codUsuario: 0, racha: 0, monedas: 0, xp: 0, nivel: 0});
+    const [stats, setStats] = useState<StatsUsuario>({ codUsuario: 0, racha: 0, monedas: 0, xp: 0, nivel: 0 });
 
-    const {fetchJson, baseUrl} = useAuth();
+    const { fetchJson } = useAuth();
     const [comprando, setComprando] = useState(false);
+
+    const { colors, isDark, utils } = useTheme() as any;
+    const s = useMemo(() => makeStyles(colors, isDark, utils), [colors, isDark, utils]);
 
     const listarStats = async () => {
         try {
@@ -89,27 +78,20 @@ export default function StoreScreen() {
     };
     const closeDetails = () => {
         setDetailsOpen(false);
-        // opcional: limpia el item luego de la animación
         setTimeout(() => setSelected(null), 200);
     };
-
 
     const handleBuy = async (it: ItemTienda, qty: number) => {
         try {
             setComprando(true);
-            await fetchJson('/item-tienda/comprar', { method:'POST', body: JSON.stringify({ codItem: it.codItem, cantidad: qty }) });
+            await fetchJson('/item-tienda/comprar', { method: 'POST', body: JSON.stringify({ codItem: it.codItem, cantidad: qty }) });
             await listarStats();
-
-            // 1) cierra el details primero
             closeDetails();
-
-            // 2) espera su fade (tu setTimeout de 200ms) y luego muestra overlay
             setTimeout(() => {
                 setSuccessInfo({ name: it.nombreItem, qty });
                 setShowSuccess(true);
             }, 240);
         } catch (e: any) {
-            // tu toast/error aquí
             alert(e?.message ?? 'No se pudo completar la compra');
         } finally {
             setComprando(false);
@@ -135,32 +117,31 @@ export default function StoreScreen() {
     }, []);
 
     const sections: Section[] = useMemo(() => {
-        const by = (tipo: SectionKey) =>
-            items.filter((it) => String(it.tipoItem).toUpperCase() === tipo);
+        const by = (tipo: SectionKey) => items.filter((it) => String(it.tipoItem).toUpperCase() === tipo);
         return [
-            {key: 'POTENCIADOR', title: 'Artículos', items: by('POTENCIADOR')},
-            {key: 'COFRE', title: 'Cofres', items: by('COFRE')},
-            {key: 'ROPA', title: 'Ropa', items: by('ROPA')},
+            { key: 'POTENCIADOR', title: 'Artículos', items: by('POTENCIADOR') },
+            { key: 'COFRE', title: 'Cofres', items: by('COFRE') },
+            { key: 'ROPA', title: 'Ropa', items: by('ROPA') },
         ];
     }, [items]);
 
     if (cargando) {
         return (
-            <View style={s.center}>
-                <ActivityIndicator size="large"/>
-                <Text style={{marginTop: 16}}>Cargando tienda…</Text>
+            <View style={[s.center, { backgroundColor: colors.bg }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={[s.muted, { marginTop: 16 }]}>Cargando tienda…</Text>
             </View>
         );
     }
 
     if (error) {
         return (
-            <View style={s.center}>
-                <Text style={{marginBottom: 12, paddingHorizontal: 60}}>
+            <View style={[s.center, { backgroundColor: colors.bg }]}>
+                <Text style={[s.text, { marginBottom: 12, paddingHorizontal: 60 }]}>
                     Uy, se cayó esto: {error}
                 </Text>
                 <Pressable onPress={listarItems} style={s.retryBtn}>
-                    <Text>Reintentar</Text>
+                    <Text style={s.text}>Reintentar</Text>
                 </Pressable>
             </View>
         );
@@ -168,128 +149,69 @@ export default function StoreScreen() {
 
     return (
         <FadeWrapper>
-            <View style={{flex: 1}}>
-
-                <ScrollView showsVerticalScrollIndicator={false}
-                            contentContainerStyle={{paddingTop: 62, paddingBottom: 32}}>
+            <View style={{ flex: 1, backgroundColor: colors.bg }}>
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingTop: 62, paddingBottom: 32 }}
+                >
                     {sections.map((sec) => {
-                            if (!sec.items.length) return null;
+                        if (!sec.items.length) return null;
 
-                            if (sec.key == "POTENCIADOR") {
-                                return (
-                                    <View key={sec.key}>
-                                        <View style={s.sectionHeader}>
-                                            <Text style={s.sectionTitle}>{sec.title}</Text>
-                                            <View style={s.sectionBar}/>
-                                        </View>
+                        return (
+                            <View key={sec.key} style={{ marginTop: sec.key === 'POTENCIADOR' ? 0 : 16 }}>
+                                {/* Header de sección */}
+                                <View style={s.sectionHeader}>
+                                    <Text style={s.sectionTitle}>{sec.title}</Text>
+                                    {/* barra a la derecha del título — un poco más clara en dark */}
+                                    <View style={s.sectionBar} />
+                                </View>
 
+                                {/* barra/“regleta” extra para Artículos (quedaba muy sutil) */}
+                                {sec.key === 'POTENCIADOR' ? <View style={s.sectionBar2} /> : null}
 
-                                        <View style={s.sectionBar2}/>
-
-                                        <FlatList
-                                            horizontal
-                                            keyExtractor={(it) => `${sec.key}-${it.codItem}`}
-                                            showsHorizontalScrollIndicator={false}
-                                            contentContainerStyle={{paddingHorizontal: SCREEN_W*0.04}}
-                                            ItemSeparatorComponent={() => <View style={{width: SCREEN_W*0.04}}/>}
-                                            data={sec.items}
-                                            renderItem={({item}) => (
-                                                <StoreItemCard
-                                                    item={item}
-                                                    onPress={() => openDetails(item)}
-                                                    // toques de UI distintos por sección
-                                                    accentColor={
-                                                        sec.key === 'POTENCIADOR'
-                                                            ? '#3B5BDB'
-                                                            : sec.key === 'COFRE'
-                                                                ? '#0EA5E9'
-                                                                : '#10B981'
-                                                    }
-                                                    variant={sec.key}
-                                                />
-                                            )}
-                                        />
-                                    </View>
-                                )
-                            }
-                            if (sec.key == "COFRE") {
-                                return (
-                                    <View key={sec.key} style={{marginTop: 16}}>
-                                        {/* Sección / título */}
-                                        <View style={s.sectionHeader}>
-                                            <Text style={s.sectionTitle}>{sec.title}</Text>
-                                            <View style={s.sectionBar}/>
-                                        </View>
-
-                                        {/* Lista horizontal por sección */}
-                                        <FlatList
-                                            style={{alignSelf: 'center'}}
-                                            horizontal
-                                            keyExtractor={(it) => `${sec.key}-${it.codItem}`}
-                                            showsHorizontalScrollIndicator={false}
-                                            contentContainerStyle={{paddingHorizontal: 12}}
-                                            ItemSeparatorComponent={() => <View style={{width: 12}}/>}
-                                            data={sec.items}
-                                            renderItem={({item}) => (
-                                                <StoreItemCard
-                                                    item={item}
-                                                    onPress={() => openDetails(item)}
-                                                    // toques de UI distintos por sección
-                                                    accentColor={
-                                                        sec.key === 'POTENCIADOR'
-                                                            ? '#3B5BDB'
-                                                            : sec.key === 'COFRE'
-                                                                ? '#0EA5E9'
-                                                                : '#10B981'
-                                                    }
-                                                    variant={sec.key}
-                                                />
-                                            )}
-                                        />
-                                    </View>
-                                );
-                            }
-                            if (sec.key == "ROPA"){
-                                return (
-                                    <View key={sec.key} style={{marginTop: 16}}>
-                                        {/* Sección / título */}
-                                        <View style={s.sectionHeader}>
-                                            <Text style={s.sectionTitle}>{sec.title}</Text>
-                                            <View style={s.sectionBar}/>
-                                        </View>
-
-                                        {/* Lista horizontal por sección */}
-                                        <FlatList
-                                            numColumns={2}
-                                            scrollEnabled={false}              // 👈 clave para quitar el warning
-                                            keyExtractor={(it) => `${sec.key}-${it.codItem}`}
-                                            showsVerticalScrollIndicator={false}
-                                            contentContainerStyle={{ padding: 12 }}
-                                            columnWrapperStyle={{ gap: 12 }}
-                                            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-                                            data={sec.items}
-                                            renderItem={({ item }) => (
-                                                <StoreItemCard
-                                                    item={item}
-                                                    onPress={() => openDetails(item)}
-                                                    accentColor={
-                                                        sec.key === 'POTENCIADOR'
-                                                            ? '#3B5BDB'
-                                                            : sec.key === 'COFRE'
-                                                                ? '#0EA5E9'
-                                                                : '#10B981'
-                                                    }
-                                                    variant={sec.key}
-                                                />
-                                            )}
-                                        />
-                                    </View>
-                                );
-                            }
-                        }
-                    )
-                    }
+                                {/* Lista por sección */}
+                                {sec.key === 'ROPA' ? (
+                                    <FlatList
+                                        numColumns={2}
+                                        scrollEnabled={false}
+                                        keyExtractor={(it) => `${sec.key}-${it.codItem}`}
+                                        showsVerticalScrollIndicator={false}
+                                        contentContainerStyle={{ padding: 12 }}
+                                        columnWrapperStyle={{ gap: 12 }}
+                                        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+                                        data={sec.items}
+                                        renderItem={({ item }) => (
+                                            <StoreItemCard
+                                                item={item}
+                                                onPress={() => openDetails(item)}
+                                                accentColor={sec.key === 'POTENCIADOR' ? '#3B5BDB' : sec.key === 'COFRE' ? '#0EA5E9' : '#10B981'}
+                                                variant={sec.key}
+                                            />
+                                        )}
+                                    />
+                                ) : (
+                                    <FlatList
+                                        horizontal
+                                        keyExtractor={(it) => `${sec.key}-${it.codItem}`}
+                                        showsHorizontalScrollIndicator={false}
+                                        contentContainerStyle={{ paddingHorizontal: sec.key === 'POTENCIADOR' ? SCREEN_W * 0.04 : 12 }}
+                                        ItemSeparatorComponent={() => <View style={{ width: sec.key === 'POTENCIADOR' ? SCREEN_W * 0.04 : 12 }} />}
+                                        data={sec.items}
+                                        renderItem={({ item }) => (
+                                            <StoreItemCard
+                                                item={item}
+                                                onPress={() => openDetails(item)}
+                                                accentColor={sec.key === 'POTENCIADOR' ? '#3B5BDB' : sec.key === 'COFRE' ? '#0EA5E9' : '#10B981'}
+                                                variant={sec.key}
+                                            />
+                                        )}
+                                    />
+                                )}
+                            </View>
+                        );
+                    })}
                 </ScrollView>
+
                 <DetailsStoreItemModal
                     visible={detailsOpen}
                     item={selected}
@@ -312,43 +234,64 @@ export default function StoreScreen() {
                     itemName={successInfo?.name ?? ''}
                     qty={successInfo?.qty ?? 1}
                     onClose={() => setShowSuccess(false)}
-                    autoCloseMs={1800}  // opcional
+                    autoCloseMs={1800}
                 />
             </View>
         </FadeWrapper>
     );
 }
 
-const s = StyleSheet.create({
-    center: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-    retryBtn: {
-        padding: 12,
-        backgroundColor: '#e5e7eb',
-        borderRadius: 8,
-    },
-    sectionHeader: {
-        paddingHorizontal: 16,
-        marginBottom: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    sectionTitle: {
-        fontSize: 22,
-        fontWeight: '800',
-        color: '#111827',
-    },
-    sectionBar: {
-        height: 6,
-        borderRadius: 999,
-        backgroundColor: '#E5E7EB',
-        marginLeft: 10,
-        flex: 1,
-    },
-    sectionBar2: {
-        height: 18,
-        outlineColor: '#a5afc4',
-        outlineWidth: 2,
-        backgroundColor: '#E5E7EB',
-        flex: 1,
-    },
-});
+/* ---------- estilos dependientes del tema ---------- */
+const makeStyles = (
+    c: import('../../theme/ThemeProvider').Palette,
+    isDark: boolean,
+    utils?: { accentStripe?: (c?: string) => string }
+) =>
+    StyleSheet.create({
+        center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+        text: { color: c.text },
+        muted: { color: c.sub },
+
+        retryBtn: {
+            padding: 12,
+            backgroundColor: c.cardTint,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: c.divider,
+        },
+
+        sectionHeader: {
+            paddingHorizontal: 16,
+            marginBottom: 8,
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        sectionTitle: {
+            fontSize: 22,
+            fontWeight: '800',
+            color: c.text,
+        },
+
+        // barra a la derecha del título
+        // en dark la hacemos más clara mezclando acento+cardTint (queda visible pero suave)
+        sectionBar: {
+            height: 6,
+            borderRadius: 999,
+            marginLeft: 10,
+            flex: 1,
+            backgroundColor: utils?.accentStripe
+                ? utils.accentStripe(c.primary)
+                : (isDark ? c.cardTint : c.divider),
+        },
+
+        // regleta extra que tenías (más clara y con borde leve)
+        sectionBar2: {
+            height: 18,
+            borderRadius: 8,
+            backgroundColor: c.cardTint,
+            borderWidth: 1,
+            borderColor: c.divider,
+            marginHorizontal: 16,
+            marginBottom: 8,
+        },
+    });

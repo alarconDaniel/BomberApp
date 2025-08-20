@@ -14,6 +14,7 @@ import { BlurView } from 'expo-blur';
 import Slider from '@react-native-community/slider';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { ItemTienda } from '../models/ItemTienda';
+import { useTheme } from '../theme/ThemeProvider';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -44,6 +45,8 @@ export default function DetailsStoreItemModal(props: Props) {
         buying = false,
     } = props;
 
+    const { colors, isDark } = useTheme();
+
     // 👇 Llama hooks SIEMPRE
     const [qty, setQty] = useState(1);
     const shake = useRef(new Animated.Value(0)).current;
@@ -61,7 +64,7 @@ export default function DetailsStoreItemModal(props: Props) {
     const hasFunds = total <= userCoins;
 
     useEffect(() => {
-        if (!item) return;          // 👈 evita animar cuando no hay item
+        if (!item) return;
         if (!hasFunds) {
             Animated.sequence([
                 Animated.timing(shake, { toValue: 1, duration: 60, easing: Easing.linear, useNativeDriver: true }),
@@ -84,79 +87,79 @@ export default function DetailsStoreItemModal(props: Props) {
         onBuy(item, clamp(qty));
     };
 
-    // 👇 Ahora retornas null al final, tras preparar todo
     if (!visible || !item) return null;
-
 
     return (
         <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-            <Pressable style={s.backdrop} onPress={onClose}>
-                <BlurView intensity={35} tint="dark" style={s.backdropBlur} />
+            {/* fondo clickeable */}
+            <Pressable style={styles.backdrop} onPress={onClose}>
+                <BlurView intensity={35} tint={isDark ? 'dark' : 'light'} style={styles.backdropBlur} />
             </Pressable>
 
-            <View style={s.centerWrap} pointerEvents="box-none">
-                <Pressable style={[s.card, s.shadow]} onPress={() => {}}>
-                    <Text style={[s.title, { color: '#111827' }]} numberOfLines={2}>
+            <View style={styles.centerWrap} pointerEvents="box-none">
+                <Pressable style={[styles.card, styles.shadow, { backgroundColor: colors.card, borderColor: colors.divider }]} onPress={() => {}}>
+                    {/* título */}
+                    <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
                         {item.nombreItem}
                     </Text>
 
-                    <View style={s.mediaRow}>
+                    {/* media + descripción */}
+                    <View style={styles.mediaRow}>
                         {imageUrl ? (
-                            <Image source={{ uri: imageUrl }} resizeMode="contain" style={s.image} />
+                            <Image source={{ uri: imageUrl }} resizeMode="contain" style={[styles.image, { backgroundColor: colors.cardTint }]} />
                         ) : (
-                            <View style={s.iconWrap}>
+                            <View style={[styles.iconWrap, { backgroundColor: colors.cardTint }]}>
                                 <FontAwesome5 name={iconName as any} size={48} color={accentColor} />
                             </View>
                         )}
 
                         <View style={{ flex: 1 }}>
-                            <Text style={s.desc} numberOfLines={5}>
+                            <Text style={[styles.desc, { color: colors.text }]} numberOfLines={5}>
                                 {item.descripcionItem || 'Sin descripción.'}
                             </Text>
-                            {/* 👇 Info de monedas del usuario */}
-                            <Text style={{ marginTop: 6, fontWeight: '700', color: '#6B7280' }}>
+                            {/* monedas del usuario */}
+                            <Text style={{ marginTop: 6, fontWeight: '700', color: colors.sub }}>
                                 Tus monedas: {userCoins}
                             </Text>
                         </View>
                     </View>
 
                     {/* Selector de cantidad */}
-                    <View style={s.qtyRow}>
+                    <View style={styles.qtyRow}>
                         <Pressable
                             onPress={() => setQty((q) => clamp(q - 1))}
-                            style={[s.circleBtn, { borderColor: '#D1D5DB' }]}
+                            style={[styles.circleBtn, { borderColor: colors.divider, backgroundColor: colors.card }]}
                         >
-                            <Text style={s.circleTxt}>−</Text>
+                            <Text style={[styles.circleTxt, { color: colors.text }]}>−</Text>
                         </Pressable>
 
-                        <Animated.View style={[s.sliderWrap, { transform: [{ translateX }] }]}>
+                        <Animated.View style={[styles.sliderWrap, { transform: [{ translateX }] }]}>
                             <Slider
                                 value={qty}
                                 onValueChange={(v: number) => setQty(Math.min(99, Math.max(1, Math.round(v))))}
                                 minimumValue={1}
                                 maximumValue={20}
                                 step={1}
-                                // 👇 Rojo si no alcanza
-                                minimumTrackTintColor={hasFunds ? accentColor : '#EF4444'}
-                                maximumTrackTintColor={hasFunds ? '#E5E7EB' : '#FCA5A5'}
-                                thumbTintColor={hasFunds ? accentColor : '#EF4444'}
+                                minimumTrackTintColor={hasFunds ? accentColor : '#B91C1C'}
+                                maximumTrackTintColor={hasFunds ? colors.divider : '#FCA5A5'}
+                                thumbTintColor={hasFunds ? accentColor : '#B91C1C'}
                             />
-                            <Text style={[s.qtyLabel, { color: hasFunds ? '#6B7280' : '#B91C1C' }]}>
+                            <Text style={[styles.qtyLabel, { color: hasFunds ? colors.sub : '#7d1b1b' }]}>
                                 {qty}{!hasFunds ? ' • Monedas insuficientes' : ''}
                             </Text>
                         </Animated.View>
 
                         <Pressable
                             onPress={() => setQty((q) => clamp(q + 1))}
-                            style={[s.circleBtn, { borderColor: '#D1D5DB' }]}
+                            style={[styles.circleBtn, { borderColor: colors.divider, backgroundColor: colors.card }]}
                         >
-                            <Text style={s.circleTxt}>+</Text>
+                            <Text style={[styles.circleTxt, { color: colors.text }]}>+</Text>
                         </Pressable>
                     </View>
 
                     {/* Footer */}
-                    <View style={s.footer}>
-                        <Text style={[s.total, { color: hasFunds ? '#111827' : '#B91C1C' }]}>
+                    <View style={styles.footer}>
+                        <Text style={[styles.total, { color: hasFunds ? colors.text : '#B91C1C' }]}>
                             {price > 0 ? `$${total}` : 'Gratis'}
                         </Text>
 
@@ -164,11 +167,11 @@ export default function DetailsStoreItemModal(props: Props) {
                             onPress={handleBuy}
                             disabled={!hasFunds || buying}
                             style={[
-                                s.buyBtn,
-                                { backgroundColor: !hasFunds ? '#EF4444' : accentColor, opacity: buying ? 0.7 : 1 },
+                                styles.buyBtn,
+                                { backgroundColor: !hasFunds ? '#B91C1C' : accentColor, opacity: buying ? 0.7 : 1 },
                             ]}
                         >
-                            <Text style={s.buyTxt}>
+                            <Text style={styles.buyTxt}>
                                 {!hasFunds ? 'Monedas insuficientes' : (buying ? 'Comprando…' : 'Comprar')}
                             </Text>
                         </Pressable>
@@ -179,7 +182,8 @@ export default function DetailsStoreItemModal(props: Props) {
     );
 }
 
-const s = StyleSheet.create({
+/* Estilos base; los colores dinámicos se aplican inline con `colors` */
+const styles = StyleSheet.create({
     backdrop: { ...StyleSheet.absoluteFillObject },
     backdropBlur: { flex: 1 },
     centerWrap: {
@@ -191,8 +195,9 @@ const s = StyleSheet.create({
     card: {
         width: SCREEN_W * 0.9,
         borderRadius: 16,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#FFFFFF', // ⟵ se sobreescribe inline con colors.card
         padding: 16,
+        borderWidth: 1,             // ⟵ borde sutil usando colors.divider
     },
     shadow: {
         shadowColor: '#000',
@@ -207,17 +212,17 @@ const s = StyleSheet.create({
         width: 92,
         height: 92,
         borderRadius: 12,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#F3F4F6', // ⟵ se sobreescribe inline con colors.cardTint
     },
     iconWrap: {
         width: 92,
         height: 92,
         borderRadius: 12,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#F3F4F6', // ⟵ se sobreescribe inline con colors.cardTint
         alignItems: 'center',
         justifyContent: 'center',
     },
-    desc: { color: '#374151', lineHeight: 18 },
+    desc: { lineHeight: 18 },
     qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },
     circleBtn: {
         width: 32,
@@ -227,12 +232,11 @@ const s = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    circleTxt: { fontSize: 18, fontWeight: '800', color: '#111827' },
+    circleTxt: { fontSize: 18, fontWeight: '800' },
     sliderWrap: { flex: 1, alignItems: 'stretch', justifyContent: 'center' },
     qtyLabel: {
         alignSelf: 'center',
         marginTop: 4,
-        color: '#6B7280',
         fontSize: 12,
         fontWeight: '700',
     },
@@ -242,7 +246,7 @@ const s = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
     },
-    total: { fontSize: 18, fontWeight: '900', color: '#111827' },
+    total: { fontSize: 18, fontWeight: '900' },
     buyBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12 },
     buyTxt: { color: 'white', fontWeight: '800' },
 });
