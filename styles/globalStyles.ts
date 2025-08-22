@@ -17,15 +17,12 @@ export const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-around',
         paddingTop: 50,
-        backgroundColor: '#fefefe',
-        borderTopWidth: 1,
         borderColor: '#ddd'
     },
     button: {
         width: 50,
         height: 50,
         borderRadius: 25,
-        backgroundColor: '#eaeaea',
         justifyContent: 'center',
         alignItems: 'center'
     },

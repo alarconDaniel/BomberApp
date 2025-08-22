@@ -3,10 +3,13 @@ import React from 'react';
 import { View, Text, Pressable, SafeAreaView, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { markModalClosed } from '../../navigation/ModalTracker';
+import {useMarkModalOnClose} from "../../navigation/useMarkModalOnClose";
 
 
 export default function PrivacyModal() {
     const router = useRouter();
+    useMarkModalOnClose();
 
     const s = StyleSheet.create({
         safe: { flex: 1, backgroundColor: "#f8fafc" },
@@ -40,7 +43,7 @@ export default function PrivacyModal() {
         <SafeAreaView style={s.safe}>
             {/* Header: volver */}
             <View style={s.headerRow}>
-                <Pressable onPress={() => router.back()} style={s.backBtn} hitSlop={10}>
+                <Pressable onPress={() => {markModalClosed(); router.back()}} style={s.backBtn} hitSlop={10}>
                     <FontAwesome5 name="chevron-left" size={18} />
                     <Text style={s.backTxt}>Volver</Text>
                 </Pressable>

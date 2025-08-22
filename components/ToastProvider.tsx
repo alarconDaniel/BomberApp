@@ -4,6 +4,7 @@ import {FontAwesome5} from '@expo/vector-icons';
 
 type ToastType = 'success' | 'error' | 'info';
 type Toast = { id: number; type: ToastType; text: string };
+import { useTheme } from '../theme/ThemeProvider';
 
 type Ctx = {
     show: (type: ToastType, text: string) => void;
@@ -46,36 +47,31 @@ export function ToastProvider({children}: {children: React.ReactNode}) {
 export const useToast = () => useContext(ToastCtx);
 
 function ToastItem({toast, onClose}: {toast: Toast; onClose: () => void}) {
+    const { colors } = useTheme(); // 👈
     const anim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
-        Animated.timing(anim, {
-            toValue: 1,
-            duration: 180,
-            useNativeDriver: true,
-            easing: Easing.out(Easing.quad),
-        }).start();
+        Animated.timing(anim, { toValue: 1, duration: 180, useNativeDriver: true, easing: Easing.out(Easing.quad) }).start();
     }, [anim]);
 
     const translateY = anim.interpolate({inputRange: [0, 1], outputRange: [-20, 0]});
     const opacity = anim;
 
+    // ✅ colores desde theme
     const palette = {
-        success: {bg: '#E7F6EC', border: '#10B981', icon: 'check-circle'},
-        error:   {bg: '#FDE8E8', border: '#EF4444', icon: 'times-circle'},
-        info:    {bg: '#EEF2FF', border: '#6366F1', icon: 'info-circle'},
+        success: { bg: colors.successSoft, border: colors.success, icon: 'check-circle' },
+        error:   { bg: colors.dangerSoft,  border: colors.danger,  icon: 'times-circle' },
+        info:    { bg: colors.primarySoft, border: colors.primary, icon: 'info-circle' },
     }[toast.type];
 
     return (
-        <Animated.View
-            style={[
-                styles.toast,
-                { backgroundColor: palette.bg, borderColor: palette.border, transform: [{translateY}], opacity },
-            ]}
-        >
+        <Animated.View style={[
+            styles.toast,
+            { backgroundColor: palette.bg, borderColor: palette.border, transform: [{translateY}], opacity }
+        ]}>
             <FontAwesome5 name={palette.icon as any} size={18} color={palette.border}/>
-            <Text style={styles.toastText} numberOfLines={2}>{toast.text}</Text>
+            <Text style={[styles.toastText, { color: colors.text }]} numberOfLines={2}>{toast.text}</Text>
             <Pressable onPress={onClose} hitSlop={10}>
-                <FontAwesome5 name="times" size={16} color="#6B7280" />
+                <FontAwesome5 name="times" size={16} color={colors.mutedText} />
             </Pressable>
         </Animated.View>
     );
@@ -88,5 +84,5 @@ const styles = StyleSheet.create({
         flexDirection: 'row', alignItems: 'center', gap: 10,
         shadowColor: '#000', shadowOpacity: 0.12, shadowOffset: {width: 0, height: 4}, shadowRadius: 8, elevation: 4,
     },
-    toastText: { color: '#111827', fontWeight: '700', flex: 1 },
+    toastText: { fontWeight: '700', flex: 1 },
 });

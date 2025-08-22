@@ -1,14 +1,15 @@
 // app/_layout.tsx
-import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
-import { useEffect } from 'react';
-import { AuthProvider, useAuth } from '../auth/AuthContext';
-import { ToastProvider } from '../components/ToastProvider';
+import {Stack, useRouter, useSegments, useRootNavigationState} from 'expo-router';
+import {useEffect} from 'react';
+import {AuthProvider, useAuth} from '../auth/AuthContext';
+import {ToastProvider} from '../components/ToastProvider';
+import {ThemeProvider} from "../theme/ThemeProvider";
 
 function AuthGate() {
-    const router   = useRouter();
+    const router = useRouter();
     const segments = useSegments();
     const navState = useRootNavigationState();
-    const { user, loading } = useAuth();
+    const {user, loading} = useAuth();
 
     useEffect(() => {
         if (loading || !navState?.key) return;
@@ -37,15 +38,17 @@ function AuthGate() {
         // Ya estás en el grupo correcto → nada
     }, [user, loading, navState?.key, segments]);
 
-    return <Stack screenOptions={{ headerShown: false }} />;
+    return <Stack screenOptions={{headerShown: false}}/>;
 }
 
 export default function RootLayout() {
     return (
-        <AuthProvider>
-            <ToastProvider>
-                <AuthGate />
-            </ToastProvider>
-        </AuthProvider>
+        <ThemeProvider>
+            <AuthProvider>
+                <ToastProvider>
+                    <AuthGate/>
+                </ToastProvider>
+            </AuthProvider>
+        </ThemeProvider>
     );
 }
