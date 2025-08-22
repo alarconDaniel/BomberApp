@@ -1,5 +1,5 @@
 // app/(operario)/SettingsScreen.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -15,7 +15,10 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import FadeWrapper from '../../components/FadeWrapper';
 import FooterOperario from '../../components/FooterOperario';
 import { useAuth } from '../../auth/AuthContext';
-import {router} from "expo-router";
+import { router } from 'expo-router';
+
+// 👇 NUEVO: módulo de sonido
+import { initSoundEngine, play, setSoundsEnabled } from '../../utils/sound';
 
 export default function SettingsScreen() {
     const { logout, user } = useAuth();
@@ -23,6 +26,57 @@ export default function SettingsScreen() {
     const [sounds, setSounds] = useState(true);
     const [dark, setDark] = useState(false);
     const [policyOpen, setPolicyOpen] = useState(false);
+
+    // Inicializa audio una sola vez y respeta el switch de "Sonidos de la app"
+    useEffect(() => {
+        initSoundEngine();
+    }, []);
+
+    useEffect(() => {
+        setSoundsEnabled(sounds);
+    }, [sounds]);
+
+    // Pequeños "wrappers" para no alterar estilo ni estructura:
+    const onToggleNotif = useCallback((v: boolean) => {
+        setNotif(v);
+        play('toggle');
+    }, []);
+
+    const onToggleSounds = useCallback((v: boolean) => {
+        setSounds(v);
+        // Dispara el sonido del toggle solo si estamos habilitando,
+        // así evitamos sonar cuando el user lo está apagando.
+        if (v) play('toggle');
+    }, []);
+
+    const onToggleDark = useCallback((v: boolean) => {
+        setDark(v);
+        play('toggle');
+    }, []);
+
+    const onOpenPrivacy = useCallback(() => {
+        play('tap');
+        router.push('/(modals)/privacy');
+    }, []);
+
+    const onPressReviews = useCallback(() => {
+        play('tap');
+        Alert.alert('Reseñas', 'Esta función vendrá pronto 🛠️');
+    }, []);
+
+    const onPressLogout = useCallback(async () => {
+        play('tap');
+        try {
+            await logout();
+        } catch {
+            Alert.alert('Ups', 'No pudimos cerrar sesión. Intenta de nuevo.');
+        }
+    }, [logout]);
+
+    const onClosePolicy = useCallback(() => {
+        play('tap');
+        setPolicyOpen(false);
+    }, []);
 
     return (
         <FadeWrapper>
@@ -38,7 +92,7 @@ export default function SettingsScreen() {
                             right={
                                 <Switch
                                     value={notif}
-                                    onValueChange={setNotif}
+                                    onValueChange={onToggleNotif}
                                     trackColor={{ false: '#c7d2fe', true: COLORS.primarySoft }}
                                     thumbColor={notif ? COLORS.primary : '#fff'}
                                 />
@@ -54,7 +108,7 @@ export default function SettingsScreen() {
                             right={
                                 <Switch
                                     value={sounds}
-                                    onValueChange={setSounds}
+                                    onValueChange={onToggleSounds}
                                     trackColor={{ false: '#c7d2fe', true: COLORS.primarySoft }}
                                     thumbColor={sounds ? COLORS.primary : '#fff'}
                                 />
@@ -75,7 +129,6 @@ export default function SettingsScreen() {
                             label="Modo oscuro"
                             right={
                                 <View style={styles.darkRight}>
-                                    {/* iconito que cambia según el estado */}
                                     {dark ? (
                                         <Ionicons name="moon" size={18} style={{ marginRight: 8 }} />
                                     ) : (
@@ -83,7 +136,7 @@ export default function SettingsScreen() {
                                     )}
                                     <Switch
                                         value={dark}
-                                        onValueChange={setDark}
+                                        onValueChange={onToggleDark}
                                         trackColor={{ false: '#c7d2fe', true: COLORS.primarySoft }}
                                         thumbColor={dark ? COLORS.primary : '#fff'}
                                     />
@@ -95,7 +148,7 @@ export default function SettingsScreen() {
 
                     {/* --------- Otros --------- */}
                     <Section title="Otros">
-                        <Pressable onPress={() => router.push('/(modals)/privacy')}>
+                        <Pressable onPress={onOpenPrivacy}>
                             <SettingRow
                                 icon={<MaterialCommunityIcons name="shield-check-outline" size={22} />}
                                 label="Política de privacidad"
@@ -105,9 +158,7 @@ export default function SettingsScreen() {
 
                         <Divider />
 
-                        <Pressable
-                            onPress={() => Alert.alert('Reseñas', 'Esta función vendrá pronto 🛠️')}
-                        >
+                        <Pressable onPress={onPressReviews}>
                             <SettingRow
                                 icon={<Ionicons name="star-outline" size={22} />}
                                 label="Reseñar App"
@@ -117,15 +168,7 @@ export default function SettingsScreen() {
 
                         <Divider />
 
-                        <Pressable
-                            onPress={async () => {
-                                try {
-                                    await logout();                 // borra tokens y usuario (cliente)
-                                } catch {
-                                    Alert.alert('Ups', 'No pudimos cerrar sesión. Intenta de nuevo.');
-                                }
-                            }}
-                        >
+                        <Pressable onPress={onPressLogout}>
                             <SettingRow
                                 icon={<MaterialCommunityIcons name="logout" size={22} />}
                                 label="Cerrar sesión"
@@ -138,7 +181,6 @@ export default function SettingsScreen() {
 
                     <View style={{ height: 32 }} />
                 </ScrollView>
-
             </SafeAreaView>
 
             {/* --------- Modal Política de Privacidad --------- */}
@@ -152,9 +194,7 @@ export default function SettingsScreen() {
                     <View style={styles.modalCard}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <MaterialCommunityIcons name="shield-account" size={22} />
-                            <Text style={[styles.modalTitle, { marginLeft: 8 }]}>
-                                Política de privacidad
-                            </Text>
+                            <Text style={[styles.modalTitle, { marginLeft: 8 }]}>Política de privacidad</Text>
                         </View>
                         <ScrollView style={{ marginTop: 12 }}>
                             <Text style={styles.modalText}>
@@ -167,7 +207,7 @@ export default function SettingsScreen() {
                                 una versión de ejemplo que podrás reemplazar por la definitiva.
                             </Text>
                         </ScrollView>
-                        <Pressable style={styles.modalBtn} onPress={() => setPolicyOpen(false)}>
+                        <Pressable style={styles.modalBtn} onPress={onClosePolicy}>
                             <Ionicons name="checkmark-circle-outline" size={18} />
                             <Text style={styles.modalBtnText}>Entendido</Text>
                         </Pressable>
@@ -181,13 +221,13 @@ export default function SettingsScreen() {
 /* ---------- helpers de UI ---------- */
 
 const COLORS = {
-    bg: '#0f172a',             // slate-900
-    card: '#111827',           // gray-900
+    bg: '#0f172a',
+    card: '#111827',
     cardTint: '#0b1220',
-    text: '#e5e7eb',           // gray-200
-    sub: '#a5b4fc',            // indigo-200
-    primary: '#7c3aed',        // violet-600
-    primarySoft: '#c4b5fd',    // violet-300
+    text: '#e5e7eb',
+    sub: '#a5b4fc',
+    primary: '#7c3aed',
+    primarySoft: '#c4b5fd',
     divider: 'rgba(255,255,255,0.08)',
     danger: '#ef4444',
 };
@@ -291,5 +331,5 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         backgroundColor: COLORS.primary,
     },
-    modalBtnText: { color: 'white', fontWeight: '700', marginLeft: 6 },
+    modalBtnText: { color: '#fff', fontWeight: '700', marginLeft: 6 },
 });
