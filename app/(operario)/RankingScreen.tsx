@@ -202,7 +202,7 @@ export default function RankingScreen() {
                 {/* Trofeos */}
                 <View style={{ marginTop: 24, paddingHorizontal: 16, marginBottom: 32 }}>
                     <Text style={{ fontWeight: '900', fontSize: 20 }}>Trofeos en juego</Text>
-                    <Text style={{ color: '#6B7280', marginTop: 4 }}>El trono cambia de manos… si te lo ganas 😉</Text>
+                    <Text style={{ color: '#6B7280', marginTop: 4 }}>El trono cambia de manos todos los dias a las 10PM… si te lo ganas 😉</Text>
 
                     <View style={{ marginTop: 14, gap: 12 }}>
                         {data.trofeos.map((t) => {
