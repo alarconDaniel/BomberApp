@@ -48,6 +48,11 @@ export default function OperarioTabsLayout() {
                     ),
                 }}
             />
+
+            <Tabs.Screen name="RankingScreen" options={{title: 'Ranking', tabBarIcon: ({focused, color, size}) => (
+                    <FontAwesome5 name="trophy" size={size ?? 24} color={color ?? (focused ? '#111' : '#888')} solid/>
+                ),}}/>
+
             <Tabs.Screen
                 name="SettingsScreen"
                 options={{
@@ -57,6 +62,10 @@ export default function OperarioTabsLayout() {
                     ),
                 }}
             />
+
+
+
+
         </Tabs>
     );
 }
