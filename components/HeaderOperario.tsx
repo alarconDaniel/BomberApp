@@ -1,79 +1,53 @@
-// components/HeaderOperario.tsx
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { Text, View, StyleSheet } from 'react-native';
-import { FontAwesome5 } from '@expo/vector-icons';
+import {Text, View} from "react-native";
+import {styles} from "../styles/globalStyles";
+import {FontAwesome5} from "@expo/vector-icons";
 import { useFocusEffect } from 'expo-router';
-import { useAuth } from '../auth/AuthContext';
-import { StatsUsuario } from '../models/StatsUsuario';
-import { styles as global } from '../styles/globalStyles';
-import { useTheme } from '../theme/ThemeProvider';
+import React, { useEffect, useState, useCallback } from 'react';
+import {useAuth} from "../auth/AuthContext";
+import {StatsUsuario} from "../models/StatsUsuario";
 
-export default function HeaderOperario() {
-    const { fetchJson } = useAuth();
-    const [stats, setStats] = useState<StatsUsuario>({
-        codUsuario: 0, racha: 0, monedas: 0, xp: 0, nivel: 0
-    });
+export default function headerOperario() {
 
-    const { colors, isDark } = useTheme();
-    const s = useMemo(() => makeStyles(colors), [colors]);
+    const {fetchJson, baseUrl} = useAuth();
+    const [stats, setStats] = useState<StatsUsuario>({codUsuario: 0, racha: 0, monedas: 0, xp: 0, nivel: 0});
 
     const listarStats = async () => {
         try {
+
             const resultado = await fetchJson<any>('/mis-stats/listar');
+
             setStats(resultado);
-        } catch {
+        } catch (e: any) {
             console.log('Error cargando stats');
         }
     };
 
-    useEffect(() => { listarStats(); }, []);
-    useFocusEffect(useCallback(() => { listarStats(); }, []));
+    useEffect(() => {
+        listarStats();
+    }, []);
 
-    // Mantener colores de icono, pero ajustar el fondo del círculo según tema
-    const fireBg  = isDark ? colors.cardTint : '#ffcfbf';
-    const coinBg  = isDark ? colors.cardTint : '#fff3bd';
-    const fireClr = '#fc4103';
-    const coinClr = '#cca700';
+    useFocusEffect(
+        useCallback(() => {
+            listarStats();
+        }, [])
+    );
 
     return (
-        <View style={[global.containerHeader, s.headerTint]}>
-            {/* Racha */}
-            <View style={{ flexDirection: 'row' }}>
-                <View style={[global.button, s.circleBase, { backgroundColor: fireBg }]}>
-                    <FontAwesome5 name="fire" size={27} color={fireClr} />
+        <View style={styles.containerHeader}>
+            <View style={{flexDirection: 'row'}}>
+                <View style={[styles.button, {backgroundColor: '#ffcfbf'}]}>
+                    <FontAwesome5 name="fire" size={27} color="#fc4103"  />
                 </View>
-                <Text style={[s.value]}>{stats.racha}</Text>
+                <Text style={{paddingLeft: 15, fontSize: 25, fontWeight: 'bold', alignSelf: 'center'}}>{stats.racha}</Text>
             </View>
 
-            {/* Monedas */}
-            <View style={{ flexDirection: 'row' }}>
-                <View style={[global.button, s.circleBase, { backgroundColor: coinBg }]}>
-                    <FontAwesome5 name="coins" size={27} color={coinClr} />
+            <View style={{flexDirection: 'row'}}>
+                <View style={[styles.button, {backgroundColor: '#fff3bd'}]}>
+                    <FontAwesome5 name="coins" size={27} color="#cca700"  />
                 </View>
-                <Text style={[s.value]}>{stats.monedas}</Text>
+                <Text style={{paddingLeft: 15, fontSize: 25, fontWeight: 'bold', alignSelf: 'center'}}>{stats.monedas}</Text>
             </View>
         </View>
-    );
-}
 
-const makeStyles = (c: import('../theme/ThemeProvider').Palette) =>
-    StyleSheet.create({
-        // Tinte del header sin romper layout de global.containerHeader
-        headerTint: {
-            backgroundColor: c.bg,            // si tu header tiene fondo, acompaña al tema
-            borderBottomWidth: 0,             // deja tu global decidir bordes si los tiene
-        },
-        // Círculo del icono: respetamos radio/tamaño del global.button,
-        // solo sumamos borde sutil en ambos temas
-        circleBase: {
-            borderWidth: 1,
-            borderColor: c.divider,
-        },
-        value: {
-            paddingLeft: 15,
-            fontSize: 25,
-            fontWeight: 'bold',
-            alignSelf: 'center',
-            color: c.text,                    // número visible en claro/oscuro
-        },
-    });
+    )
+}
