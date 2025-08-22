@@ -1,199 +1,133 @@
 // app/(tabs)/homeRetos.tsx
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     View, Text, Animated, Dimensions, Pressable, ActivityIndicator,
     Platform, UIManager, StyleSheet
 } from 'react-native';
-import Svg, {Polyline} from 'react-native-svg';
-import {FontAwesome5} from '@expo/vector-icons';
-import {useRouter} from 'expo-router';
+import Svg, { Polyline } from 'react-native-svg';
+import { FontAwesome5 } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 import HeaderOperario from '../../components/HeaderOperario';
 import FadeWrapper from "../../components/FadeWrapper";
+import { Reto } from '../../models/Reto';
+import { useAuth } from "../../auth/AuthContext";
+import { useTheme } from '../../theme/ThemeProvider'; // <-- 🔵
 
-import {Reto} from '../../models/Reto';
-import {styles as global} from "../../styles/globalStyles";
-import {useAuth} from "../../auth/AuthContext";
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-const {width: SCREEN_W, height: SCREEN_H} = Dimensions.get('window');
-
-// Curva
 const NODE_SIZE = 84;
 const STEP_Y = 120;
 const AMPLITUDE = Math.min(120, SCREEN_W * 0.3);
 const PERIOD_PX = 320;
 
-// >>> Extensión solo de la curva (no cambia nodos ni layout)
-const EXTRA_CURVE_TOP = 240;     // cuánto se extiende hacia ARRIBA para que no se vea el final
-const EXTRA_CURVE_BOTTOM = 240;    // puedes dejar 0 o poner, p.ej., 120 si quieres un poco abajo
+const EXTRA_CURVE_TOP = 240;
+const EXTRA_CURVE_BOTTOM = 240;
 
-// Popover
 const POPOVER_W = 240;
-const POPOVER_EST_H = 120;              // altura estimada para decidir arriba/abajo
-const ARROW = 16;                        // tamaño del “rombo”
-const GAP_NODE_POPOVER = 10;            // separación nodo-popover
-const EXTRA_SCROLL_PAD = 260;           // para que el último no choque con el footer
+const POPOVER_EST_H = 120;
+const ARROW = 16;
+const GAP_NODE_POPOVER = 10;
 
-function clamp(n: number, min: number, max: number) {
-    return Math.max(min, Math.min(n, max));
-}
+function clamp(n: number, min: number, max: number) { return Math.max(min, Math.min(n, max)); }
+function xOnS(yPx: number) { const centerX = SCREEN_W / 2; return centerX + AMPLITUDE * Math.sin((2 * Math.PI * yPx) / PERIOD_PX); }
 
-// X para un Y: seno centrado
-function xOnS(yPx: number) {
-    const centerX = SCREEN_W / 2;
-    return centerX + AMPLITUDE * Math.sin((2 * Math.PI * yPx) / PERIOD_PX);
-}
-
-// Camino (original, sin extensión) — lo dejo por si lo quieres usar en otro lado
-function buildPolylinePoints(totalHeight: number) {
-    const points: string[] = [];
-    const step = 8;
-    for (let y = 0; y <= totalHeight; y += step) {
-        const x = xOnS(y);
-        points.push(`${x},${y}`);
-    }
-    return points.join(' ');
-}
-
-// Camino extendido: dibuja desde yLocal=0 hasta total+extras,
-// pero calculando x con yMundo = yLocal - EXTRA_CURVE_TOP para mantener alineación con los nodos.
 function buildPolylinePointsExtended(totalHeight: number, extraTop: number, extraBottom: number) {
     const points: string[] = [];
     const step = 8;
-    const totalLocal = totalHeight + extraTop + extraBottom; // espacio que ocupa el SVG
+    const totalLocal = totalHeight + extraTop + extraBottom;
     for (let yLocal = 0; yLocal <= totalLocal; yLocal += step) {
-        const yWorld = yLocal - extraTop; // corrige fase para que el trazo coincida con nodos existentes
+        const yWorld = yLocal - extraTop;
         const x = xOnS(yWorld);
         points.push(`${x},${yLocal}`);
     }
     return points.join(' ');
 }
 
-// Calcular tiempo correctamente
 function formatTiempo(ms: number) {
     if (!ms || isNaN(ms)) return '0 min';
-
-    const totalMin = Math.floor(ms / 60000); // 60000 ms = 1 minuto
+    const totalMin = Math.floor(ms / 60000);
     const horas = Math.floor(totalMin / 60);
     const minutos = totalMin % 60;
-
     if (horas > 0 && minutos > 0) return `${horas}h ${minutos}m`;
     if (horas > 0) return `${horas}h`;
     return `${minutos}m`;
 }
 
 export default function HomeRetosScreen() {
-
-    const {fetchJson, baseUrl} = useAuth();
-
+    const { colors } = useTheme();                 // <-- 🔵
     const router = useRouter();
+    const { fetchJson } = useAuth();
+
     const [retos, setRetos] = useState<Reto[]>([]);
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState<string | null>(null);
-
-    // id del reto abierto
     const [expandedId, setExpandedId] = useState<number | null>(null);
-
-    // Animación del popover
     const popAnim = useRef(new Animated.Value(0)).current;
 
-    // Enable LayoutAnimation en Android por si se usa en el futuro
-    useEffect(() => {
-        if (Platform.OS === 'android') {
-            // @ts-ignore
-            UIManager.setLayoutAnimationEnabledExperimental?.(true);
-        }
-    }, []);
+    useEffect(() => { if (Platform.OS === 'android') { // @ts-ignore
+        UIManager.setLayoutAnimationEnabledExperimental?.(true); }}, []);
 
     const listarRetos = async () => {
         try {
-            setCargando(true);
-            setError(null);
-
+            setCargando(true); setError(null);
             const resultado = await fetchJson<any[]>('/mis-retos/listar');
-
-            const mapeados: Reto[] = (resultado ?? []).map((item: any) =>
-                new Reto(
-                    item.codReto ?? item.cod ?? 0,
-                    item.nombreReto ?? item.nombre ?? 'Reto',
-                    item.descripcionReto ?? item.descripcion ?? '',
-                    item.tiempoEstimadoSegReto ?? item.tiempo ?? 0,
-                    item.fechaInicioReto ?? item.fechaInicio ?? '',
-                    item.fechaFinReto ?? item.fechaFin ?? '',
-                    item.completadoReto ?? item.completado ?? false,
-                )
-            );
-
+            const mapeados: Reto[] = (resultado ?? []).map((item: any) => new Reto(
+                item.codReto ?? item.cod ?? 0,
+                item.nombreReto ?? item.nombre ?? 'Reto',
+                item.descripcionReto ?? item.descripcion ?? '',
+                item.tiempoEstimadoSegReto ?? item.tiempo ?? 0,
+                item.fechaInicioReto ?? item.fechaInicio ?? '',
+                item.fechaFinReto ?? item.fechaFin ?? '',
+                item.completadoReto ?? item.completado ?? false,
+            ));
             setRetos(mapeados);
         } catch (e: any) {
             setError(e?.message || 'Error cargando retos');
-        } finally {
-            setCargando(false);
-        }
+        } finally { setCargando(false); }
     };
+    useEffect(() => { listarRetos(); }, []);
 
-    useEffect(() => {
-        listarRetos();
-    }, []);
-
-    // Geometría
     const totalHeight = Math.max(SCREEN_H, (retos.length + 1) * STEP_Y);
-
-    // Puntos extendidos: la curva “sigue” por arriba (y opcionalmente por abajo)
     const polylinePoints = useMemo(
         () => buildPolylinePointsExtended(totalHeight, EXTRA_CURVE_TOP, EXTRA_CURVE_BOTTOM),
         [totalHeight]
     );
 
-    const nodes = useMemo(
-        () =>
-            retos.map((r, idx) => {
-                const y = 80 + idx * STEP_Y;
-                const x = xOnS(y);
-                return {reto: r, x, y, idx};
-            }),
-        [retos]
-    );
+    const nodes = useMemo(() =>
+        retos.map((r, idx) => {
+            const y = 80 + idx * STEP_Y;
+            const x = xOnS(y);
+            return { reto: r, x, y, idx };
+        }), [retos]);
 
-    // Animar abrir/cerrar según expandedId
     useEffect(() => {
         if (expandedId == null) {
-            Animated.timing(popAnim, {toValue: 0, duration: 140, useNativeDriver: true}).start();
+            Animated.timing(popAnim, { toValue: 0, duration: 140, useNativeDriver: true }).start();
         } else {
             popAnim.setValue(0);
-            Animated.spring(popAnim, {
-                toValue: 1,
-                useNativeDriver: true,
-                friction: 6,
-                tension: 120,
-            }).start();
+            Animated.spring(popAnim, { toValue: 1, useNativeDriver: true, friction: 6, tension: 120 }).start();
         }
     }, [expandedId]);
 
-    const active = useMemo(
-        () => (expandedId != null ? nodes.find(n => n.reto.codReto === expandedId) : null),
-        [expandedId, nodes]
-    );
-
-    const openFor = (id: number) => {
-        setExpandedId(prev => (prev === id ? null : id));
-    };
+    const active = useMemo(() => (expandedId != null ? nodes.find(n => n.reto.codReto === expandedId) : null), [expandedId, nodes]);
+    const openFor = (id: number) => setExpandedId(prev => (prev === id ? null : id));
 
     if (cargando) {
         return (
-            <View style={[{alignItems: 'center', justifyContent: 'center', flex: 1}]}>
-                <ActivityIndicator size="large"/>
-                <Text style={{marginTop: 20}}>Cargando retos…</Text>
+            <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1, backgroundColor: colors.bg }}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={{ marginTop: 20, color: colors.text }}>Cargando retos…</Text>
             </View>
         );
     }
 
     if (error) {
         return (
-            <View style={[{alignItems: 'center', justifyContent: 'center', flex: 1}]}>
-                <Text style={{marginBottom: 12, paddingHorizontal: 60}}>Uy, se cayó esto: {error}</Text>
-                <Pressable onPress={listarRetos} style={{padding: 12, backgroundColor: '#e5e7eb', borderRadius: 8}}>
-                    <Text>Reintentar</Text>
+            <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1, backgroundColor: colors.bg }}>
+                <Text style={{ marginBottom: 12, paddingHorizontal: 60, color: colors.text }}>Uy, se cayó esto: {error}</Text>
+                <Pressable onPress={listarRetos} style={{ padding: 12, backgroundColor: colors.cardTint, borderRadius: 8, borderWidth: 1, borderColor: colors.divider }}>
+                    <Text style={{ color: colors.text }}>Reintentar</Text>
                 </Pressable>
             </View>
         );
@@ -201,25 +135,21 @@ export default function HomeRetosScreen() {
 
     return (
         <FadeWrapper>
-            <View>
-                <HeaderOperario/>
+            <View style={{ backgroundColor: colors.bg, flex: 1 }}>
+                <HeaderOperario />
 
-                <Animated.ScrollView
-                    showsVerticalScrollIndicator={false}
-                    // contentContainerStyle={{ paddingBottom: EXTRA_SCROLL_PAD }}  // más espacio vs footer
-                >
-                    {/* Camino en S */}
-                    <View style={{height: totalHeight}}>
+                <Animated.ScrollView showsVerticalScrollIndicator={false}>
+                    <View style={{ height: totalHeight }}>
+                        {/* Curva en S */}
                         <Svg
-                            // SVG más alto y desplazado hacia arriba para cubrir el “pull to overscroll”
                             height={totalHeight + EXTRA_CURVE_TOP + EXTRA_CURVE_BOTTOM}
                             width={SCREEN_W}
-                            style={{position: 'absolute', top: -EXTRA_CURVE_TOP, left: 0}}
+                            style={{ position: 'absolute', top: -EXTRA_CURVE_TOP, left: 0 }}
                         >
                             <Polyline
                                 points={polylinePoints}
                                 fill="none"
-                                stroke="#001780"
+                                stroke={colors.brandBlue}         // ⬅️ theme
                                 strokeWidth={24}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -228,120 +158,130 @@ export default function HomeRetosScreen() {
                         </Svg>
 
                         {/* Nodos */}
-                        {nodes.map(({reto, x, y}) => {
+                        {nodes.map(({ reto, x, y }) => {
                             const left = x - NODE_SIZE / 2;
                             const top = y - NODE_SIZE / 2;
+                            const completed = reto.completadoReto;
 
                             return (
                                 <Pressable
                                     key={reto.codReto}
                                     onPress={() => openFor(reto.codReto)}
                                     style={[
-                                        stylesNode.node,
-                                        {left, top}
+                                        {
+                                            position: 'absolute',
+                                            width: NODE_SIZE,
+                                            height: NODE_SIZE,
+                                            borderRadius: NODE_SIZE / 2,
+                                            backgroundColor: colors.card,                 // ⬅
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            shadowColor: '#000',
+                                            shadowOpacity: 0.12,
+                                            shadowOffset: { width: 0, height: 4 },
+                                            shadowRadius: 8,
+                                            elevation: 4,
+                                            borderWidth: 2,
+                                            borderColor: colors.brandBlueBorder,          // ⬅
+                                            left, top,
+                                        },
                                     ]}
                                 >
-                                    {reto.completadoReto ? (
-                                            <View style={[stylesNode.nodeInner, {backgroundColor: 'lightgreen'}]}>
-                                                <FontAwesome5 name="check" size={24} color="green"/>
-                                            </View>) :
-                                        <View style={stylesNode.nodeInner}>
-                                            <FontAwesome5 name="flag" size={24} color="#3B5BDB"/>
-                                        </View>}
-
+                                    <View
+                                        style={{
+                                            width: NODE_SIZE - 14,
+                                            height: NODE_SIZE - 14,
+                                            borderRadius: (NODE_SIZE - 14) / 2,
+                                            backgroundColor: completed ? colors.successSoft : colors.brandBlueSoft, // ⬅
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                        }}
+                                    >
+                                        <FontAwesome5
+                                            name={completed ? 'check' : 'flag'}
+                                            size={24}
+                                            color={completed ? colors.success : colors.primary} // ⬅
+                                        />
+                                    </View>
                                 </Pressable>
                             );
                         })}
 
-                        {/* Overlay para cerrar al tocar fuera */}
+                        {/* Overlay para cerrar */}
                         {expandedId != null && (
-                            <Pressable
-                                onPress={() => setExpandedId(null)}
-                                style={StyleSheet.absoluteFill} // cubre toda el área de la S
-                            />
+                            <Pressable onPress={() => setExpandedId(null)} style={StyleSheet.absoluteFill} />
                         )}
 
-                        {/* Popover (render único, arriba de todo) */}
+                        {/* Popover */}
                         {active && (
                             <Animated.View
                                 pointerEvents="box-none"
                                 style={[
-                                    stylesPopover.container,
-                                    // z-index bien alto y elevation para Android
-                                    {zIndex: 999, elevation: 20},
-                                    // posición calculada
+                                    { position: 'absolute', width: POPOVER_W, zIndex: 999, elevation: 20 },
                                     (() => {
-                                        // ¿abre abajo o arriba?
                                         const isLast = active.idx === retos.length - 1;
                                         const preferDown = active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER + POPOVER_EST_H <= totalHeight - 16;
-                                        const openDown = preferDown && !isLast ? true : false;
-
+                                        const openDown = preferDown && !isLast;
                                         const popLeft = clamp(active.x - POPOVER_W / 2, 10, SCREEN_W - POPOVER_W - 10);
-                                        const popTop = openDown
-                                            ? active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER
-                                            : active.y - GAP_NODE_POPOVER - POPOVER_EST_H;
-
-                                        return {
-                                            left: popLeft,
-                                            top: popTop,
-                                        };
+                                        const popTop = openDown ? active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER : active.y - GAP_NODE_POPOVER - POPOVER_EST_H;
+                                        return { left: popLeft, top: popTop };
                                     })(),
                                     {
-                                        opacity: popAnim.interpolate({inputRange: [0, 1], outputRange: [0, 1]}),
+                                        opacity: popAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
                                         transform: [
-                                            {scale: popAnim.interpolate({inputRange: [0, 1], outputRange: [0.95, 1]})},
-                                            {
-                                                translateY: popAnim.interpolate({
-                                                    inputRange: [0, 1],
-                                                    outputRange: [-4, 0]
-                                                })
-                                            },
+                                            { scale: popAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) },
+                                            { translateY: popAnim.interpolate({ inputRange: [0, 1], outputRange: [-4, 0] }) },
                                         ],
                                     },
                                 ]}
                             >
-                                {/* punta/triángulo */}
                                 {(() => {
                                     const isLast = active.idx === retos.length - 1;
                                     const preferDown = active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER + POPOVER_EST_H <= totalHeight - 16;
-                                    const openDown = preferDown && !isLast ? true : false;
-
-                                    // popLeft usado arriba (recalcular aquí igual)
+                                    const openDown = preferDown && !isLast;
                                     const popLeft = clamp(active.x - POPOVER_W / 2, 10, SCREEN_W - POPOVER_W - 10);
-                                    // Alinear la punta con el centro del nodo
                                     const arrowLeft = clamp(active.x - popLeft - ARROW / 2, 8, POPOVER_W - ARROW - 8);
 
                                     return (
-                                        <View
-                                            style={[
-                                                stylesPopover.body,
-                                                openDown ? {paddingTop: 14} : {paddingBottom: 14},
-                                            ]}
-                                        >
-                                            {/* flechita */}
-                                            <View
-                                                style={[
-                                                    stylesPopover.arrow,
-                                                    openDown ? {top: -ARROW / 2} : {bottom: -ARROW / 2},
-                                                    {left: arrowLeft},
-                                                ]}
-                                            />
+                                        <View style={[{
+                                            backgroundColor: colors.popoverBg,         // ⬅
+                                            borderRadius: 14,
+                                            paddingHorizontal: 14,
+                                            paddingVertical: 12,
+                                            alignItems: 'center',
+                                            shadowColor: '#000',
+                                            shadowOpacity: 0.15,
+                                            shadowOffset: { width: 0, height: 6 },
+                                            shadowRadius: 10,
+                                            elevation: 6,
+                                        }, openDown ? { paddingTop: 14 } : { paddingBottom: 14 }]}>
+                                            <View style={[{
+                                                position: 'absolute',
+                                                width: ARROW, height: ARROW,
+                                                backgroundColor: colors.popoverBg,       // ⬅
+                                                transform: [{ rotate: '45deg' }],
+                                                borderRadius: 3,
+                                                left: arrowLeft,
+                                            }, openDown ? { top: -ARROW / 2 } : { bottom: -ARROW / 2 }]} />
 
-                                            {/* contenido */}
-                                            <Text style={stylesPopover.title}>
+                                            <Text style={{ fontSize: 14, fontWeight: '600', textAlign: 'center', color: colors.popoverText }}>
                                                 {active.reto.nombreReto}
                                             </Text>
-                                            <Text style={stylesPopover.subtitle}>
+                                            <Text style={{ fontSize: 12, opacity: 0.8, marginTop: 2, color: colors.popoverText }}>
                                                 (Aprox {formatTiempo(active.reto.tiempoEstimadoSegReto)})
                                             </Text>
 
                                             <Pressable
-                                                onPress={() =>
-                                                    router.push(`/(modals)/reto/${active.reto.codReto}`)
-                                                }
-                                                style={stylesPopover.cta}
+                                                onPress={() => router.push(`/(modals)/reto/${active.reto.codReto}`)}
+                                                style={{
+                                                    marginTop: 10,
+                                                    paddingVertical: 8,
+                                                    paddingHorizontal: 24,
+                                                    backgroundColor: colors.primary,       // ⬅
+                                                    borderRadius: 999,
+                                                }}
                                             >
-                                                <Text style={stylesPopover.ctaText}>Ver</Text>
+                                                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Ver</Text>
                                             </Pressable>
                                         </View>
                                     );
@@ -354,67 +294,3 @@ export default function HomeRetosScreen() {
         </FadeWrapper>
     );
 }
-
-const stylesNode = StyleSheet.create({
-    node: {
-        position: 'absolute',
-        width: NODE_SIZE,
-        height: NODE_SIZE,
-        borderRadius: NODE_SIZE / 2,
-        backgroundColor: 'white',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOpacity: 0.12,
-        shadowOffset: {width: 0, height: 4},
-        shadowRadius: 8,
-        elevation: 4,
-        borderWidth: 2,
-        borderColor: '#6C8CFF',
-    },
-    nodeInner: {
-        width: NODE_SIZE - 14,
-        height: NODE_SIZE - 14,
-        borderRadius: (NODE_SIZE - 14) / 2,
-        backgroundColor: '#EFF3FF',
-        alignItems: 'center',
-        justifyContent: 'center',
-    }
-});
-
-const stylesPopover = StyleSheet.create({
-    container: {
-        position: 'absolute',
-        width: POPOVER_W,
-    },
-    body: {
-        backgroundColor: '#CFCFD4',
-        borderRadius: 14,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOpacity: 0.15,
-        shadowOffset: {width: 0, height: 6},
-        shadowRadius: 10,
-        elevation: 6,
-    },
-    arrow: {
-        position: 'absolute',
-        width: ARROW,
-        height: ARROW,
-        backgroundColor: '#CFCFD4',
-        transform: [{rotate: '45deg'}],
-        borderRadius: 3,
-    },
-    title: {fontSize: 14, fontWeight: '600', textAlign: 'center'},
-    subtitle: {fontSize: 12, opacity: 0.8, marginTop: 2},
-    cta: {
-        marginTop: 10,
-        paddingVertical: 8,
-        paddingHorizontal: 24,
-        backgroundColor: '#9CA3AF',
-        borderRadius: 999,
-    },
-    ctaText: {color: 'white', fontSize: 14, fontWeight: '600'},
-});

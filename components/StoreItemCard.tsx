@@ -1,7 +1,9 @@
+// components/StoreItemCard.tsx
 import React from 'react';
 import {View, Text, Pressable, StyleSheet, Dimensions} from 'react-native';
 import {FontAwesome5} from '@expo/vector-icons';
 import {ItemTienda} from '../models/ItemTienda';
+import {useTheme} from '../theme/ThemeProvider'; // 👈
 
 const {width: SCREEN_W} = Dimensions.get('window');
 
@@ -15,224 +17,174 @@ type Props = {
 const iconFallbackByTipo: Record<string, string> = {
     POTENCIADOR: 'bolt',
     COFRE: 'box-open',
-    ROPA: 'tshirt',
+    ROPA: 'tshirt'
 };
 
 export default function StoreItemCard({
                                           item,
                                           onPress,
                                           accentColor = '#3B5BDB',
-                                          variant = 'POTENCIADOR',
-                                      }: Props) {
-
-    // si metadata trae icon, se usa; si no, se cae al tipo
-    const metaIcon =
-        (item.metadataItem as any)?.icon ||
-        iconFallbackByTipo[String(item.tipoItem).toUpperCase()] ||
-        'shopping-bag';
-
-    const badge = (item.metadataItem as any)?.badge; // e.g., "x2", "Racha", "Boost"
-
+                                          variant = 'POTENCIADOR'
+                                      }:
+                                      Props) {
+    const {colors} = useTheme(); // 👈
+    const metaIcon = (item.metadataItem as any)?.icon || iconFallbackByTipo[String(item.tipoItem).toUpperCase()] || 'shopping-bag';
+    const badge = (item.metadataItem as any)?.badge;
     const price = Number(item.precioItem || 0);
 
-    if (item.tipoItem.toUpperCase() == "ROPA") {
+    // ROPA
+    if (item.tipoItem.toUpperCase() === 'ROPA') {
         return (
-            <Pressable onPress={onPress} style={[s.card, s.shadow, {borderColor: accentColor}]}>
+            <Pressable onPress={onPress} style={[s(colors).card, s(colors).shadow, {borderColor: accentColor}]}>
                 {/* cabecera/badge */}
-                <View style={[s.ribbon, {backgroundColor: accentColor}]}>
-                    <Text style={s.ribbonText}>
-                        {item.nombreItem}
+                <View style={[s(colors).ribbon, {backgroundColor: accentColor}]}>
+                    <Text
+                        style={s(colors).ribbonText}>{item.nombreItem}
                     </Text>
                 </View>
 
+
                 {/* ícono central */}
-                <View style={[s.iconWrap, {marginVertical: 20}]}>
-                    <FontAwesome5 name={metaIcon as any} size={68} color={accentColor}/>
+                <View style={[s(colors).iconWrap, {marginVertical: 20}]}><FontAwesome5 name={metaIcon as any} size={68}
+                                                                                       color={accentColor}/>
                 </View>
 
                 {/* badge secundario si viene */}
-                {badge ? (
-                    <View style={[s.badge, {borderColor: accentColor}]}>
-                        <Text style={[s.badgeText, {color: accentColor}]}>{badge}</Text>
-                    </View>
-                ) : null}
+                {badge ? (<View style={[s(colors).badge, {borderColor: accentColor}]}><Text
+                    style={[s(colors).badgeText, {color: accentColor}]}>{badge}</Text></View>) : null}
 
                 {/* precio / CTA visual */}
-                <View style={[s.footer, {flex: 1}]}>
-                    <Text style={s.price}>
-                        {price > 0 ? `$${price}` : 'Gratis'}
-                    </Text>
-                    <FontAwesome5 name="chevron-right" size={14} color="#6B7280"/>
+                <View style={[s(colors).footer, {flex: 1}]}>
+                    <Text style={s(colors).price}>{price > 0 ? `$${price}` : 'Gratis'}</Text>
+                    <FontAwesome5 name="chevron-right" size={14} color={colors.mutedText}/>
                 </View>
             </Pressable>
         );
     }
 
-    if (item.tipoItem.toUpperCase() == "COFRE") {
+    // COFRE
+    if (item.tipoItem.toUpperCase() === 'COFRE') {
         return (
-            <Pressable onPress={onPress} style={{flex: 1, width:100}}>
+            <Pressable onPress={onPress} style={{flex: 1, width: 100}}>
                 {/* cabecera/badge */}
-                <View style={[s.ribbon, {backgroundColor: accentColor}]}>
-                    <Text style={s.ribbonText}>
-                        {item.nombreItem}
-                    </Text>
-                </View>
+                <View style={[s(colors).ribbon, {backgroundColor: accentColor}]}><Text
+                    style={s(colors).ribbonText}>{item.nombreItem}</Text></View>
 
                 {/* ícono central */}
-                {item.precioItem == 1000 && (
-                    <View style={{alignSelf: 'center', paddingVertical: 10, justifyContent: 'flex-end', flex: 1}}>
-                        <FontAwesome5 name={metaIcon as any} size={60} color={accentColor}/>
-                    </View>
-                )
-                }
-                {item.precioItem == 100 && (
-                    <View style={{alignSelf: 'center', paddingVertical: 10, justifyContent: 'flex-end', flex: 1}}>
-                        <FontAwesome5 name={metaIcon as any} size={50} color={accentColor}/>
-                    </View>
-                )
-                }
-                {item.precioItem == 10 && (
-                    <View style={{alignSelf: 'center', paddingVertical: 10, justifyContent: 'flex-end', flex: 1}}>
-                        <FontAwesome5 name={metaIcon as any} size={40} color={accentColor}/>
-                    </View>
-                )
-                }
+                {item.precioItem == 1000 && (<View style={{
+                    alignSelf: 'center',
+                    paddingVertical: 10,
+                    justifyContent: 'flex-end',
+                    flex: 1
+                }}><FontAwesome5 name={metaIcon as any} size={60} color={accentColor}/></View>)}
 
+                {item.precioItem == 100 && (<View style={{
+                    alignSelf: 'center',
+                    paddingVertical: 10,
+                    justifyContent: 'flex-end',
+                    flex: 1
+                }}><FontAwesome5 name={metaIcon as any} size={50} color={accentColor}/></View>)}
+
+                {item.precioItem == 10 && (<View style={{
+                    alignSelf: 'center',
+                    paddingVertical: 10,
+                    justifyContent: 'flex-end',
+                    flex: 1
+                }}><FontAwesome5 name={metaIcon as any} size={40} color={accentColor}/></View>)}
 
                 {/* badge secundario si viene */}
-                {badge ? (
-                    <View style={[s.badge, {borderColor: accentColor}]}>
-                        <Text style={[s.badgeText, {color: accentColor}]}>{badge}</Text>
-                    </View>
-                ) : null}
+                {badge ? (<View style={[s(colors).badge, {borderColor: accentColor}]}><Text
+                    style={[s(colors).badgeText, {color: accentColor}]}>{badge}</Text></View>) : null}
 
                 {/* precio / CTA visual */}
-                <View>
-                    <Text style={[s.price, {alignSelf: 'center'}]}>
-                        {price > 0 ? `$${price}` : 'Gratis'}
-                    </Text>
-                </View>
+                <View><Text style={[s(colors).price, {alignSelf: 'center'}]}>{price > 0 ? `$${price}` : 'Gratis'}</Text></View>
             </Pressable>
         );
     }
 
-    if (item.tipoItem.toUpperCase() == "POTENCIADOR") {
-        return (
-            <Pressable onPress={onPress}>
-                <View style={s.sectionBar2}/>
+    // POTENCIADOR
+    return (
+        <Pressable onPress={onPress}>
+            <View style={[s(colors).sectionBar2, {backgroundColor: colors.storeRedBar, outlineColor: colors.outline}]}/>
 
-                <View style={[s.cardPotenciador, s.shadow, {borderColor: accentColor}]}>
+            <View style={[s(colors).cardPotenciador, s(colors).shadow, {borderColor: accentColor}]}>
 
-                    {/* cabecera/badge */}
-                    <View style={[s.ribbon, {backgroundColor: accentColor}]}>
-                        <Text style={s.ribbonText}>
-                            {item.nombreItem}
-                        </Text>
-                    </View>
+                {/* cabecera/badge */}
+                <View style={[s(colors).ribbon, {backgroundColor: accentColor}]}><Text
+                    style={s(colors).ribbonText}>{item.nombreItem}</Text></View>
 
-                    {/* ícono central */}
-                    <View style={[s.iconWrap]}>
-                        <FontAwesome5 name={metaIcon as any} size={28} color={accentColor}/>
-                    </View>
+                {/* ícono central */}
+                <View style={[s(colors).iconWrap]}><FontAwesome5 name={metaIcon as any} size={28} color={accentColor}/></View>
 
-                    {/* badge secundario si viene */}
-                    {badge ? (
-                        <View style={[s.badge, {borderColor: accentColor}]}>
-                            <Text style={[s.badgeText, {color: accentColor}]}>{badge}</Text>
-                        </View>
-                    ) : null}
+                {/* badge secundario si viene */}
+                {badge ? (<View style={[s(colors).badge, {borderColor: accentColor}]}><Text
+                    style={[s(colors).badgeText, {color: accentColor}]}>{badge}</Text></View>) : null}
 
-                    {/* precio / CTA visual */}
-                    <View style={s.footer}>
-                        <Text style={s.price}>
-                            {price > 0 ? `$${price}` : 'Gratis'}
-                        </Text>
-                        <FontAwesome5 name="chevron-right" size={14} color="#6B7280"/>
-                    </View>
+                {/* precio / CTA visual */}
+                <View style={s(colors).footer}>
+                    <Text style={s(colors).price}>{price > 0 ? `$${price}` : 'Gratis'}</Text>
+                    <FontAwesome5 name="chevron-right" size={14} color={colors.mutedText}/>
                 </View>
-            </Pressable>
-
-        );
-    }
+            </View>
+        </Pressable>
+    );
 }
 
-const s = StyleSheet.create({
+const s = (c: import('../theme/ThemeProvider').Palette) => StyleSheet.create({
     card: {
         width: SCREEN_W * 0.45,
         flex: 1,
         borderRadius: 16,
-        backgroundColor: '#ffffff',
+        backgroundColor: c.card,
         paddingTop: 10,
         paddingHorizontal: 10,
         paddingBottom: 10,
-        borderWidth: 2,
+        borderWidth: 2
     },
     sectionBar2: {
         height: 10,
         overflow: 'visible',
         alignSelf: 'center',
         width: 15,
-        outlineColor: '#a5afc4',
+        outlineColor: c.outline,
         outlineWidth: 2,
-        backgroundColor: "red",
-
+        backgroundColor: c.storeRedBar
     },
     cardPotenciador: {
         width: SCREEN_W * 0.28,
         borderRadius: 16,
-        backgroundColor: '#ffffff',
+        backgroundColor: c.card,
         paddingTop: 10,
         paddingHorizontal: 10,
         paddingBottom: 10,
-        borderWidth: 2,
+        borderWidth: 2
     },
     shadow: {
         shadowColor: '#000',
         shadowOpacity: 0.12,
         shadowOffset: {width: 0, height: 4},
         shadowRadius: 8,
-        elevation: 4,
+        elevation: 4
     },
-    ribbon: {
-        alignSelf: 'stretch',
-        borderRadius: 12,
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-    },
-    ribbonText: {
-        fontSize: 12,
-        color: 'white',
-        fontWeight: '700',
-        textAlign: 'center',
-    },
-    iconWrap: {
-        height: 72,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+    ribbon: {alignSelf: 'stretch', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 10},
+    ribbonText: {fontSize: 12, color: 'white', fontWeight: '700', textAlign: 'center'},
+    iconWrap: {height: 72, alignItems: 'center', justifyContent: 'center'},
     badge: {
         alignSelf: 'center',
         borderRadius: 999,
         paddingVertical: 4,
         paddingHorizontal: 10,
         borderWidth: 1.5,
-        marginTop: 2,
+        marginTop: 2
     },
-    badgeText: {
-        fontSize: 12,
-        fontWeight: '700',
-    },
+    badgeText: {fontSize: 12, fontWeight: '700'},
     footer: {
         marginTop: 5,
         borderTopWidth: 1,
-        borderTopColor: '#F3F4F6',
+        borderTopColor: c.imageBg,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'space-between'
     },
-    price: {
-        fontSize: 14,
-        fontWeight: '800',
-        color: '#111827',
-    },
+    price: {fontSize: 14, fontWeight: '800', color: c.text},
 });

@@ -1,10 +1,14 @@
+// components/FooterOperario.tsx
 import { View, TouchableOpacity, Text } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { styles as global } from '../styles/globalStyles';
+import { useTheme } from '../theme/ThemeProvider';
 
 export default function FooterOperario({ state, descriptors, navigation }: BottomTabBarProps) {
+    const { colors } = useTheme();
+
     return (
-        <View style={global.container}>
+        <View style={[global.container, { backgroundColor: colors.tabBg, borderColor: colors.tabBorder }]}>
             {state.routes.map((route, index) => {
                 const isFocused = state.index === index;
                 const options = descriptors[route.key]?.options || {};
@@ -13,11 +17,10 @@ export default function FooterOperario({ state, descriptors, navigation }: Botto
                 const onPress = () => !isFocused && navigation.navigate(route.name as never);
                 const onLongPress = () => navigation.emit({ type: 'tabLongPress', target: route.key });
 
-                // Preparamos colores/tamaños para el icono
-                const color = isFocused ? global.iconActive?.color ?? '#111' : global.icon?.color ?? '#888';
+                // ✅ SOLO colores desde el theme
+                const color = isFocused ? colors.tabIconActive : colors.tabIcon;
                 const size = global.icon?.fontSize ? Number(global.icon.fontSize) : 18;
 
-                // Si el screen definió tabBarIcon, lo invocamos
                 const maybeIcon =
                     typeof options.tabBarIcon === 'function'
                         ? options.tabBarIcon({ focused: isFocused, color, size })
@@ -32,10 +35,14 @@ export default function FooterOperario({ state, descriptors, navigation }: Botto
                         testID={options.tabBarButtonTestID}
                         onPress={onPress}
                         onLongPress={onLongPress}
-                        style={[global.button, isFocused && global.active]}
+                        style={[
+                            global.button,
+                            { backgroundColor: colors.tabButtonBg },
+                            isFocused && { backgroundColor: colors.tabActiveBg }, // 🔵 activo desde theme
+                        ]}
                     >
                         {maybeIcon ?? (
-                            <Text style={[global.icon, isFocused && global.iconActive]}>
+                            <Text style={[global.icon, { color }, isFocused && global.iconActive]}>
                                 {label?.[0]?.toUpperCase() ?? '?'}
                             </Text>
                         )}

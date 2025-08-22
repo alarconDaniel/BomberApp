@@ -3,6 +3,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {View, Text, StyleSheet, Animated, Easing, Pressable} from 'react-native';
 import {BlurView} from 'expo-blur';
 import {FontAwesome5} from '@expo/vector-icons';
+import { useTheme } from '../theme/ThemeProvider';
 
 type Props = {
     visible: boolean;
@@ -16,6 +17,8 @@ type Props = {
 export default function PurchaseSuccessOverlay({
                                                    visible, itemName, qty, onClose, autoCloseMs, zIndex = 9999,
                                                }: Props) {
+
+    const { colors } = useTheme();
 
     // Mantener montado durante la salida
     const [rendered, setRendered] = useState(visible);
@@ -79,6 +82,18 @@ export default function PurchaseSuccessOverlay({
     const ringScale     = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.2] });
     const ringOpacity   = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] });
 
+    const s = StyleSheet.create({
+        center: { ...StyleSheet.absoluteFillObject, alignItems:'center', justifyContent:'center', padding:16 },
+        card: { width:'86%', borderRadius:16, backgroundColor: colors.card, padding:16, alignItems:'center',
+            shadowColor:'#000', shadowOpacity:0.18, shadowOffset:{width:0,height:6}, shadowRadius:12, elevation:8 },
+        badge: { width:68, height:68, borderRadius:34, backgroundColor: colors.success, alignItems:'center', justifyContent:'center' },
+        ring: { position:'absolute', width:110, height:110, borderRadius:55, backgroundColor: colors.success },
+        title: { fontSize:20, fontWeight:'900', marginBottom:6, color: colors.text },
+        subtitle: { color: colors.secondaryText, textAlign:'center', marginBottom:12 },
+        btn: { marginTop:6, paddingHorizontal:16, paddingVertical:10, borderRadius:12, backgroundColor: colors.success },
+        btnText: { color:'white', fontWeight:'800' },
+    });
+
     return (
         <View pointerEvents="box-none" style={[StyleSheet.absoluteFillObject, { zIndex }]}>
             {/* Backdrop con blur y fade */}
@@ -103,16 +118,4 @@ export default function PurchaseSuccessOverlay({
     );
 }
 
-const s = StyleSheet.create({
-    center: { ...StyleSheet.absoluteFillObject, alignItems:'center', justifyContent:'center', padding:16 },
-    card: {
-        width: '86%', borderRadius: 16, backgroundColor: 'white', padding: 16, alignItems:'center',
-        shadowColor:'#000', shadowOpacity:0.18, shadowOffset:{width:0,height:6}, shadowRadius:12, elevation:8,
-    },
-    badge: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#10B981', alignItems:'center', justifyContent:'center' },
-    ring:  { position:'absolute', width:110, height:110, borderRadius:55, backgroundColor:'#10B981' },
-    title: { fontSize: 20, fontWeight:'900', marginBottom:6, color:'#111827' },
-    subtitle: { color:'#374151', textAlign:'center', marginBottom:12 },
-    btn:   { marginTop:6, paddingHorizontal:16, paddingVertical:10, borderRadius:12, backgroundColor:'#10B981' },
-    btnText: { color:'white', fontWeight:'800' },
-});
+
