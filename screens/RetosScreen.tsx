@@ -7,7 +7,7 @@ import {
 import FadeWrapper from '../components/FadeWrapper';
 import HeaderOperario from '../components/HeaderOperario';
 import { colors } from '../styles/globalStyles1';
-import { API } from '../config/api';
+import { BASE_URL, API } from '../config/api';
 
 const FOOTER_HEIGHT = 64;
 const MAX_DESC = 255 as const;
@@ -22,12 +22,22 @@ type RetoDTO = {
   codReto: number;
   nombreReto: string;
   descripcionReto?: string | null;
-  tiempoEstimadoSegReto?: number | null; // <-- nombre correcto
-  fechaInicioReto?: string | null;       // 'YYYY-MM-DD'
-  fechaFinReto?: string | null;          // 'YYYY-MM-DD'
+  tiempoEstimadoSegReto?: number | null;
+  fechaInicioReto?: string | null;  // 'YYYY-MM-DD'
+  fechaFinReto?: string | null;     // 'YYYY-MM-DD'
 };
 
-const isoDate = (d: Date) => d.toISOString().slice(0, 10); // util
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+// Normaliza objetos que puedan venir en snake_case desde el backend
+const normalizeReto = (x: any): RetoDTO => ({
+  codReto: x?.codReto ?? x?.cod_reto ?? x?.id ?? 0,
+  nombreReto: x?.nombreReto ?? x?.nombre_reto ?? '',
+  descripcionReto: x?.descripcionReto ?? x?.descripcion_reto ?? null,
+  tiempoEstimadoSegReto: x?.tiempoEstimadoSegReto ?? x?.tiempo_estimado_seg_reto ?? null,
+  fechaInicioReto: x?.fechaInicioReto ?? x?.fecha_inicio_reto ?? null,
+  fechaFinReto: x?.fechaFinReto ?? x?.fecha_fin_reto ?? null,
+});
 
 export default function RetosScreen() {
   const [nombre, setNombre] = useState('');
@@ -42,19 +52,56 @@ export default function RetosScreen() {
   const restantes = MAX_DESC - descripcion.length;
 
   useEffect(() => {
+    if (__DEV__) {
+      console.log('[RETOS] BASE_URL =', BASE_URL);
+      console.log('[RETOS] LISTAR =', API.reto.listar);
+    }
     listarRetos();
   }, []);
 
   const listarRetos = async () => {
     try {
       setCargando(true);
-      const res = await fetch(API.reto.listar);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: RetoDTO[] = await res.json();
-      setRetos(Array.isArray(json) ? json : []);
+
+      const res = await fetch(`${API.reto.listar}?_ts=${Date.now()}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store' as any,
+      });
+
+      const txt = await res.text(); // leer siempre para loguear si falla
+      if (!res.ok) {
+        console.log('RETOS listar ERROR:', res.status, txt);
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+
+      if (!txt || txt.trim().length === 0) {
+        console.log('RETOS listar vacío');
+        setRetos([]);
+        return;
+      }
+
+      let json: any;
+      try { json = JSON.parse(txt); } catch {
+        console.log('RETOS listar JSON inválido:', txt);
+        throw new Error('Respuesta inválida del servidor');
+      }
+
+      const rawArr =
+        Array.isArray(json) ? json
+        : Array.isArray(json?.data) ? json.data
+        : Array.isArray(json?.items) ? json.items
+        : Array.isArray(json?.retos) ? json.retos
+        : [];
+
+      const arr: RetoDTO[] = rawArr
+        .map(normalizeReto)
+        .filter((r: RetoDTO) => !!r.codReto);
+
+      setRetos(arr);
     } catch (e: any) {
-      console.log('listarRetos error:', e?.message);
-      Alert.alert('Error', 'No se pudo cargar la lista de retos');
+      console.log('listarRetos catch:', e?.message);
+      Alert.alert('Error', e?.message ?? 'No se pudo cargar la lista de retos');
     } finally {
       setCargando(false);
     }
@@ -71,8 +118,9 @@ export default function RetosScreen() {
           try {
             setCargando(true);
             const res = await fetch(API.reto.borrar(id), { method: 'DELETE' });
+            const txt = await res.text();
             if (!res.ok) {
-              const txt = await res.text();
+              console.log('RETOS borrar ERROR:', res.status, txt);
               throw new Error(txt || `HTTP ${res.status}`);
             }
             await listarRetos();
@@ -100,10 +148,9 @@ export default function RetosScreen() {
     const payload = {
       nombreReto: nombre.trim(),
       descripcionReto: descripcion.trim() || null,
-      tiempoEstimadoSegReto: 0,     // <-- nombre correcto
-      fechaInicioReto: isoDate(hoy),// <-- requerido si tu columna no es nullable
-      fechaFinReto: isoDate(fin),   // <-- fin >= inicio
-      // (si tu backend no exige fechas, podrías enviar null y marcar las columnas como nullable)
+      tiempoEstimadoSegReto: 0,
+      fechaInicioReto: isoDate(hoy),
+      fechaFinReto: isoDate(fin),
     };
 
     try {
@@ -114,9 +161,9 @@ export default function RetosScreen() {
         body: JSON.stringify(payload),
       });
 
+      const txt = await res.text();
       if (!res.ok) {
-        const txt = await res.text();
-        console.log('crearReto error ->', res.status, txt);
+        console.log('RETOS crear ERROR ->', res.status, txt);
         throw new Error(txt || 'Falla al registrar');
       }
 
@@ -144,7 +191,9 @@ export default function RetosScreen() {
 
   const retosFiltrados = useMemo(() => {
     const q = query.toLowerCase();
-    return retos.filter(r => (r.nombreReto || '').toLowerCase().includes(q));
+    return retos.filter((r: RetoDTO) =>
+      (r.nombreReto || '').toLowerCase().includes(q)
+    );
   }, [query, retos]);
 
   return (
@@ -224,7 +273,11 @@ export default function RetosScreen() {
           </View>
 
           {/* Lista real con borrar; si no hay datos, fallback a placeholders */}
-          {retos.length > 0 ? (
+          {cargando ? (
+            <View style={{ marginTop: 16 }}>
+              <ActivityIndicator />
+            </View>
+          ) : retos.length > 0 ? (
             <FlatList
               data={retosFiltrados}
               keyExtractor={(item) => String(item.codReto)}
@@ -356,8 +409,6 @@ const styles = StyleSheet.create({
   chipText: { fontWeight: '700', color: colors.navy },
 
   actionsRow: { flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' },
-  actionBtn: { backgroundColor: colors.orange, paddingHorizontal: 14, height: 36, borderRadius: 10, justifyContent: 'center' },
-  actionText: { color: colors.white, fontWeight: '800' },
 
   historyTitle: { fontSize: 18, fontWeight: '800', marginTop: 18, color: colors.navy },
   searchWrap: {
@@ -384,6 +435,7 @@ const styles = StyleSheet.create({
   footer: {
     position: 'absolute', left: 0, right: 0, bottom: 0, height: FOOTER_HEIGHT,
     backgroundColor: colors.white, elevation: 8,
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: -2 },
+    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8,
+    shadowOffset: { width: 0, height: -2 },
   },
 });
