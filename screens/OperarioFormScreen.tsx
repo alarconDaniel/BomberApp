@@ -29,7 +29,7 @@ type UsuarioResponse = {
   correoUsuario?: string;
   contrasenaUsuario?: string;
   cedulaUsuario?: string;
-  cargoUsuario?: 'Operario' | 'Mantenimiento' | 'Supervisor';
+  cargoUsuario?: 'Administrador' | 'Operario';
   // soporta back con snake_case por si acaso:
   nombre_usuario?: string;
   apellido_usuario?: string;
