@@ -1,4 +1,4 @@
-// app/(tabs)/inventory.tsx
+// app/(operario)/InventoryScreen.tsx
 import React, {useCallback, useEffect, useRef, useState, useMemo} from 'react';
 import {
     ActivityIndicator,
@@ -17,16 +17,15 @@ import {ItemInventario, InventarioResponse} from '../../models/ItemInventario';
 import FadeWrapper from '../../components/FadeWrapper';
 import DetailsInventoryItemModal from "../../components/DetailsInventoryItemModal";
 import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
-type InventoryScreenRoute = RouteProp<
-    Record<string, { cod_usuario?: number }>,
-    string
->;
-type Props = { route?: InventoryScreenRoute };
 
-export default function InventoryScreen({route}: Props) {
+
+
+export default function InventoryScreen() {
     const {fetchJson} = useAuth();
     const { colors } = useTheme();
+    const g = useMemo(() => makeGlobalStyles(colors), [colors]);
 
     const [items, setItems] = useState<ItemInventario[]>([]);
     const [total, setTotal] = useState<number>(0);
@@ -110,13 +109,6 @@ export default function InventoryScreen({route}: Props) {
             paddingBottom: 16,
             backgroundColor: colors.bg,
         },
-        title: {
-            fontSize: 40,
-            fontWeight: '700',
-            textAlign: 'center',
-            marginBottom: 0,
-            color: colors.text,
-        },
         centerBox: {
             alignItems: 'center',
             justifyContent: 'center',
@@ -150,24 +142,19 @@ export default function InventoryScreen({route}: Props) {
             zIndex: 10,
             elevation: 3,
         },
-        badgeText: {fontSize: 12, fontWeight: '700', color: colors.text},
         cardLabel: {
             marginTop: 6,
-            fontSize: 12,
-            fontWeight: '600',
             textAlign: 'center',
             color: colors.text,
         },
-        empty: {textAlign: 'center', marginTop: 40, color: colors.mutedText},
-        error: {color: colors.danger, fontWeight: '600', textAlign: 'center'},
-        hint: {color: colors.mutedText, textAlign: 'center'},
+        empty: {textAlign: 'center', marginTop: 40},
     });
 
     if (cargando) {
         return (
             <View style={[styles.centerBox, {flex: 1, backgroundColor: colors.bg}]}>
                 <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.hint}>Cargando inventario…</Text>
+                <Text style={[g.text.caption, g.text.muted]}>Cargando inventario…</Text>
             </View>
         );
     }
@@ -175,14 +162,16 @@ export default function InventoryScreen({route}: Props) {
     if (error) {
         return (
             <View style={[styles.centerBox, {flex: 1, backgroundColor: colors.bg}]}>
-                <Text style={[styles.error, {marginBottom: 12, paddingHorizontal: 60}]}>
+                <Text
+                    style={[g.text.bodyStrong, g.text.danger, {textAlign: 'center', marginBottom: 12, paddingHorizontal: 60}]}
+                >
                     Uy, se cayó esto: {error}
                 </Text>
                 <Pressable
                     onPress={listarInventario}
                     style={{padding: 12, backgroundColor: colors.mutedBg, borderRadius: 8}}
                 >
-                    <Text style={{ color: colors.text }}>Reintentar</Text>
+                    <Text style={g.text.body}>Reintentar</Text>
                 </Pressable>
             </View>
         );
@@ -191,7 +180,9 @@ export default function InventoryScreen({route}: Props) {
     return (
         <FadeWrapper>
             <View style={[styles.screen, {paddingHorizontal: H_PADDING}]}>
-                <Text style={[styles.title, {marginTop: TITLE_TOP}]}>Inventario {items.length ? `(${items.length})` : ''}</Text>
+                <Text style={[g.text.h1, {textAlign: 'center', marginTop: TITLE_TOP}]}>
+                    Inventario {items.length ? `(${items.length})` : ''}
+                </Text>
 
                 <FlatList
                     data={items}
@@ -205,10 +196,10 @@ export default function InventoryScreen({route}: Props) {
                                 <View style={[styles.cross, {transform: [{rotate: '45deg'}]}]}/>
                                 <View style={[styles.cross, {transform: [{rotate: '-45deg'}]}]}/>
                                 <View style={styles.badge}>
-                                    <Text style={styles.badgeText}>x{item.cantidad}</Text>
+                                    <Text style={g.text.captionStrong}>x{item.cantidad}</Text>
                                 </View>
                             </View>
-                            <Text style={styles.cardLabel}>
+                            <Text style={[g.text.captionStrong, styles.cardLabel]}>
                                 {item.item.nombre}
                             </Text>
                         </Pressable>
@@ -216,7 +207,7 @@ export default function InventoryScreen({route}: Props) {
                     numColumns={COLS}
                     columnWrapperStyle={{justifyContent: 'center', marginBottom: ROW_GAP}}
                     contentContainerStyle={{paddingTop: GRID_TOP_OFFSET, paddingBottom: 8}}
-                    ListEmptyComponent={<Text style={styles.empty}>Sin ítems todavía</Text>}
+                    ListEmptyComponent={<Text style={[g.text.body, g.text.muted, styles.empty]}>Sin ítems todavía</Text>}
                     showsVerticalScrollIndicator={false}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh}/>}
                 />

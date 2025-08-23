@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeProvider';
 import {markModalClosed} from "../../navigation/ModalTracker";
 import {useMarkModalOnClose} from "../../navigation/useMarkModalOnClose";
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 // --- Hook para altura del teclado ---
 function useKeyboardHeight() {
@@ -31,6 +32,7 @@ export default function EditarPerfilModal() {
     useMarkModalOnClose();
     const router = useRouter();
     const { colors, isDark } = useTheme();
+    const g = makeGlobalStyles(colors);
     const { fetchJson } = useAuth();
     const insets = useSafeAreaInsets();
     const kbHeight = useKeyboardHeight();
@@ -53,8 +55,8 @@ export default function EditarPerfilModal() {
                 backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
                 backTxt: { fontSize: 16, color: colors.text },
                 content: { flexGrow: 1, paddingHorizontal: 24 },
-                title: { textAlign: 'center', fontSize: 24, fontWeight: 'bold', marginTop: 8, color: colors.text },
-                label: { marginTop: 16, fontWeight: '600', color: colors.text },
+                title: { textAlign: 'center', marginTop: 8 },
+                label: { marginTop: 16 },
                 input: {
                     marginTop: 8,
                     borderWidth: 1,
@@ -74,7 +76,7 @@ export default function EditarPerfilModal() {
                     borderColor: isDark ? colors.divider : "rgba(15,23,42,0.08)",
                     width: '100%' as DimensionValue
                 },
-                help: { color: isDark ? colors.mutedText : '#6b7280', fontSize: 12, marginTop: 4 },
+                help: { fontSize: 12, marginTop: 4 },
                 primaryBtn: {
                     marginTop: 16, paddingVertical: 12, paddingHorizontal: 24,
                     backgroundColor: isDark ? colors.primary : "#7c3aed",
@@ -85,8 +87,8 @@ export default function EditarPerfilModal() {
                     backgroundColor: isDark ? colors.mutedBg : "#e5e7eb",
                     borderRadius: 999, alignItems: 'center'
                 },
-                primaryTxt: { color: '#fff', fontWeight: '700' },
-                dangerTxt: { color: isDark ? colors.primary : '#7c3aed', fontWeight: '700' },
+                primaryTxt: {},
+                dangerTxt: { color: isDark ? colors.primary : '#7c3aed' },
                 ro: { opacity: 0.9, color: colors.text }
             }),
         [colors, isDark]
@@ -157,14 +159,14 @@ export default function EditarPerfilModal() {
             <View style={s.headerRow}>
                 <Pressable onPress={() => { markModalClosed(); router.back(); }} style={s.backBtn} hitSlop={10}>
                     <FontAwesome5 name="chevron-left" size={18} color={colors.text} />
-                    <Text style={s.backTxt}>Volver</Text>
+                    <Text style={[g.text.body]}>{'Volver'}</Text>
                 </Pressable>
             </View>
 
             {cargando ? (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                     <ActivityIndicator size="large" color={colors.primary} />
-                    <Text style={{ marginTop: 10, color: colors.text }}>Cargando…</Text>
+                    <Text style={[g.text.caption, { marginTop: 10 }]}>Cargando…</Text>
                 </View>
             ) : (
                 <KeyboardAvoidingView
@@ -181,11 +183,11 @@ export default function EditarPerfilModal() {
                         bounces={false}
                         overScrollMode="never"
                     >
-                        <Text style={s.title}>Editar perfil</Text>
+                        <Text style={[g.text.h2, s.title]}>Editar perfil</Text>
 
                         {/* Solo lectura */}
                         <View style={s.card}>
-                            <Text style={s.label}>Nombre</Text>
+                            <Text style={[g.text.bodyStrong, s.label]}>Nombre</Text>
                             <TextInput
                                 editable={false}
                                 style={[s.input, s.ro]}
@@ -193,7 +195,7 @@ export default function EditarPerfilModal() {
                                 placeholderTextColor={colors.mutedText}
                             />
 
-                            <Text style={s.label}>Correo</Text>
+                            <Text style={[g.text.bodyStrong, s.label]}>Correo</Text>
                             <TextInput
                                 editable={false}
                                 style={[s.input, s.ro]}
@@ -201,7 +203,7 @@ export default function EditarPerfilModal() {
                                 placeholderTextColor={colors.mutedText}
                             />
 
-                            <Text style={s.label}>Cédula</Text>
+                            <Text style={[g.text.bodyStrong, s.label]}>Cédula</Text>
                             <TextInput
                                 editable={false}
                                 style={[s.input, s.ro]}
@@ -209,14 +211,14 @@ export default function EditarPerfilModal() {
                                 placeholderTextColor={colors.mutedText}
                             />
 
-                            <Text style={s.help}>
+                            <Text style={[g.text.caption, { color: isDark ? colors.mutedText : '#6b7280' }]}>
                                 Para cambiar datos personales comunícate con un administrador.
                             </Text>
                         </View>
 
                         {/* Nickname */}
                         <View style={s.card}>
-                            <Text style={s.label}>Nickname</Text>
+                            <Text style={[g.text.bodyStrong, s.label]}>Nickname</Text>
                             <TextInput
                                 style={s.input}
                                 placeholder="Tu nickname"
@@ -228,13 +230,13 @@ export default function EditarPerfilModal() {
                                 returnKeyType="done"
                             />
                             <Pressable style={s.primaryBtn} onPress={guardarNickname} disabled={savingNick}>
-                                {savingNick ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryTxt}>Guardar nickname</Text>}
+                                {savingNick ? <ActivityIndicator color="#fff" /> : <Text style={[g.text.smallStrong, { color: '#fff' }]}>Guardar nickname</Text>}
                             </Pressable>
                         </View>
 
                         {/* Contraseña */}
                         <View style={s.card}>
-                            <Text style={s.label}>Contraseña actual</Text>
+                            <Text style={[g.text.bodyStrong, s.label]}>Contraseña actual</Text>
                             <TextInput
                                 style={s.input}
                                 placeholder="••••••••"
@@ -245,7 +247,7 @@ export default function EditarPerfilModal() {
                                 returnKeyType="next"
                             />
 
-                            <Text style={s.label}>Nueva contraseña</Text>
+                            <Text style={[g.text.bodyStrong, s.label]}>Nueva contraseña</Text>
                             <TextInput
                                 style={s.input}
                                 placeholder="Mínimo 8 caracteres"
@@ -258,7 +260,7 @@ export default function EditarPerfilModal() {
                             />
 
                             <Pressable style={s.secondaryBtn} onPress={cambiarPassword} disabled={savingPw}>
-                                {savingPw ? <ActivityIndicator color={isDark ? colors.text : undefined} /> : <Text style={s.dangerTxt}>Cambiar contraseña</Text>}
+                                {savingPw ? <ActivityIndicator color={isDark ? colors.text : undefined} /> : <Text style={[g.text.smallStrong, s.dangerTxt]}>Cambiar contraseña</Text>}
                             </Pressable>
                         </View>
                     </ScrollView>

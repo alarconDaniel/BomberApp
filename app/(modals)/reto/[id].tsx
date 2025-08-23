@@ -7,6 +7,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { markModalClosed } from '../../../navigation/ModalTracker';
 import { useMarkModalOnClose } from "../../../navigation/useMarkModalOnClose";
 import { useTheme } from '../../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../../theme/GlobalStyles';
 
 type RetoDetalle = {
     codReto: number;
@@ -28,6 +29,7 @@ function formatTiempo(ms: number) {
 export default function DetalleRetoScreen() {
     useMarkModalOnClose();
     const { colors, isDark } = useTheme();
+    const g = makeGlobalStyles(colors);
 
     const styles = useMemo(
         () =>
@@ -35,12 +37,10 @@ export default function DetalleRetoScreen() {
                 safe: { flex: 1, backgroundColor: isDark ? colors.bg : '#fff' },
                 headerRow: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
                 backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-                backTxt: { fontSize: 16, color: isDark ? colors.text : undefined as any },
                 center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
                 content: { flex: 1, paddingHorizontal: 24, alignItems: 'center' },
-                title: { textAlign: 'center', fontSize: 32, fontWeight: 'bold', marginTop: 24, color: colors.text },
-                desc: { textAlign: 'center', marginTop: 24, lineHeight: 24, fontSize: 20, opacity: 0.85, color: isDark ? colors.secondaryText : undefined as any },
-                meta: { marginTop: 20, textAlign: 'center', fontSize: 20, color: colors.text },
+                desc: { textAlign: 'center', marginTop: 24 },
+                meta: { marginTop: 20, textAlign: 'center' },
                 primaryBtn: {
                     marginTop: 'auto',
                     marginBottom: 24,
@@ -49,17 +49,12 @@ export default function DetalleRetoScreen() {
                     backgroundColor: isDark ? colors.primary : '#001780',
                     borderRadius: 999,
                 },
-                primaryBtnTxt: { color: '#fff', fontWeight: '700', fontSize: 16 },
                 secondaryBtn: {
                     paddingVertical: 10,
                     paddingHorizontal: 18,
                     backgroundColor: isDark ? colors.mutedBg : '#eee',
                     borderRadius: 10,
                 },
-                secondaryBtnTxt: { color: colors.text },
-                inlineStrong: { fontWeight: '600', fontSize: 20, color: colors.text },
-                hint: { marginTop: 10, color: colors.text },
-                errorTxt: { textAlign: 'center', marginBottom: 12, color: colors.text },
             }),
         [colors, isDark]
     );
@@ -99,28 +94,30 @@ export default function DetalleRetoScreen() {
             <View style={styles.headerRow}>
                 <Pressable onPress={() => { markModalClosed(); router.back(); }} style={styles.backBtn} hitSlop={10}>
                     <FontAwesome5 name="chevron-left" size={18} color={colors.text} />
-                    <Text style={styles.backTxt}>Volver</Text>
+                    <Text style={g.text.body}>Volver</Text>
                 </Pressable>
             </View>
 
             {cargando ? (
                 <View style={styles.center}>
                     <ActivityIndicator size="large" color={colors.primary} />
-                    <Text style={styles.hint}>Cargando reto…</Text>
+                    <Text style={[g.text.caption, { marginTop: 10 }]}>Cargando reto…</Text>
                 </View>
             ) : error ? (
                 <View style={styles.center}>
-                    <Text style={styles.errorTxt}>{error}</Text>
+                    <Text style={[g.text.body, g.text.danger, { textAlign: 'center', marginBottom: 12 }]}>{error}</Text>
                     <Pressable onPress={() => router.back()} style={styles.secondaryBtn}>
-                        <Text style={styles.secondaryBtnTxt}>OK</Text>
+                        <Text style={g.text.body}>OK</Text>
                     </Pressable>
                 </View>
             ) : (
                 <View style={styles.content}>
-                    <Text style={styles.title}>{reto?.nombreReto}</Text>
-                    <Text style={styles.desc}>{reto?.descripcionReto}</Text>
-                    <Text style={styles.meta}>
-                        <Text style={styles.inlineStrong}>Tiempo estimado: </Text>
+                    <Text style={g.text.h1}>{reto?.nombreReto}</Text>
+                    <Text style={[g.text.body, g.text.secondary, styles.desc, { fontSize: 20 }]}>
+                        {reto?.descripcionReto}
+                    </Text>
+                    <Text style={[g.text.body, styles.meta]}>
+                        <Text style={g.text.bodyStrong}>Tiempo estimado: </Text>
                         {formatTiempo(reto?.tiempoEstimadoSegReto ?? 0)}
                     </Text>
 
@@ -130,7 +127,7 @@ export default function DetalleRetoScreen() {
                             console.log('Empezar reto', id);
                         }}
                     >
-                        <Text style={styles.primaryBtnTxt}>Resolver</Text>
+                        <Text style={[g.text.smallStrong, g.text.onPrimary]}>Resolver</Text>
                     </Pressable>
                 </View>
             )}

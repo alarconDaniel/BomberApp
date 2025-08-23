@@ -12,7 +12,8 @@ import HeaderOperario from '../../components/HeaderOperario';
 import FadeWrapper from "../../components/FadeWrapper";
 import { Reto } from '../../models/Reto';
 import { useAuth } from "../../auth/AuthContext";
-import { useTheme } from '../../theme/ThemeProvider'; // <-- 🔵
+import { useTheme } from '../../theme/ThemeProvider';
+import {makeGlobalStyles} from "../../theme/GlobalStyles"; // <-- 🔵
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -58,6 +59,8 @@ export default function HomeRetosScreen() {
     const { colors } = useTheme();                 // <-- 🔵
     const router = useRouter();
     const { fetchJson } = useAuth();
+
+    const g = makeGlobalStyles(colors);
 
     const [retos, setRetos] = useState<Reto[]>([]);
     const [cargando, setCargando] = useState(true);
@@ -264,10 +267,8 @@ export default function HomeRetosScreen() {
                                                 left: arrowLeft,
                                             }, openDown ? { top: -ARROW / 2 } : { bottom: -ARROW / 2 }]} />
 
-                                            <Text style={{ fontSize: 14, fontWeight: '600', textAlign: 'center', color: colors.popoverText }}>
-                                                {active.reto.nombreReto}
-                                            </Text>
-                                            <Text style={{ fontSize: 12, opacity: 0.8, marginTop: 2, color: colors.popoverText }}>
+                                            <Text style={g.text.challengeTitle}>{active.reto.nombreReto}</Text>
+                                            <Text style={[g.text.challengeTime, { opacity: 0.8 }]}>
                                                 (Aprox {formatTiempo(active.reto.tiempoEstimadoSegReto)})
                                             </Text>
 

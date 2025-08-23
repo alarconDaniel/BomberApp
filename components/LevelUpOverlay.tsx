@@ -1,3 +1,4 @@
+// components/LevelUpOverlay.tsx
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Dimensions, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
@@ -20,12 +21,12 @@ export default function LevelUpOverlay({ visible, level, onClose }: Props) {
         const N = 22;
         return Array.from({ length: N }).map((_, i) => {
             const progress = new Animated.Value(0);
-            const x = Math.random() * W;                         // posición inicial X
-            const drift = (Math.random() * 80 + 40) * (Math.random() > 0.5 ? 1 : -1); // deriva lateral
+            const x = Math.random() * W;
+            const drift = (Math.random() * 80 + 40) * (Math.random() > 0.5 ? 1 : -1);
             const rotateDeg = (Math.random() * 180 + 90) * (Math.random() > 0.5 ? 1 : -1);
-            const size = Math.random() * 14 + 16;               // tamaño de emoji
+            const size = Math.random() * 14 + 16;
             const emoji = EMOJIS[i % EMOJIS.length];
-            const delay = Math.floor(Math.random() * 300);       // arranque escalonado
+            const delay = Math.floor(Math.random() * 300);
             return { progress, x, drift, rotateDeg, size, emoji, delay };
         });
     }, []);

@@ -4,6 +4,7 @@ import {View, Text, StyleSheet, Animated, Easing, Pressable} from 'react-native'
 import {BlurView} from 'expo-blur';
 import {FontAwesome5} from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeProvider';
+import { makeGlobalStyles } from '../theme/GlobalStyles';
 
 type Props = {
     visible: boolean;
@@ -19,6 +20,7 @@ export default function PurchaseSuccessOverlay({
                                                }: Props) {
 
     const { colors } = useTheme();
+    const g = makeGlobalStyles(colors);
 
     // Mantener montado durante la salida
     const [rendered, setRendered] = useState(visible);
@@ -88,10 +90,7 @@ export default function PurchaseSuccessOverlay({
             shadowColor:'#000', shadowOpacity:0.18, shadowOffset:{width:0,height:6}, shadowRadius:12, elevation:8 },
         badge: { width:68, height:68, borderRadius:34, backgroundColor: colors.success, alignItems:'center', justifyContent:'center' },
         ring: { position:'absolute', width:110, height:110, borderRadius:55, backgroundColor: colors.success },
-        title: { fontSize:20, fontWeight:'900', marginBottom:6, color: colors.text },
-        subtitle: { color: colors.secondaryText, textAlign:'center', marginBottom:12 },
         btn: { marginTop:6, paddingHorizontal:16, paddingVertical:10, borderRadius:12, backgroundColor: colors.success },
-        btnText: { color:'white', fontWeight:'800' },
     });
 
     return (
@@ -109,13 +108,13 @@ export default function PurchaseSuccessOverlay({
                         <Animated.View style={[s.ring, { transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
                         <View style={s.badge}><FontAwesome5 name="check" size={28} color="white" /></View>
                     </View>
-                    <Text style={s.title}>¡Compra confirmada!</Text>
-                    <Text style={s.subtitle}>Se ha comprado {qty} × <Text style={{fontWeight:'800'}}>{itemName}</Text></Text>
-                    <Pressable onPress={handleClose} style={s.btn}><Text style={s.btnText}>Listo</Text></Pressable>
+                    <Text style={g.text.title}>¡Compra confirmada!</Text>
+                    <Text style={[g.text.body, g.text.secondary, { textAlign:'center', marginBottom:12 }]}>
+                        Se ha comprado {qty} × <Text style={g.text.bodyStrong}>{itemName}</Text>
+                    </Text>
+                    <Pressable onPress={handleClose} style={s.btn}><Text style={[g.text.smallStrong, g.text.onPrimary]}>Listo</Text></Pressable>
                 </Animated.View>
             </View>
         </View>
     );
 }
-
-

@@ -4,6 +4,7 @@ import { Modal, View, Text, Pressable, StyleSheet, Dimensions, Image } from 'rea
 import { BlurView } from 'expo-blur';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeProvider';
+import { makeGlobalStyles } from '../theme/GlobalStyles';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -26,6 +27,7 @@ type Props = {
 
 export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl = '' }: Props) {
     const { colors } = useTheme();
+    const g = makeGlobalStyles(colors);
 
     const uri = useMemo(() => {
         if (!trophy?.icono) return null;
@@ -72,20 +74,12 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
             overflow: 'hidden',
         },
         iconImg: { width: '100%', height: '100%' },
-        title: {
-            fontSize: 18,
-            fontWeight: '900',
-            color: colors.text,
-            flex: 1,
-        },
-        desc: { color: colors.secondaryText, marginTop: 12, lineHeight: 20 },
         footer: {
             marginTop: 16,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
         },
-        holderTxt: { color: colors.secondaryText, flexShrink: 1 },
         closeBtn: {
             marginTop: 18,
             paddingHorizontal: 16,
@@ -94,7 +88,6 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
             backgroundColor: colors.primary,
             alignSelf: 'center',
         },
-        closeTxt: { color: 'white', fontWeight: '800' },
     });
 
     return (
@@ -115,17 +108,13 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
                                 <FontAwesome5 name="trophy" size={28} color={colors.warning} />
                             )}
                         </View>
-                        <Text
-                            style={s.title}
-                            numberOfLines={2}
-                            ellipsizeMode="tail"
-                        >
+                        <Text style={[g.text.h3]} numberOfLines={2} ellipsizeMode="tail">
                             {trophy.nombre}
                         </Text>
                     </View>
 
                     {/* Descripción */}
-                    <Text style={s.desc} numberOfLines={6}>
+                    <Text style={[g.text.body, g.text.secondary, { marginTop: 12, lineHeight: 20 }]} numberOfLines={6}>
                         {trophy.descripcion || 'Sin descripción.'}
                     </Text>
 
@@ -134,21 +123,21 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
                         {holderName ? (
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                 <FontAwesome5 name="user-astronaut" size={16} color={colors.secondaryText} />
-                                <Text style={s.holderTxt}>
-                                    Lo tiene: <Text style={{ fontWeight: '800', color: colors.text }}>{holderName}</Text>
+                                <Text style={[g.text.body, g.text.secondary, { flexShrink: 1 }]}>
+                                    Lo tiene: <Text style={g.text.bodyStrong}>{holderName}</Text>
                                 </Text>
                             </View>
                         ) : (
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                 <FontAwesome5 name="bolt" size={16} color={colors.success} />
-                                <Text style={s.holderTxt}>Sin dueño — ¿te lo ganas?</Text>
+                                <Text style={[g.text.body, g.text.secondary]}>Sin dueño — ¿te lo ganas?</Text>
                             </View>
                         )}
                     </View>
 
                     {/* Botón cerrar */}
                     <Pressable onPress={onClose} style={s.closeBtn}>
-                        <Text style={s.closeTxt}>Cerrar</Text>
+                        <Text style={[g.text.smallStrong, g.text.onPrimary]}>Cerrar</Text>
                     </Pressable>
                 </Pressable>
             </View>

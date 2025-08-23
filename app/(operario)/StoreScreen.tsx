@@ -10,7 +10,8 @@ import {useAuth} from "../../auth/AuthContext";
 import {StatsUsuario} from "../../models/StatsUsuario";
 import PurchaseSuccessOverlay from '../../components/PurchaseSuccessOverlay';
 import { useToast } from '../../components/ToastProvider';
-import { useTheme } from '../../theme/ThemeProvider'; // 👈
+import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 const {width: SCREEN_W} = Dimensions.get('window');
 
@@ -30,7 +31,9 @@ function toItemTienda(raw: any): ItemTienda {
 }
 
 export default function StoreScreen() {
-    const { colors } = useTheme(); // 👈
+    const { colors } = useTheme();
+    const g = useMemo(() => makeGlobalStyles(colors), [colors]);
+
     const toast = useToast();
     const [successInfo, setSuccessInfo] = useState<{name: string; qty: number} | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -88,7 +91,6 @@ export default function StoreScreen() {
         center: {flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg},
         retryBtn: { padding: 12, backgroundColor: colors.mutedBg, borderRadius: 8 },
         sectionHeader: { paddingHorizontal: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center' },
-        sectionTitle: { fontSize: 22, fontWeight: '800', color: colors.text },
         sectionBar: { height: 6, borderRadius: 999, backgroundColor: colors.mutedBg, marginLeft: 10, flex: 1 },
         sectionBar2: { height: 18, outlineColor: colors.outline, outlineWidth: 2, backgroundColor: colors.mutedBg, flex: 1 },
     }), [colors]);
@@ -97,7 +99,7 @@ export default function StoreScreen() {
         return (
             <View style={s.center}>
                 <ActivityIndicator size="large" color={colors.primary}/>
-                <Text style={{marginTop: 16, color: colors.text}}>Cargando tienda…</Text>
+                <Text style={[g.text.caption, {marginTop: 16}]}>Cargando tienda…</Text>
             </View>
         );
     }
@@ -105,11 +107,11 @@ export default function StoreScreen() {
     if (error) {
         return (
             <View style={s.center}>
-                <Text style={{marginBottom: 12, paddingHorizontal: 60, color: colors.text}}>
+                <Text style={[g.text.body, {marginBottom: 12, paddingHorizontal: 60}]}>
                     Uy, se cayó esto: {error}
                 </Text>
                 <Pressable onPress={listarItems} style={s.retryBtn}>
-                    <Text style={{ color: colors.text }}>Reintentar</Text>
+                    <Text style={g.text.body}>Reintentar</Text>
                 </Pressable>
             </View>
         );
@@ -131,7 +133,8 @@ export default function StoreScreen() {
                             return (
                                 <View key={sec.key}>
                                     <View style={s.sectionHeader}>
-                                        <Text style={s.sectionTitle}>{sec.title}</Text>
+                                        <Text style={[g.text.h1, {marginVertical: 2}]}>{sec.title}</Text>
+
                                         <View style={s.sectionBar}/>
                                     </View>
                                     <View style={s.sectionBar2}/>
@@ -153,7 +156,7 @@ export default function StoreScreen() {
                             return (
                                 <View key={sec.key} style={{marginTop: 16}}>
                                     <View style={s.sectionHeader}>
-                                        <Text style={s.sectionTitle}>{sec.title}</Text>
+                                        <Text style={[g.text.h1, {marginTop: 6, marginBottom: 8}]}>{sec.title}</Text>
                                         <View style={s.sectionBar}/>
                                     </View>
                                     <FlatList
@@ -175,7 +178,7 @@ export default function StoreScreen() {
                         return (
                             <View key={sec.key} style={{marginTop: 16}}>
                                 <View style={s.sectionHeader}>
-                                    <Text style={s.sectionTitle}>{sec.title}</Text>
+                                    <Text style={[g.text.h1, {marginVertical: 2}]}>{sec.title}</Text>
                                     <View style={s.sectionBar}/>
                                 </View>
                                 <FlatList

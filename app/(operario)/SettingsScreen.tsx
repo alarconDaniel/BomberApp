@@ -8,10 +8,12 @@ import FadeWrapper from '../../components/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
 import { router } from 'expo-router';
 import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 export default function SettingsScreen() {
     const { logout, user } = useAuth();
     const { colors, isDark, setScheme, scheme } = useTheme();
+    const { text } = useMemo(() => makeGlobalStyles(colors), [colors]);
 
     const [notif, setNotif] = useState(true);
     const [sounds, setSounds] = useState(true);
@@ -24,13 +26,15 @@ export default function SettingsScreen() {
     return (
         <FadeWrapper>
             <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-                <ScrollView contentContainerStyle={s.container}>
-                    <Text style={s.title}>Configuración</Text>
+                <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
+                    {/* Título principal */}
+                    <Text style={[text.h1, s.titlePad]}>Configuración</Text>
 
                     {/* --------- Experiencia de la app --------- */}
-                    <Section title="Experiencia de la app" colors={colors}>
+                    <Section title="Experiencia de la app" colors={colors} text={text}>
                         <SettingRow
                             colors={colors}
+                            text={text}
                             icon={<Ionicons name="notifications-outline" size={22} color={colors.text} />}
                             label="Notificaciones"
                             right={
@@ -48,6 +52,7 @@ export default function SettingsScreen() {
 
                         <SettingRow
                             colors={colors}
+                            text={text}
                             icon={<Ionicons name="volume-high-outline" size={22} color={colors.text} />}
                             label="Sonidos de la app"
                             right={
@@ -67,6 +72,7 @@ export default function SettingsScreen() {
                         <Pressable onPress={() => setThemeOpen(true)}>
                             <SettingRow
                                 colors={colors}
+                                text={text}
                                 icon={
                                     scheme === 'system'
                                         ? <MaterialCommunityIcons name="theme-light-dark" size={22} color={colors.text} />
@@ -77,7 +83,7 @@ export default function SettingsScreen() {
                                 label="Tema"
                                 right={
                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Text style={[s.label, { opacity: 0.8, marginRight: 8 }]}>{schemeLabel}</Text>
+                                        <Text style={[text.body, { opacity: 0.8, marginRight: 8 }]}>{schemeLabel}</Text>
                                         <Ionicons name="chevron-forward" size={18} color={colors.text} />
                                     </View>
                                 }
@@ -87,10 +93,11 @@ export default function SettingsScreen() {
                     </Section>
 
                     {/* --------- Otros --------- */}
-                    <Section title="Otros" colors={colors}>
+                    <Section title="Otros" colors={colors} text={text}>
                         <Pressable onPress={() => router.push('/(modals)/privacy')}>
                             <SettingRow
                                 colors={colors}
+                                text={text}
                                 icon={<MaterialCommunityIcons name="shield-check-outline" size={22} color={colors.text} />}
                                 label="Política de privacidad"
                                 right={<Ionicons name="chevron-forward" size={18} color={colors.text} />}
@@ -102,6 +109,7 @@ export default function SettingsScreen() {
                         <Pressable onPress={() => Alert.alert('Reseñas', 'Esta función vendrá pronto 🛠️')}>
                             <SettingRow
                                 colors={colors}
+                                text={text}
                                 icon={<Ionicons name="star-outline" size={22} color={colors.text} />}
                                 label="Reseñar App"
                                 right={<Ionicons name="chevron-forward" size={18} color={colors.text} />}
@@ -118,6 +126,7 @@ export default function SettingsScreen() {
                         >
                             <SettingRow
                                 colors={colors}
+                                text={text}
                                 icon={<MaterialCommunityIcons name="logout" size={22} color={colors.danger} />}
                                 label="Cerrar sesión"
                                 right={<Ionicons name="exit-outline" size={18} color={colors.danger} />}
@@ -129,17 +138,17 @@ export default function SettingsScreen() {
 
                     <View style={{ height: 32 }} />
                 </ScrollView>
-
             </SafeAreaView>
 
             {/* ---- Modal de selección de tema ---- */}
-            <Modal visible={themeOpen}  animationType="fade" transparent onRequestClose={() => setThemeOpen(false)}>
+            <Modal visible={themeOpen} animationType="fade" transparent onRequestClose={() => setThemeOpen(false)}>
                 <Pressable style={s.modalBackdrop} onPress={() => setThemeOpen(false)} />
                 <View style={s.sheet}>
-                    <Text style={s.sheetTitle}>Tema de la app</Text>
+                    <Text style={[text.h3]}>Tema de la app</Text>
 
                     <ThemeOption
                         colors={colors}
+                        text={text}
                         active={scheme === 'light'}
                         icon={<Ionicons name="sunny" size={18} color={colors.text} />}
                         label="Claro"
@@ -148,6 +157,7 @@ export default function SettingsScreen() {
 
                     <ThemeOption
                         colors={colors}
+                        text={text}
                         active={scheme === 'dark'}
                         icon={<Ionicons name="moon" size={18} color={colors.text} />}
                         label="Oscuro"
@@ -156,6 +166,7 @@ export default function SettingsScreen() {
 
                     <ThemeOption
                         colors={colors}
+                        text={text}
                         active={scheme === 'system'}
                         icon={<MaterialCommunityIcons name="theme-light-dark" size={18} color={colors.text} />}
                         label="Sistema"
@@ -169,39 +180,44 @@ export default function SettingsScreen() {
 
 /* ---------- helpers ---------- */
 
+type Palette = import('../../theme/ThemeProvider').Palette;
+type TextVariants = ReturnType<typeof makeGlobalStyles>['text'];
+
 function Section({
-                     title, children, colors,
-                 }: { title: string; children: React.ReactNode; colors: import('../../theme/ThemeProvider').Palette }) {
+                     title, children, colors, text,
+                 }: { title: string; children: React.ReactNode; colors: Palette; text: TextVariants }) {
     const s = makeStyles(colors);
     return (
         <View style={s.section}>
-            <Text style={s.sectionTitle}>{title}</Text>
+            {/* h2 con color de subtítulo que te gustaba en Settings */}
+            <Text style={[text.h2, { color: colors.sub, marginBottom: 8 }]}>{title}</Text>
             <View style={s.card}>{children}</View>
         </View>
     );
 }
 
-function Divider({ colors }: { colors: import('../../theme/ThemeProvider').Palette }) {
+function Divider({ colors }: { colors: Palette }) {
     return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.divider }} />;
 }
 
 function SettingRow({
-                        icon, label, right, subtitle, danger, colors,
+                        icon, label, right, subtitle, danger, colors, text,
                     }: {
     icon: React.ReactNode;
     label: string;
     right?: React.ReactNode;
     subtitle?: string;
     danger?: boolean;
-    colors: import('../../theme/ThemeProvider').Palette;
+    colors: Palette;
+    text: TextVariants;
 }) {
     const s = makeStyles(colors);
     return (
         <View style={s.row}>
             <View style={s.iconWrap}>{icon}</View>
             <View style={{ flex: 1 }}>
-                <Text style={[s.label, danger && { color: colors.danger }]}>{label}</Text>
-                {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
+                <Text style={[text.bodyStrong, danger && { color: colors.danger }]}>{label}</Text>
+                {subtitle ? <Text style={text.caption}>{subtitle}</Text> : null}
             </View>
             {right}
         </View>
@@ -209,9 +225,10 @@ function SettingRow({
 }
 
 function ThemeOption({
-                         colors, active, icon, label, onPress,
+                         colors, text, active, icon, label, onPress,
                      }: {
-    colors: import('../../theme/ThemeProvider').Palette;
+    colors: Palette;
+    text: TextVariants;
     active: boolean;
     icon: React.ReactNode;
     label: string;
@@ -232,18 +249,18 @@ function ThemeOption({
             },
         ]}>
             <View style={{ width: 28, alignItems: 'center' }}>{icon}</View>
-            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', flex: 1, marginLeft: 8 }}>{label}</Text>
+            <Text style={[text.bodyStrong, { flex: 1, marginLeft: 8 }]}>{label}</Text>
             {active ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}
         </Pressable>
     );
 }
 
-const makeStyles = (c: import('../../theme/ThemeProvider').Palette) =>
+const makeStyles = (c: Palette) =>
     StyleSheet.create({
         container: { padding: 16, backgroundColor: c.bg },
-        title: { color: c.text, fontSize: 32, fontWeight: '700', marginBottom: 12 },
+        titlePad: { marginBottom: 12 }, // se combina con text.h1
+
         section: { marginTop: 12 },
-        sectionTitle: { color: c.sub, marginBottom: 8, fontWeight: '600', fontSize: 22 },
         card: {
             backgroundColor: c.card,
             borderRadius: 16,
@@ -269,10 +286,8 @@ const makeStyles = (c: import('../../theme/ThemeProvider').Palette) =>
             justifyContent: 'center',
             marginRight: 12,
         },
-        label: { color: c.text, fontSize: 16, fontWeight: '600' },
-        subtitle: { color: '#6b7280', fontSize: 12, marginTop: 2 },
-        darkRight: { flexDirection: 'row', alignItems: 'center' },
 
+        // Modal
         modalBackdrop: {
             ...StyleSheet.absoluteFillObject,
             backgroundColor: 'rgba(0,0,0,0.45)',
@@ -288,5 +303,4 @@ const makeStyles = (c: import('../../theme/ThemeProvider').Palette) =>
             borderColor: c.divider,
             paddingBottom: 60,
         },
-        sheetTitle: { color: c.text, fontSize: 18, fontWeight: '700' },
     });

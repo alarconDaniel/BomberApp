@@ -1,5 +1,5 @@
 // app/(operario)/RankingScreen.tsx
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import FadeWrapper from '../../components/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
 import DetailsTrophyModal from '../../components/DetailsTrophyModal';
 import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 type TopItem = {
     codUsuario: number;
@@ -44,12 +45,14 @@ export default function RankingScreen() {
     const router = useRouter();
     const { fetchJson, baseUrl } = useAuth();
     const { colors } = useTheme();
-    const [data, setData] = useState<RankingResumen | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [err, setErr] = useState<string | null>(null);
+    const g = useMemoedG(colors);
 
-    const [selectedTrophy, setSelectedTrophy] = useState<TrophyItem | null>(null);
-    const [trophyOpen, setTrophyOpen] = useState(false);
+    const [data, setData] = React.useState<RankingResumen | null>(null);
+    const [loading, setLoading] = React.useState(true);
+    const [err, setErr] = React.useState<string | null>(null);
+
+    const [selectedTrophy, setSelectedTrophy] = React.useState<TrophyItem | null>(null);
+    const [trophyOpen, setTrophyOpen] = React.useState(false);
 
     const openTrophy = (t: TrophyItem) => {
         setSelectedTrophy(t);
@@ -74,14 +77,14 @@ export default function RankingScreen() {
     }, [fetchJson]);
 
     useFocusEffect(useCallback(() => { cargar(); }, [cargar]));
-    useEffect(() => { /* refresh on mount */ }, []);
+    React.useEffect(() => { /* refresh on mount */ }, []);
 
     if (loading) {
         return (
             <FadeWrapper>
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
                     <ActivityIndicator size="large" color={colors.primary} />
-                    <Text style={{ marginTop: 12, color: colors.text }}>Invocando la tabla del destino…</Text>
+                    <Text style={[g.text.caption, { marginTop: 12 }]}>Invocando la tabla del destino…</Text>
                 </View>
             </FadeWrapper>
         );
@@ -91,9 +94,9 @@ export default function RankingScreen() {
         return (
             <FadeWrapper>
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 36, backgroundColor: colors.bg }}>
-                    <Text style={{ textAlign: 'center', marginBottom: 12, color: colors.text }}>{err || 'Ups, no hay ranking disponible.'}</Text>
+                    <Text style={[g.text.body, { textAlign: 'center', marginBottom: 12 }]}>{err || 'Ups, no hay ranking disponible.'}</Text>
                     <Pressable onPress={cargar} style={{ backgroundColor: colors.mutedBg, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 }}>
-                        <Text style={{ color: colors.text }}>Reintentar</Text>
+                        <Text style={g.text.body}>Reintentar</Text>
                     </Pressable>
                 </View>
             </FadeWrapper>
@@ -112,8 +115,8 @@ export default function RankingScreen() {
             >
                 {/* Header */}
                 <View style={{ paddingTop: 18, paddingHorizontal: 18, paddingBottom: 10, backgroundColor: colors.bg }}>
-                    <Text style={{ fontSize: 22, fontWeight: '900', color: colors.text }}>Ranking Global</Text>
-                    <Text style={{ marginTop: 4, color: colors.mutedText }}>Los 5 con más XP total</Text>
+                    <Text style={[g.text.h1]}>Ranking Global</Text>
+                    <Text style={[g.text.caption, g.text.muted, { marginTop: 4 }]}>Los 5 con más XP total</Text>
                 </View>
 
                 {/* Top 5 */}
@@ -133,13 +136,12 @@ export default function RankingScreen() {
                                 shadowRadius: 6,
                                 elevation: 2,
                                 borderWidth: 1,
-                                // Mantengo el código de medallas: oro/plata/bronce
                                 borderColor: idx === 0 ? '#F59E0B' : idx === 1 ? '#94A3B8' : idx === 2 ? '#A16207' : colors.divider
                             }}
                         >
                             {/* posición */}
                             <View style={{ width: 34, alignItems: 'center' }}>
-                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{idx + 1}</Text>
+                                <Text style={[g.text.h3]}>{idx + 1}</Text>
                             </View>
 
                             {/* avatar */}
@@ -163,10 +165,10 @@ export default function RankingScreen() {
 
                             {/* info */}
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontWeight: '800', fontSize: 16, color: colors.text }} numberOfLines={1}>
+                                <Text style={[g.text.bodyStrong, { fontWeight: '800' }]} numberOfLines={1}>
                                     {t.nickname?.trim() || `${t.nombre} ${t.apellido}`}
                                 </Text>
-                                <Text style={{ color: colors.mutedText, marginTop: 2 }} numberOfLines={1}>
+                                <Text style={[g.text.caption, g.text.muted, { marginTop: 2 }]} numberOfLines={1}>
                                     Nivel {t.nivel} • {t.xp} XP
                                 </Text>
                             </View>
@@ -193,18 +195,16 @@ export default function RankingScreen() {
                         borderColor: colors.brandBlueBorder
                     }}
                 >
-                    <Text style={{ fontSize: 16, color: colors.text }}>
-                        Estás en la <Text style={{ fontWeight: '800', color: colors.text }}>posición #{me.position}</Text> — Nivel {me.nivel} • {me.xp} XP
+                    <Text style={g.text.body}>
+                        Estás en la <Text style={[g.text.bodyStrong]}>posición #{me.position}</Text> — Nivel {me.nivel} • {me.xp} XP
                     </Text>
-                    <Text style={{ marginTop: 6, fontSize: 14, color: colors.text }}>
-                        {data.mensaje}
-                    </Text>
+                    <Text style={[g.text.small, { marginTop: 6 }]}>{data.mensaje}</Text>
                 </View>
 
                 {/* Trofeos */}
                 <View style={{ marginTop: 24, paddingHorizontal: 16, marginBottom: 32 }}>
-                    <Text style={{ fontWeight: '900', fontSize: 20, color: colors.text }}>Trofeos en juego</Text>
-                    <Text style={{ color: colors.mutedText, marginTop: 4 }}>El trono cambia de manos todos los dias a las 10PM… si te lo ganas 😉</Text>
+                    <Text style={[g.text.h1]}>Trofeos en juego</Text>
+                    <Text style={[g.text.caption, g.text.muted, { marginTop: 4 }]}>El trono cambia de manos todos los dias a las 10PM… si te lo ganas 😉</Text>
 
                     <View style={{ marginTop: 14, gap: 12 }}>
                         {data.trofeos.map((t) => {
@@ -244,10 +244,10 @@ export default function RankingScreen() {
 
                                     {/* Nombre trofeo + holder */}
                                     <View style={{ flex: 1 }}>
-                                        <Text style={{ fontWeight: '800', fontSize: 16, color: colors.text }} numberOfLines={1}>
+                                        <Text style={[g.text.bodyStrong]} numberOfLines={1}>
                                             {t.nombre}
                                         </Text>
-                                        <Text style={{ color: colors.mutedText, marginTop: 2 }} numberOfLines={1}>
+                                        <Text style={[g.text.caption, g.text.muted, { marginTop: 2 }]} numberOfLines={1}>
                                             {t.holder
                                                 ? `Lo tiene: ${t.holder.nickname?.trim() || t.holder.nombre}`
                                                 : 'Sin dueño — ¿te atreves?'}
@@ -271,4 +271,9 @@ export default function RankingScreen() {
             />
         </FadeWrapper>
     );
+}
+
+import { useMemo } from 'react';
+function useMemoedG(colors: any) {
+    return useMemo(() => makeGlobalStyles(colors), [colors]);
 }

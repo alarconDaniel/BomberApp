@@ -1,10 +1,12 @@
+// components/ToastProvider.tsx
 import React, {createContext, useContext, useEffect, useRef, useState} from 'react';
 import {Animated, Easing, StyleSheet, View, Text, Pressable} from 'react-native';
 import {FontAwesome5} from '@expo/vector-icons';
+import { useTheme } from '../theme/ThemeProvider';
+import { makeGlobalStyles } from '../theme/GlobalStyles';
 
 type ToastType = 'success' | 'error' | 'info';
 type Toast = { id: number; type: ToastType; text: string };
-import { useTheme } from '../theme/ThemeProvider';
 
 type Ctx = {
     show: (type: ToastType, text: string) => void;
@@ -35,19 +37,26 @@ export function ToastProvider({children}: {children: React.ReactNode}) {
     return (
         <ToastCtx.Provider value={ctx}>
             {children}
-            <View pointerEvents="box-none" style={styles.host}>
-                {toasts.map(t => (
-                    <ToastItem key={t.id} toast={t} onClose={() => remove(t.id)} />
-                ))}
-            </View>
+            <ToastsHost toasts={toasts} onRemove={remove} />
         </ToastCtx.Provider>
     );
 }
 
 export const useToast = () => useContext(ToastCtx);
 
-function ToastItem({toast, onClose}: {toast: Toast; onClose: () => void}) {
-    const { colors } = useTheme(); // 👈
+function ToastsHost({toasts, onRemove}:{toasts: Toast[]; onRemove:(id:number)=>void}) {
+    const { colors } = useTheme();
+    return (
+        <View pointerEvents="box-none" style={styles.host}>
+            {toasts.map(t => (
+                <ToastItem key={t.id} toast={t} onClose={() => onRemove(t.id)} colors={colors} />
+            ))}
+        </View>
+    );
+}
+
+function ToastItem({toast, onClose, colors}: {toast: Toast; onClose: () => void; colors: any}) {
+    const g = makeGlobalStyles(colors);
     const anim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         Animated.timing(anim, { toValue: 1, duration: 180, useNativeDriver: true, easing: Easing.out(Easing.quad) }).start();
@@ -56,7 +65,6 @@ function ToastItem({toast, onClose}: {toast: Toast; onClose: () => void}) {
     const translateY = anim.interpolate({inputRange: [0, 1], outputRange: [-20, 0]});
     const opacity = anim;
 
-    // ✅ colores desde theme
     const palette = {
         success: { bg: colors.successSoft, border: colors.success, icon: 'check-circle' },
         error:   { bg: colors.dangerSoft,  border: colors.danger,  icon: 'times-circle' },
@@ -69,7 +77,7 @@ function ToastItem({toast, onClose}: {toast: Toast; onClose: () => void}) {
             { backgroundColor: palette.bg, borderColor: palette.border, transform: [{translateY}], opacity }
         ]}>
             <FontAwesome5 name={palette.icon as any} size={18} color={palette.border}/>
-            <Text style={[styles.toastText, { color: colors.text }]} numberOfLines={2}>{toast.text}</Text>
+            <Text style={[g.text.bodyStrong, { flex: 1 }]} numberOfLines={2}>{toast.text}</Text>
             <Pressable onPress={onClose} hitSlop={10}>
                 <FontAwesome5 name="times" size={16} color={colors.mutedText} />
             </Pressable>
@@ -84,5 +92,4 @@ const styles = StyleSheet.create({
         flexDirection: 'row', alignItems: 'center', gap: 10,
         shadowColor: '#000', shadowOpacity: 0.12, shadowOffset: {width: 0, height: 4}, shadowRadius: 8, elevation: 4,
     },
-    toastText: { fontWeight: '700', flex: 1 },
 });

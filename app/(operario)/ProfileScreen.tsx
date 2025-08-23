@@ -1,4 +1,4 @@
-// app/(tabs)/profile.tsx
+// app/(operario)/ProfileScreen.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, ActivityIndicator, Image, Pressable, Text, View, ScrollView } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { PerfilResumen } from '../../models/PerfilResumen';
 import { useRouter, useFocusEffect } from 'expo-router';
 import LevelUpOverlay from '../../components/LevelUpOverlay';
 import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 const AVATAR_SIZE = 110;
 
@@ -21,6 +22,7 @@ function initials(nombre?: string, apellido?: string) {
 
 export default function ProfileScreen() {
     const { colors, isDark } = useTheme();
+    const g = useMemo(() => makeGlobalStyles(colors), [colors]);
     const router = useRouter();
 
     const lastLevelRef = useRef<number | null>(null);
@@ -112,8 +114,7 @@ export default function ProfileScreen() {
         [data?.usuario.nombre, data?.usuario.apellido]
     );
 
-    // 🎨 Paleta: en CLARO uso EXACTAMENTE los hex originales.
-    // En OSCURO mapeo a tu ThemeProvider para no tocar layout, solo colores.
+    // 🎨 Paleta: respetamos exactamente tu mapeo original
     const P = isDark ? {
         bg: colors.bg,
         headerBg: colors.bg,
@@ -133,7 +134,7 @@ export default function ProfileScreen() {
         levelNumber: colors.primary,
         xpText: colors.text,
 
-        progressTrack: colors.outline,     // contraste claro sobre mutedBg
+        progressTrack: colors.outline,
         progressFill: colors.primary,
 
         progressHint: colors.mutedText,
@@ -157,7 +158,6 @@ export default function ProfileScreen() {
 
         star: colors.warning,
     } : {
-        // === MODO CLARO: EXACTAMENTE tus colores del archivo original ===
         bg: '#fff',
         headerBg: '#fff',
         iconPen: '#333',
@@ -176,13 +176,12 @@ export default function ProfileScreen() {
         levelNumber: '#4338CA',
         xpText: '#111',
 
-        // Barra experiencia (track/fill exactos)
         progressTrack: '#E5E7EB',
         progressFill: '#6366F1',
 
         progressHint: '#6B7280',
 
-        sectionTitle: '#000', // como por defecto en RN (negro)
+        sectionTitle: '#000',
 
         streakIcon: '#fc4103',
         streakBg: '#ffcfbf',
@@ -207,7 +206,7 @@ export default function ProfileScreen() {
             <FadeWrapper>
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: P.bg }}>
                     <ActivityIndicator size="large" color={isDark ? colors.primary : undefined} />
-                    <Text style={{ marginTop: 16, color: P.nick }}>Cargando perfil…</Text>
+                    <Text style={[g.text.caption, { marginTop: 16, color: P.nick }]}>Cargando perfil…</Text>
                 </View>
             </FadeWrapper>
         );
@@ -216,14 +215,14 @@ export default function ProfileScreen() {
         return (
             <FadeWrapper>
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, backgroundColor: P.bg }}>
-                    <Text style={{ textAlign: 'center', marginBottom: 12, color: P.nick }}>
+                    <Text style={[g.text.body, { textAlign: 'center', marginBottom: 12, color: P.nick }]}>
                         {err || 'Uy, algo pasó cargando el perfil.'}
                     </Text>
                     <Pressable
                         onPress={cargar}
                         style={{ backgroundColor: P.chipBg, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 }}
                     >
-                        <Text style={{ color: P.chipText }}>Reintentar</Text>
+                        <Text style={[g.text.body, { color: P.chipText }]}>Reintentar</Text>
                     </Pressable>
                 </View>
             </FadeWrapper>
@@ -267,7 +266,7 @@ export default function ProfileScreen() {
 
                         {/* Nickname animado */}
                         <View style={{ marginTop: 12, alignItems: 'center', position: 'relative' }}>
-                            <Animated.Text style={[{ fontWeight: '700', fontSize: 18, color: P.nick }, shakeStyle]}>
+                            <Animated.Text style={[g.text.h3, { color: P.nick }, shakeStyle]}>
                                 {nickname}
                             </Animated.Text>
                             <Animated.View style={starStyle}>
@@ -276,7 +275,7 @@ export default function ProfileScreen() {
                         </View>
 
                         {/* Nombre completo */}
-                        <Text style={{ marginTop: 2, fontSize: 14, color: P.fullname }}>{fullname}</Text>
+                        <Text style={[g.text.small, { marginTop: 2, color: P.fullname }]}>{fullname}</Text>
                     </View>
                 </View>
 
@@ -292,7 +291,7 @@ export default function ProfileScreen() {
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <Text style={{ fontSize: 16, color: P.levelText }}>Nivel</Text>
+                            <Text style={[g.text.body, { color: P.levelText }]}>Nivel</Text>
                             <View style={{
                                 width: 36, height: 36, borderRadius: 18,
                                 borderWidth: 2, borderColor: P.levelCircleBorder, alignItems: 'center', justifyContent: 'center',
@@ -301,7 +300,7 @@ export default function ProfileScreen() {
                                 <Text style={{ fontSize: 16, fontWeight: '800', color: P.levelCircleBorder }}>{stats.nivel}</Text>
                             </View>
                         </View>
-                        <Text style={{ fontSize: 14, color: P.xpText }}>EXP {stats.xp}</Text>
+                        <Text style={[g.text.small, { color: P.xpText }]}>EXP {stats.xp}</Text>
                     </View>
 
                     {/* Barra de progreso */}
@@ -315,21 +314,21 @@ export default function ProfileScreen() {
                         />
                     </View>
 
-                    <Text style={{ fontSize: 12, color: P.progressHint, marginTop: 8 }}>
+                    <Text style={[g.text.caption, { marginTop: 8, color: P.progressHint }]}>
                         a {stats.faltante} EXP para llegar al nivel {stats.nivel + 1}
                     </Text>
                 </View>
 
                 {/* Resumen */}
                 <View style={{ marginTop: 18, paddingHorizontal: 18 }}>
-                    <Text style={{ fontWeight: '800', fontSize: 18, color: P.sectionTitle }}>Resumen</Text>
+                    <Text style={[g.text.h3, { color: P.sectionTitle }]}>Resumen</Text>
 
                     {/* Racha */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
                         <View style={{ backgroundColor: P.streakBg, padding: 10, borderRadius: 12 }}>
                             <FontAwesome5 name="fire" size={24} color={P.streakIcon} />
                         </View>
-                        <Text style={{ marginLeft: 12, fontSize: 16, color: P.sectionTitle }}>
+                        <Text style={[g.text.body, { marginLeft: 12, color: P.sectionTitle }]}>
                             <Text style={{ fontWeight: '700', color: P.sectionTitle }}>{stats.racha}</Text> días de racha
                         </Text>
                     </View>
@@ -339,7 +338,7 @@ export default function ProfileScreen() {
                         <View style={{ backgroundColor: P.coinBg, padding: 10, borderRadius: 12 }}>
                             <FontAwesome5 name="coins" size={24} color={P.coinIcon} />
                         </View>
-                        <Text style={{ marginLeft: 12, fontSize: 16, color: P.sectionTitle }}>
+                        <Text style={[g.text.body, { marginLeft: 12, color: P.sectionTitle }]}>
                             <Text style={{ fontWeight: '700', color: P.sectionTitle }}>{stats.monedas}</Text> denigues
                         </Text>
                     </View>
@@ -348,12 +347,12 @@ export default function ProfileScreen() {
                 {/* Logros — estilo como tu mock */}
                 <View style={{ marginTop: 22, paddingHorizontal: 18, marginBottom: 36 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ fontWeight: '800', fontSize: 18, color: P.sectionTitle }}>Logros</Text>
+                        <Text style={[g.text.h3, { color: P.sectionTitle }]}>Logros</Text>
                         <Pressable
                             onPress={() => router.push('/(modals)/logros')}
                             style={{ paddingVertical: 6, paddingHorizontal: 12, backgroundColor: P.chipBg, borderRadius: 999 }}
                         >
-                            <Text style={{ fontSize: 12, color: P.chipText }}>Ver todos</Text>
+                            <Text style={[g.text.captionStrong, { color: P.chipText }]}>Ver todos</Text>
                         </Pressable>
                     </View>
 
@@ -382,16 +381,16 @@ export default function ProfileScreen() {
 
                                     {/* Centro: nombre + subtítulo */}
                                     <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={{ fontWeight: '800', fontSize: 16, color: P.logroTitle }} numberOfLines={1}>
+                                        <Text style={[g.text.bodyStrong, { color: P.logroTitle }]} numberOfLines={1}>
                                             {l.nombre}
                                         </Text>
-                                        <Text style={{ color: P.logroSubtitle, marginTop: 2 }} numberOfLines={1}>
+                                        <Text style={[g.text.caption, { color: P.logroSubtitle, marginTop: 2 }]} numberOfLines={1}>
                                             {l.nombre}
                                         </Text>
                                     </View>
 
                                     {/* Derecha: recompensa */}
-                                    <Text style={{ fontWeight: '800', fontSize: 16, color: P.logroReward }}>
+                                    <Text style={[g.text.bodyStrong, { color: P.logroReward }]}>
                                         {fmtRecompensa(l.recompensa)}
                                     </Text>
                                 </Pressable>

@@ -6,19 +6,19 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { markModalClosed } from '../../navigation/ModalTracker';
 import { useMarkModalOnClose } from "../../navigation/useMarkModalOnClose";
 import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 export default function PrivacyModal() {
     const router = useRouter();
     useMarkModalOnClose();
     const { colors } = useTheme();
+    const g = makeGlobalStyles(colors);
 
     const s = StyleSheet.create({
         safe: { flex: 1, backgroundColor: colors.bg },
         headerRow: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
         backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-        backTxt: { fontSize: 16, color: colors.text },
         content: { flex: 1, paddingHorizontal: 24, alignItems: 'center' },
-        title: { textAlign: 'center', fontSize: 28, fontWeight: 'bold', marginTop: 24, color: colors.text },
         card: {
             marginTop: 20,
             backgroundColor: colors.card,
@@ -28,7 +28,6 @@ export default function PrivacyModal() {
             borderColor: colors.divider,
             width: '100%',
         },
-        text: { color: colors.secondaryText, lineHeight: 22 },
         primaryBtn: {
             marginTop: 'auto',
             marginBottom: 24,
@@ -37,7 +36,6 @@ export default function PrivacyModal() {
             backgroundColor: colors.primary,
             borderRadius: 999,
         },
-        primaryBtnTxt: { color: '#fff', fontWeight: '700', fontSize: 16 },
     });
 
     return (
@@ -46,16 +44,16 @@ export default function PrivacyModal() {
             <View style={s.headerRow}>
                 <Pressable onPress={() => { markModalClosed(); router.back(); }} style={s.backBtn} hitSlop={10}>
                     <FontAwesome5 name="chevron-left" size={18} color={colors.text} />
-                    <Text style={s.backTxt}>Volver</Text>
+                    <Text style={g.text.body}>Volver</Text>
                 </Pressable>
             </View>
 
             <View style={s.content}>
-                <Text style={s.title}>Política de privacidad</Text>
+                <Text style={[g.text.h2, { textAlign: 'center', marginTop: 24 }]}>Política de privacidad</Text>
 
                 <View style={s.card}>
                     <ScrollView>
-                        <Text style={s.text}>
+                        <Text style={[g.text.body, g.text.secondary, { lineHeight: 22 }]}>
                             Esta aplicación respeta tu privacidad. Recopilamos solo la información necesaria para
                             operar el servicio (por ejemplo, datos de cuenta y uso básico). No vendemos tus datos
                             a terceros. Podemos usar información agregada y anonimizada para mejorar la experiencia.
@@ -67,7 +65,7 @@ export default function PrivacyModal() {
                 </View>
 
                 <Pressable style={s.primaryBtn} onPress={() => router.back()}>
-                    <Text style={s.primaryBtnTxt}>Entendido</Text>
+                    <Text style={[g.text.smallStrong, g.text.onPrimary]}>Entendido</Text>
                 </Pressable>
             </View>
         </SafeAreaView>

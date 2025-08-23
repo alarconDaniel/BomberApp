@@ -3,7 +3,8 @@ import React from 'react';
 import {View, Text, Pressable, StyleSheet, Dimensions} from 'react-native';
 import {FontAwesome5} from '@expo/vector-icons';
 import {ItemTienda} from '../models/ItemTienda';
-import {useTheme} from '../theme/ThemeProvider'; // 👈
+import {useTheme} from '../theme/ThemeProvider';
+import { makeGlobalStyles } from '../theme/GlobalStyles';
 
 const {width: SCREEN_W} = Dimensions.get('window');
 
@@ -25,9 +26,10 @@ export default function StoreItemCard({
                                           onPress,
                                           accentColor = '#3B5BDB',
                                           variant = 'POTENCIADOR'
-                                      }:
-                                      Props) {
-    const {colors} = useTheme(); // 👈
+                                      }: Props) {
+    const {colors} = useTheme();
+    const g = makeGlobalStyles(colors);
+
     const metaIcon = (item.metadataItem as any)?.icon || iconFallbackByTipo[String(item.tipoItem).toUpperCase()] || 'shopping-bag';
     const badge = (item.metadataItem as any)?.badge;
     const price = Number(item.precioItem || 0);
@@ -38,24 +40,26 @@ export default function StoreItemCard({
             <Pressable onPress={onPress} style={[s(colors).card, s(colors).shadow, {borderColor: accentColor}]}>
                 {/* cabecera/badge */}
                 <View style={[s(colors).ribbon, {backgroundColor: accentColor}]}>
-                    <Text
-                        style={s(colors).ribbonText}>{item.nombreItem}
+                    <Text style={[g.text.captionStrong, { color: 'white', textAlign: 'center' }]}>
+                        {item.nombreItem}
                     </Text>
                 </View>
 
-
                 {/* ícono central */}
-                <View style={[s(colors).iconWrap, {marginVertical: 20}]}><FontAwesome5 name={metaIcon as any} size={68}
-                                                                                       color={accentColor}/>
+                <View style={[s(colors).iconWrap, {marginVertical: 20}]}>
+                    <FontAwesome5 name={metaIcon as any} size={68} color={accentColor}/>
                 </View>
 
                 {/* badge secundario si viene */}
-                {badge ? (<View style={[s(colors).badge, {borderColor: accentColor}]}><Text
-                    style={[s(colors).badgeText, {color: accentColor}]}>{badge}</Text></View>) : null}
+                {badge ? (
+                    <View style={[s(colors).badge, {borderColor: accentColor}]}>
+                        <Text style={[g.text.captionStrong, {color: accentColor}]}>{badge}</Text>
+                    </View>
+                ) : null}
 
                 {/* precio / CTA visual */}
                 <View style={[s(colors).footer, {flex: 1}]}>
-                    <Text style={s(colors).price}>{price > 0 ? `$${price}` : 'Gratis'}</Text>
+                    <Text style={[g.text.smallStrong, { color: colors.text }]}>{price > 0 ? `$${price}` : 'Gratis'}</Text>
                     <FontAwesome5 name="chevron-right" size={14} color={colors.mutedText}/>
                 </View>
             </Pressable>
@@ -67,37 +71,44 @@ export default function StoreItemCard({
         return (
             <Pressable onPress={onPress} style={{flex: 1, width: 100}}>
                 {/* cabecera/badge */}
-                <View style={[s(colors).ribbon, {backgroundColor: accentColor}]}><Text
-                    style={s(colors).ribbonText}>{item.nombreItem}</Text></View>
+                <View style={[s(colors).ribbon, {backgroundColor: accentColor}]}>
+                    <Text style={[g.text.captionStrong, { color: 'white', textAlign: 'center' }]}>
+                        {item.nombreItem}
+                    </Text>
+                </View>
 
                 {/* ícono central */}
-                {item.precioItem == 1000 && (<View style={{
-                    alignSelf: 'center',
-                    paddingVertical: 10,
-                    justifyContent: 'flex-end',
-                    flex: 1
-                }}><FontAwesome5 name={metaIcon as any} size={60} color={accentColor}/></View>)}
+                {item.precioItem == 1000 && (
+                    <View style={{ alignSelf: 'center', paddingVertical: 10, justifyContent: 'flex-end', flex: 1 }}>
+                        <FontAwesome5 name={metaIcon as any} size={60} color={accentColor}/>
+                    </View>
+                )}
 
-                {item.precioItem == 100 && (<View style={{
-                    alignSelf: 'center',
-                    paddingVertical: 10,
-                    justifyContent: 'flex-end',
-                    flex: 1
-                }}><FontAwesome5 name={metaIcon as any} size={50} color={accentColor}/></View>)}
+                {item.precioItem == 100 && (
+                    <View style={{ alignSelf: 'center', paddingVertical: 10, justifyContent: 'flex-end', flex: 1 }}>
+                        <FontAwesome5 name={metaIcon as any} size={50} color={accentColor}/>
+                    </View>
+                )}
 
-                {item.precioItem == 10 && (<View style={{
-                    alignSelf: 'center',
-                    paddingVertical: 10,
-                    justifyContent: 'flex-end',
-                    flex: 1
-                }}><FontAwesome5 name={metaIcon as any} size={40} color={accentColor}/></View>)}
+                {item.precioItem == 10 && (
+                    <View style={{ alignSelf: 'center', paddingVertical: 10, justifyContent: 'flex-end', flex: 1 }}>
+                        <FontAwesome5 name={metaIcon as any} size={40} color={accentColor}/>
+                    </View>
+                )}
 
                 {/* badge secundario si viene */}
-                {badge ? (<View style={[s(colors).badge, {borderColor: accentColor}]}><Text
-                    style={[s(colors).badgeText, {color: accentColor}]}>{badge}</Text></View>) : null}
+                {badge ? (
+                    <View style={[s(colors).badge, {borderColor: accentColor}]}>
+                        <Text style={[g.text.captionStrong, {color: accentColor}]}>{badge}</Text>
+                    </View>
+                ) : null}
 
                 {/* precio / CTA visual */}
-                <View><Text style={[s(colors).price, {alignSelf: 'center'}]}>{price > 0 ? `$${price}` : 'Gratis'}</Text></View>
+                <View>
+                    <Text style={[g.text.smallStrong, {alignSelf: 'center', color: colors.text}]}>
+                        {price > 0 ? `$${price}` : 'Gratis'}
+                    </Text>
+                </View>
             </Pressable>
         );
     }
@@ -110,19 +121,27 @@ export default function StoreItemCard({
             <View style={[s(colors).cardPotenciador, s(colors).shadow, {borderColor: accentColor}]}>
 
                 {/* cabecera/badge */}
-                <View style={[s(colors).ribbon, {backgroundColor: accentColor}]}><Text
-                    style={s(colors).ribbonText}>{item.nombreItem}</Text></View>
+                <View style={[s(colors).ribbon, {backgroundColor: accentColor}]}>
+                    <Text style={[g.text.captionStrong, { color: 'white', textAlign: 'center' }]}>
+                        {item.nombreItem}
+                    </Text>
+                </View>
 
                 {/* ícono central */}
-                <View style={[s(colors).iconWrap]}><FontAwesome5 name={metaIcon as any} size={28} color={accentColor}/></View>
+                <View style={[s(colors).iconWrap]}>
+                    <FontAwesome5 name={metaIcon as any} size={28} color={accentColor}/>
+                </View>
 
                 {/* badge secundario si viene */}
-                {badge ? (<View style={[s(colors).badge, {borderColor: accentColor}]}><Text
-                    style={[s(colors).badgeText, {color: accentColor}]}>{badge}</Text></View>) : null}
+                {badge ? (
+                    <View style={[s(colors).badge, {borderColor: accentColor}]}>
+                        <Text style={[g.text.captionStrong, {color: accentColor}]}>{badge}</Text>
+                    </View>
+                ) : null}
 
                 {/* precio / CTA visual */}
                 <View style={s(colors).footer}>
-                    <Text style={s(colors).price}>{price > 0 ? `$${price}` : 'Gratis'}</Text>
+                    <Text style={[g.text.smallStrong, { color: colors.text }]}>{price > 0 ? `$${price}` : 'Gratis'}</Text>
                     <FontAwesome5 name="chevron-right" size={14} color={colors.mutedText}/>
                 </View>
             </View>
@@ -167,7 +186,6 @@ const s = (c: import('../theme/ThemeProvider').Palette) => StyleSheet.create({
         elevation: 4
     },
     ribbon: {alignSelf: 'stretch', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 10},
-    ribbonText: {fontSize: 12, color: 'white', fontWeight: '700', textAlign: 'center'},
     iconWrap: {height: 72, alignItems: 'center', justifyContent: 'center'},
     badge: {
         alignSelf: 'center',
@@ -177,7 +195,6 @@ const s = (c: import('../theme/ThemeProvider').Palette) => StyleSheet.create({
         borderWidth: 1.5,
         marginTop: 2
     },
-    badgeText: {fontSize: 12, fontWeight: '700'},
     footer: {
         marginTop: 5,
         borderTopWidth: 1,
@@ -186,5 +203,4 @@ const s = (c: import('../theme/ThemeProvider').Palette) => StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between'
     },
-    price: {fontSize: 14, fontWeight: '800', color: c.text},
 });

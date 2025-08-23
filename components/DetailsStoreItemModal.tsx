@@ -1,11 +1,12 @@
 // components/DetailsStoreItemModal.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Modal, View, Text, Pressable, StyleSheet, Dimensions, Image, Animated, Easing } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Slider from '@react-native-community/slider';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { ItemTienda } from '../models/ItemTienda';
-import { useTheme } from '../theme/ThemeProvider'; // 👈
+import { useTheme } from '../theme/ThemeProvider';
+import { makeGlobalStyles } from '../theme/GlobalStyles';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -19,7 +20,8 @@ const iconFallbackByTipo: Record<string, string> = { POTENCIADOR: 'bolt', COFRE:
 
 export default function DetailsStoreItemModal(props: Props) {
     const { visible, item, onClose, onBuy, accentColor = '#3B5BDB', userCoins = 0, buying = false } = props;
-    const { colors } = useTheme(); // 👈
+    const { colors } = useTheme();
+    const g = makeGlobalStyles(colors);
 
     const [qty, setQty] = useState(1);
     const shake = useRef(new Animated.Value(0)).current;
@@ -57,20 +59,16 @@ export default function DetailsStoreItemModal(props: Props) {
         centerWrap: { ...StyleSheet.absoluteFillObject, alignItems:'center', justifyContent:'center', padding:16 },
         card: { width: SCREEN_W * 0.9, borderRadius: 16, backgroundColor: colors.card, padding: 16 },
         shadow: { shadowColor:'#000', shadowOpacity:0.18, shadowOffset:{width:0,height:6}, shadowRadius:12, elevation:8 },
-        title: { fontSize: 20, fontWeight: '800', marginBottom: 10, color: colors.text },
         mediaRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
         image: { width: 92, height: 92, borderRadius: 12, backgroundColor: colors.imageBg },
         iconWrap: { width: 92, height: 92, borderRadius: 12, backgroundColor: colors.imageBg, alignItems:'center', justifyContent:'center' },
-        desc: { color: colors.secondaryText, lineHeight: 18 },
         qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },
         circleBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, alignItems:'center', justifyContent:'center', borderColor: colors.inputBorder },
         circleTxt: { fontSize: 18, fontWeight: '800', color: colors.text },
         sliderWrap: { flex: 1, alignItems: 'stretch', justifyContent: 'center' },
-        qtyLabel: { alignSelf:'center', marginTop:4, color: hasFunds ? colors.mutedText : colors.danger, fontSize:12, fontWeight:'700' },
         footer: { marginTop:16, flexDirection:'row', alignItems:'center', justifyContent:'space-between' },
-        total: { fontSize:18, fontWeight:'900', color: hasFunds ? colors.text : colors.danger },
+        total: { fontSize:18, fontWeight:'900' },
         buyBtn: { paddingHorizontal:18, paddingVertical:10, borderRadius:12, backgroundColor: !hasFunds ? colors.danger : accentColor, opacity: buying ? 0.7 : 1 },
-        buyTxt: { color: 'white', fontWeight:'800' },
     });
 
     return (
@@ -81,7 +79,7 @@ export default function DetailsStoreItemModal(props: Props) {
 
             <View style={s.centerWrap} pointerEvents="box-none">
                 <Pressable style={[s.card, s.shadow]} onPress={() => {}}>
-                    <Text style={s.title} numberOfLines={2}>{item.nombreItem}</Text>
+                    <Text style={[g.text.title, {marginBottom: 24}]} numberOfLines={2}>{item.nombreItem}</Text>
 
                     <View style={s.mediaRow}>
                         {imageUrl ? (
@@ -93,8 +91,8 @@ export default function DetailsStoreItemModal(props: Props) {
                         )}
 
                         <View style={{ flex: 1 }}>
-                            <Text style={s.desc} numberOfLines={5}>{item.descripcionItem || 'Sin descripción.'}</Text>
-                            <Text style={{ marginTop: 6, fontWeight: '700', color: colors.mutedText }}>Tus monedas: {userCoins}</Text>
+                            <Text style={[g.text.body, g.text.secondary]} numberOfLines={5}>{item.descripcionItem || 'Sin descripción.'}</Text>
+                            <Text style={[g.text.smallStrong, g.text.muted, { marginTop: 6 }]}>Tus monedas: {userCoins}</Text>
                         </View>
                     </View>
 
@@ -112,7 +110,7 @@ export default function DetailsStoreItemModal(props: Props) {
                                 maximumTrackTintColor={hasFunds ? colors.mutedBg : colors.dangerSoft}
                                 thumbTintColor={hasFunds ? accentColor : colors.danger}
                             />
-                            <Text style={s.qtyLabel}>
+                            <Text style={[g.text.caption, { alignSelf: 'center', marginTop: 4, color: hasFunds ? colors.mutedText : colors.danger }]}>
                                 {qty}{!hasFunds ? ' • Monedas insuficientes' : ''}
                             </Text>
                         </Animated.View>
@@ -121,9 +119,11 @@ export default function DetailsStoreItemModal(props: Props) {
                     </View>
 
                     <View style={s.footer}>
-                        <Text style={s.total}>{price > 0 ? `$${total}` : 'Gratis'}</Text>
+                        <Text style={[s.total, { color: hasFunds ? colors.text : colors.danger }]}>{price > 0 ? `$${total}` : 'Gratis'}</Text>
                         <Pressable onPress={handleBuy} disabled={!hasFunds || buying} style={s.buyBtn}>
-                            <Text style={s.buyTxt}>{!hasFunds ? 'Monedas insuficientes' : (buying ? 'Comprando…' : 'Comprar')}</Text>
+                            <Text style={[g.text.smallStrong, g.text.onPrimary]}>
+                                {!hasFunds ? 'Monedas insuficientes' : (buying ? 'Comprando…' : 'Comprar')}
+                            </Text>
                         </Pressable>
                     </View>
                 </Pressable>

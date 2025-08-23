@@ -12,6 +12,7 @@ import { BlurView } from 'expo-blur';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { ItemInventario } from '../models/ItemInventario';
 import { useTheme } from '../theme/ThemeProvider';
+import { makeGlobalStyles } from '../theme/GlobalStyles';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -20,7 +21,7 @@ type Props = {
     item?: ItemInventario | null;
     onClose: () => void;
     accentColor?: string;
-    showDate?: boolean; // por si quieres mostrar la fecha de compra
+    showDate?: boolean;
 };
 
 const iconFallbackByNombre: Record<string, string> = {
@@ -38,6 +39,7 @@ export default function DetailsInventoryItemModal({
                                                       showDate = true,
                                                   }: Props) {
     const { colors } = useTheme();
+    const g = makeGlobalStyles(colors);
     if (!visible || !item) return null;
 
     const nombre = item.item?.nombre ?? 'Item';
@@ -72,7 +74,6 @@ export default function DetailsInventoryItemModal({
             shadowRadius: 12,
             elevation: 8,
         },
-        title: { fontSize: 20, fontWeight: '800', marginBottom: 10, color: colors.text },
         mediaRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
         iconWrap: {
             width: 92,
@@ -82,10 +83,6 @@ export default function DetailsInventoryItemModal({
             alignItems: 'center',
             justifyContent: 'center',
         },
-        desc: { color: colors.secondaryText, lineHeight: 18 },
-        metaStrong: { color: colors.text, fontWeight: '800' },
-        metaValue: { color: colors.text, fontWeight: '900' },
-        metaSoft: { color: colors.mutedText, fontWeight: '600', marginTop: 2 },
         footer: {
             marginTop: 16,
             flexDirection: 'row',
@@ -99,7 +96,6 @@ export default function DetailsInventoryItemModal({
             borderColor: colors.inputBorder,
             backgroundColor: colors.primary,
         },
-        closeTxt: { color: '#fff', fontWeight: '800' },
     });
 
     return (
@@ -111,7 +107,7 @@ export default function DetailsInventoryItemModal({
             <View style={s.centerWrap} pointerEvents="box-none">
                 <Pressable style={[s.card, s.shadow]} onPress={() => {}}>
                     {/* Título */}
-                    <Text style={s.title} numberOfLines={2}>
+                    <Text style={[g.text.title, {marginBottom: 24}]} numberOfLines={2}>
                         {nombre}
                     </Text>
 
@@ -122,14 +118,16 @@ export default function DetailsInventoryItemModal({
                         </View>
 
                         <View style={{ flex: 1 }}>
-                            <Text style={s.desc} numberOfLines={6}>
+                            <Text style={[g.text.body, g.text.secondary]} numberOfLines={6}>
                                 {descripcion}
                             </Text>
 
                             <View style={{ marginTop: 8 }}>
-                                <Text style={s.metaStrong}>Cantidad en tu inventario: <Text style={s.metaValue}>x{cantidad}</Text></Text>
+                                <Text style={g.text.bodyStrong}>
+                                    Cantidad en tu inventario: <Text style={{ fontWeight: '900' }}>x{cantidad}</Text>
+                                </Text>
                                 {showDate && fecha && (
-                                    <Text style={s.metaSoft}>
+                                    <Text style={[g.text.caption]}>
                                         Desde: {fecha.toLocaleDateString()} {fecha.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </Text>
                                 )}
@@ -140,7 +138,7 @@ export default function DetailsInventoryItemModal({
                     {/* Footer simple */}
                     <View style={s.footer}>
                         <Pressable onPress={onClose} style={s.closeBtn}>
-                            <Text style={s.closeTxt}>Cerrar</Text>
+                            <Text style={[g.text.smallStrong, g.text.onPrimary]}>Cerrar</Text>
                         </Pressable>
                     </View>
                 </Pressable>
