@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+// app/(modals)/editar-perfil.tsx
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View,
     Alert, KeyboardAvoidingView, Platform, ScrollView, Keyboard
@@ -9,8 +10,11 @@ import { useAuth } from '../../auth/AuthContext';
 import type { PerfilResumen } from '../../models/PerfilResumen';
 import type { DimensionValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../theme/ThemeProvider';
+import {markModalClosed} from "../../navigation/ModalTracker";
+import {useMarkModalOnClose} from "../../navigation/useMarkModalOnClose";
 
-// --- Hook chiquito para saber la altura del teclado ---
+// --- Hook para altura del teclado ---
 function useKeyboardHeight() {
     const [h, setH] = useState(0);
     useEffect(() => {
@@ -24,7 +28,9 @@ function useKeyboardHeight() {
 }
 
 export default function EditarPerfilModal() {
+    useMarkModalOnClose();
     const router = useRouter();
+    const { colors, isDark } = useTheme();
     const { fetchJson } = useAuth();
     const insets = useSafeAreaInsets();
     const kbHeight = useKeyboardHeight();
@@ -39,35 +45,52 @@ export default function EditarPerfilModal() {
     const [savingNick, setSavingNick] = useState(false);
     const [savingPw, setSavingPw] = useState(false);
 
-    const s = StyleSheet.create({
-        safe: { flex: 1, backgroundColor: "#f8fafc" },
-        headerRow: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-        backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-        backTxt: { fontSize: 16 },
-        content: { flexGrow: 1, paddingHorizontal: 24 },
-        title: { textAlign: 'center', fontSize: 24, fontWeight: 'bold', marginTop: 8 },
-        label: { marginTop: 16, fontWeight: '600' },
-        input: {
-            marginTop: 8, borderWidth: 1, borderColor: 'rgba(0,0,0,0.15)', borderRadius: 10,
-            paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff'
-        },
-        card: {
-            marginTop: 16, backgroundColor: "#ffffff", borderRadius: 14, padding: 16,
-            borderWidth: 1, borderColor: "rgba(15,23,42,0.08)", width: '100%' as DimensionValue
-        },
-        help: { color: '#6b7280', fontSize: 12, marginTop: 4 },
-        primaryBtn: {
-            marginTop: 16, paddingVertical: 12, paddingHorizontal: 24, backgroundColor: "#7c3aed",
-            borderRadius: 999, alignItems: 'center'
-        },
-        secondaryBtn: {
-            marginTop: 12, paddingVertical: 12, paddingHorizontal: 24, backgroundColor: "#e5e7eb",
-            borderRadius: 999, alignItems: 'center'
-        },
-        primaryTxt: { color: '#fff', fontWeight: '700' },
-        dangerTxt: { color: '#7c3aed', fontWeight: '700' },
-        ro: { opacity: 0.9 }
-    });
+    const s = useMemo(
+        () =>
+            StyleSheet.create({
+                safe: { flex: 1, backgroundColor: isDark ? colors.bg : "#f8fafc" },
+                headerRow: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+                backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+                backTxt: { fontSize: 16, color: colors.text },
+                content: { flexGrow: 1, paddingHorizontal: 24 },
+                title: { textAlign: 'center', fontSize: 24, fontWeight: 'bold', marginTop: 8, color: colors.text },
+                label: { marginTop: 16, fontWeight: '600', color: colors.text },
+                input: {
+                    marginTop: 8,
+                    borderWidth: 1,
+                    borderColor: isDark ? colors.inputBorder : 'rgba(0,0,0,0.15)',
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    backgroundColor: isDark ? colors.card : '#fff',
+                    color: colors.text,
+                },
+                card: {
+                    marginTop: 16,
+                    backgroundColor: isDark ? colors.card : "#ffffff",
+                    borderRadius: 14,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: isDark ? colors.divider : "rgba(15,23,42,0.08)",
+                    width: '100%' as DimensionValue
+                },
+                help: { color: isDark ? colors.mutedText : '#6b7280', fontSize: 12, marginTop: 4 },
+                primaryBtn: {
+                    marginTop: 16, paddingVertical: 12, paddingHorizontal: 24,
+                    backgroundColor: isDark ? colors.primary : "#7c3aed",
+                    borderRadius: 999, alignItems: 'center'
+                },
+                secondaryBtn: {
+                    marginTop: 12, paddingVertical: 12, paddingHorizontal: 24,
+                    backgroundColor: isDark ? colors.mutedBg : "#e5e7eb",
+                    borderRadius: 999, alignItems: 'center'
+                },
+                primaryTxt: { color: '#fff', fontWeight: '700' },
+                dangerTxt: { color: isDark ? colors.primary : '#7c3aed', fontWeight: '700' },
+                ro: { opacity: 0.9, color: colors.text }
+            }),
+        [colors, isDark]
+    );
 
     const cargar = async () => {
         try {
@@ -132,30 +155,26 @@ export default function EditarPerfilModal() {
         <SafeAreaView style={s.safe}>
             {/* Header */}
             <View style={s.headerRow}>
-                <Pressable onPress={() => router.back()} style={s.backBtn} hitSlop={10}>
-                    <FontAwesome5 name="chevron-left" size={18} />
+                <Pressable onPress={() => { markModalClosed(); router.back(); }} style={s.backBtn} hitSlop={10}>
+                    <FontAwesome5 name="chevron-left" size={18} color={colors.text} />
                     <Text style={s.backTxt}>Volver</Text>
                 </Pressable>
             </View>
 
             {cargando ? (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                    <ActivityIndicator size="large" />
-                    <Text style={{ marginTop: 10 }}>Cargando…</Text>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={{ marginTop: 10, color: colors.text }}>Cargando…</Text>
                 </View>
             ) : (
                 <KeyboardAvoidingView
                     behavior={Platform.select({ ios: 'padding', android: undefined })}
                     style={{ flex: 1 }}
                 >
-                    {/* 👉 UN SOLO ScrollView */}
                     <ScrollView
                         contentContainerStyle={[
                             s.content,
-                            {
-                                // espacio extra cuando el teclado está abierto
-                                paddingBottom: insets.bottom + (kbHeight > 0 ? kbHeight + 24 : 32),
-                            },
+                            { paddingBottom: insets.bottom + (kbHeight > 0 ? kbHeight + 24 : 32) },
                         ]}
                         keyboardShouldPersistTaps="handled"
                         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -171,13 +190,24 @@ export default function EditarPerfilModal() {
                                 editable={false}
                                 style={[s.input, s.ro]}
                                 value={`${perfil?.usuario.nombre ?? ''} ${perfil?.usuario.apellido ?? ''}`}
+                                placeholderTextColor={colors.mutedText}
                             />
 
                             <Text style={s.label}>Correo</Text>
-                            <TextInput editable={false} style={[s.input, s.ro]} value={perfil?.usuario.email ?? ''} />
+                            <TextInput
+                                editable={false}
+                                style={[s.input, s.ro]}
+                                value={perfil?.usuario.email ?? ''}
+                                placeholderTextColor={colors.mutedText}
+                            />
 
                             <Text style={s.label}>Cédula</Text>
-                            <TextInput editable={false} style={[s.input, s.ro]} value={(perfil as any)?.usuario?.cedula ?? ''} />
+                            <TextInput
+                                editable={false}
+                                style={[s.input, s.ro]}
+                                value={(perfil as any)?.usuario?.cedula ?? ''}
+                                placeholderTextColor={colors.mutedText}
+                            />
 
                             <Text style={s.help}>
                                 Para cambiar datos personales comunícate con un administrador.
@@ -190,6 +220,7 @@ export default function EditarPerfilModal() {
                             <TextInput
                                 style={s.input}
                                 placeholder="Tu nickname"
+                                placeholderTextColor={colors.mutedText}
                                 value={nickname}
                                 onChangeText={setNickname}
                                 autoCapitalize="none"
@@ -207,6 +238,7 @@ export default function EditarPerfilModal() {
                             <TextInput
                                 style={s.input}
                                 placeholder="••••••••"
+                                placeholderTextColor={colors.mutedText}
                                 secureTextEntry
                                 value={currentPw}
                                 onChangeText={setCurrentPw}
@@ -217,6 +249,7 @@ export default function EditarPerfilModal() {
                             <TextInput
                                 style={s.input}
                                 placeholder="Mínimo 8 caracteres"
+                                placeholderTextColor={colors.mutedText}
                                 secureTextEntry
                                 value={newPw}
                                 onChangeText={setNewPw}
@@ -225,7 +258,7 @@ export default function EditarPerfilModal() {
                             />
 
                             <Pressable style={s.secondaryBtn} onPress={cambiarPassword} disabled={savingPw}>
-                                {savingPw ? <ActivityIndicator /> : <Text style={s.dangerTxt}>Cambiar contraseña</Text>}
+                                {savingPw ? <ActivityIndicator color={isDark ? colors.text : undefined} /> : <Text style={s.dangerTxt}>Cambiar contraseña</Text>}
                             </Pressable>
                         </View>
                     </ScrollView>

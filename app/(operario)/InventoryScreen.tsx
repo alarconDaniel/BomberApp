@@ -1,4 +1,4 @@
-// InventoryScreen.tsx
+// app/(tabs)/inventory.tsx
 import React, {useCallback, useEffect, useRef, useState, useMemo} from 'react';
 import {
     ActivityIndicator,
@@ -16,6 +16,7 @@ import {useAuth} from '../../auth/AuthContext';
 import {ItemInventario, InventarioResponse} from '../../models/ItemInventario';
 import FadeWrapper from '../../components/FadeWrapper';
 import DetailsInventoryItemModal from "../../components/DetailsInventoryItemModal";
+import { useTheme } from '../../theme/ThemeProvider';
 
 type InventoryScreenRoute = RouteProp<
     Record<string, { cod_usuario?: number }>,
@@ -25,6 +26,7 @@ type Props = { route?: InventoryScreenRoute };
 
 export default function InventoryScreen({route}: Props) {
     const {fetchJson} = useAuth();
+    const { colors } = useTheme();
 
     const [items, setItems] = useState<ItemInventario[]>([]);
     const [total, setTotal] = useState<number>(0);
@@ -73,10 +75,7 @@ export default function InventoryScreen({route}: Props) {
             setCargando(true);
             setError(null);
 
-            // ahora esperamos { usuario, items, total }
             const resp = await fetchJson<InventarioResponse>('/item-inventario/listar');
-
-            console.log('Respuesta inventario:', resp);
 
             const arr = Array.isArray((resp as any)?.items) ? resp.items : [];
             if (mounted.current) {
@@ -104,33 +103,70 @@ export default function InventoryScreen({route}: Props) {
         setRefreshing(false);
     }, [listarInventario]);
 
+    const styles = StyleSheet.create({
+        screen: {
+            flex: 1,
+            paddingTop: 18,
+            paddingBottom: 16,
+            backgroundColor: colors.bg,
+        },
+        title: {
+            fontSize: 40,
+            fontWeight: '700',
+            textAlign: 'center',
+            marginBottom: 0,
+            color: colors.text,
+        },
+        centerBox: {
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            paddingHorizontal: 16,
+        },
+        card: {
+            alignItems: 'center',
+        },
+        imageBox: {
+            backgroundColor: colors.imageBg,
+            borderRadius: 8,
+            overflow: 'hidden',
+            position: 'relative',
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        cross: {position: 'absolute', width: '140%', height: 2, backgroundColor: colors.outline},
+        badge: {
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            backgroundColor: colors.mutedBg,
+            borderRadius: 999,
+            borderWidth: 2,
+            borderColor: colors.card,
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+            elevation: 3,
+        },
+        badgeText: {fontSize: 12, fontWeight: '700', color: colors.text},
+        cardLabel: {
+            marginTop: 6,
+            fontSize: 12,
+            fontWeight: '600',
+            textAlign: 'center',
+            color: colors.text,
+        },
+        empty: {textAlign: 'center', marginTop: 40, color: colors.mutedText},
+        error: {color: colors.danger, fontWeight: '600', textAlign: 'center'},
+        hint: {color: colors.mutedText, textAlign: 'center'},
+    });
 
-    const renderItem = useCallback(
-        ({item}: { item: ItemInventario }) => (
-            <Pressable
-                style={[styles.card, {width: CARD_W, marginHorizontal: GAP / 2}]}
-                onPress={() => openDetails(item)}
-            >
-                <View style={[styles.imageBox, {width: CARD_W, height: CARD_W / CARD_RATIO}]}>
-                    <View style={[styles.cross, {transform: [{rotate: '45deg'}]}]}/>
-                    <View style={[styles.cross, {transform: [{rotate: '-45deg'}]}]}/>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>x{item.cantidad}</Text>
-                    </View>
-                </View>
-                <Text style={styles.cardLabel}>
-                    {item.item.nombre}
-                </Text>
-            </Pressable>
-        ),
-        [CARD_W, GAP, CARD_RATIO]
-    );
-
-    // === Estados cargando/error ===
     if (cargando) {
         return (
-            <View style={[styles.centerBox, {flex: 1}]}>
-                <ActivityIndicator size="large" />
+            <View style={[styles.centerBox, {flex: 1, backgroundColor: colors.bg}]}>
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.hint}>Cargando inventario…</Text>
             </View>
         );
@@ -138,15 +174,15 @@ export default function InventoryScreen({route}: Props) {
 
     if (error) {
         return (
-            <View style={[styles.centerBox, {flex: 1}]}>
+            <View style={[styles.centerBox, {flex: 1, backgroundColor: colors.bg}]}>
                 <Text style={[styles.error, {marginBottom: 12, paddingHorizontal: 60}]}>
                     Uy, se cayó esto: {error}
                 </Text>
                 <Pressable
                     onPress={listarInventario}
-                    style={{padding: 12, backgroundColor: '#e5e7eb', borderRadius: 8}}
+                    style={{padding: 12, backgroundColor: colors.mutedBg, borderRadius: 8}}
                 >
-                    <Text>Reintentar</Text>
+                    <Text style={{ color: colors.text }}>Reintentar</Text>
                 </Pressable>
             </View>
         );
@@ -160,7 +196,23 @@ export default function InventoryScreen({route}: Props) {
                 <FlatList
                     data={items}
                     keyExtractor={(it) => String(it.cod)}
-                    renderItem={renderItem}
+                    renderItem={({item}) => (
+                        <Pressable
+                            style={[styles.card, {width: CARD_W, marginHorizontal: GAP / 2}]}
+                            onPress={() => openDetails(item)}
+                        >
+                            <View style={[styles.imageBox, {width: CARD_W, height: CARD_W / CARD_RATIO}]}>
+                                <View style={[styles.cross, {transform: [{rotate: '45deg'}]}]}/>
+                                <View style={[styles.cross, {transform: [{rotate: '-45deg'}]}]}/>
+                                <View style={styles.badge}>
+                                    <Text style={styles.badgeText}>x{item.cantidad}</Text>
+                                </View>
+                            </View>
+                            <Text style={styles.cardLabel}>
+                                {item.item.nombre}
+                            </Text>
+                        </Pressable>
+                    )}
                     numColumns={COLS}
                     columnWrapperStyle={{justifyContent: 'center', marginBottom: ROW_GAP}}
                     contentContainerStyle={{paddingTop: GRID_TOP_OFFSET, paddingBottom: 8}}
@@ -175,67 +227,9 @@ export default function InventoryScreen({route}: Props) {
                 visible={detailsOpen}
                 item={selected ?? undefined}
                 onClose={closeDetails}
-                accentColor="#3B82F6"
-                showDate={true} // cámbialo a false si no quieres mostrar la fecha
+                accentColor={colors.primary}
+                showDate={true}
             />
         </FadeWrapper>
     );
 }
-
-const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-        paddingTop: 18,
-        paddingBottom: 16,
-        backgroundColor: '#fff',
-    },
-    title: {
-        fontSize: 40,
-        fontWeight: '700',
-        textAlign: 'center',
-        marginBottom: 0,
-    },
-    centerBox: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
-        paddingHorizontal: 16,
-    },
-    card: {
-        alignItems: 'center',
-    },
-    imageBox: {
-        backgroundColor: '#D9D9D9',
-        borderRadius: 8,
-        overflow: 'hidden',
-        position: 'relative',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    cross: {position: 'absolute', width: '140%', height: 2, backgroundColor: '#777'},
-    badge: {
-        position: 'absolute',
-        top: 6,
-        right: 6,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        backgroundColor: '#BDBDBD',
-        borderRadius: 999,
-        borderWidth: 2,
-        borderColor: '#fff',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10,
-        elevation: 3,
-    },
-    badgeText: {fontSize: 12, fontWeight: '700', color: '#1E1E1E'},
-    cardLabel: {
-        marginTop: 6,
-        fontSize: 12,
-        fontWeight: '600',
-        textAlign: 'center',
-    },
-    empty: {textAlign: 'center', marginTop: 40, color: '#666'},
-    error: {color: '#c00', fontWeight: '600', textAlign: 'center'},
-    hint: {color: '#555', textAlign: 'center'},
-});

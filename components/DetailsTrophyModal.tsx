@@ -1,8 +1,9 @@
-// src/components/DetailsTrophyModal.tsx
+// components/DetailsTrophyModal.tsx
 import React, { useMemo } from 'react';
 import { Modal, View, Text, Pressable, StyleSheet, Dimensions, Image } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { useTheme } from '../theme/ThemeProvider';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -24,6 +25,8 @@ type Props = {
 };
 
 export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl = '' }: Props) {
+    const { colors } = useTheme();
+
     const uri = useMemo(() => {
         if (!trophy?.icono) return null;
         return trophy.icono.startsWith('http') ? trophy.icono : `${baseUrl}${trophy.icono}`;
@@ -34,6 +37,65 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
     const holderName = trophy.holder
         ? (trophy.holder.nickname?.trim() || trophy.holder.nombre)
         : null;
+
+    const s = StyleSheet.create({
+        backdrop: { ...StyleSheet.absoluteFillObject },
+        backdropBlur: { flex: 1 },
+        centerWrap: {
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+        },
+        card: {
+            width: SCREEN_W * 0.9,
+            borderRadius: 16,
+            backgroundColor: colors.card,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: colors.divider,
+        },
+        shadow: {
+            shadowColor: '#000',
+            shadowOpacity: 0.18,
+            shadowOffset: { width: 0, height: 6 },
+            shadowRadius: 12,
+            elevation: 8,
+        },
+        iconBox: {
+            width: 56,
+            height: 56,
+            borderRadius: 12,
+            backgroundColor: colors.imageBg,
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+        },
+        iconImg: { width: '100%', height: '100%' },
+        title: {
+            fontSize: 18,
+            fontWeight: '900',
+            color: colors.text,
+            flex: 1,
+        },
+        desc: { color: colors.secondaryText, marginTop: 12, lineHeight: 20 },
+        footer: {
+            marginTop: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+        },
+        holderTxt: { color: colors.secondaryText, flexShrink: 1 },
+        closeBtn: {
+            marginTop: 18,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            backgroundColor: colors.primary,
+            alignSelf: 'center',
+        },
+        closeTxt: { color: 'white', fontWeight: '800' },
+    });
 
     return (
         <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
@@ -50,7 +112,7 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
                             {uri ? (
                                 <Image source={{ uri }} style={s.iconImg} resizeMode="cover" />
                             ) : (
-                                <FontAwesome5 name="trophy" size={28} color="#F59E0B" />
+                                <FontAwesome5 name="trophy" size={28} color={colors.warning} />
                             )}
                         </View>
                         <Text
@@ -71,20 +133,20 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
                     <View style={s.footer}>
                         {holderName ? (
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <FontAwesome5 name="user-astronaut" size={16} color="#374151" />
+                                <FontAwesome5 name="user-astronaut" size={16} color={colors.secondaryText} />
                                 <Text style={s.holderTxt}>
-                                    Lo tiene: <Text style={{ fontWeight: '800' }}>{holderName}</Text>
+                                    Lo tiene: <Text style={{ fontWeight: '800', color: colors.text }}>{holderName}</Text>
                                 </Text>
                             </View>
                         ) : (
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <FontAwesome5 name="bolt" size={16} color="#16A34A" />
+                                <FontAwesome5 name="bolt" size={16} color={colors.success} />
                                 <Text style={s.holderTxt}>Sin dueño — ¿te lo ganas?</Text>
                             </View>
                         )}
                     </View>
 
-                    {/* 👇 Botón cerrar abajo */}
+                    {/* Botón cerrar */}
                     <Pressable onPress={onClose} style={s.closeBtn}>
                         <Text style={s.closeTxt}>Cerrar</Text>
                     </Pressable>
@@ -93,60 +155,3 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
         </Modal>
     );
 }
-
-const s = StyleSheet.create({
-    backdrop: { ...StyleSheet.absoluteFillObject },
-    backdropBlur: { flex: 1 },
-    centerWrap: {
-        ...StyleSheet.absoluteFillObject,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-    },
-    card: {
-        width: SCREEN_W * 0.9,
-        borderRadius: 16,
-        backgroundColor: '#FFFFFF',
-        padding: 16,
-    },
-    shadow: {
-        shadowColor: '#000',
-        shadowOpacity: 0.18,
-        shadowOffset: { width: 0, height: 6 },
-        shadowRadius: 12,
-        elevation: 8,
-    },
-    iconBox: {
-        width: 56,
-        height: 56,
-        borderRadius: 12,
-        backgroundColor: '#F3F4F6',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
-    },
-    iconImg: { width: '100%', height: '100%' },
-    title: {
-        fontSize: 18,
-        fontWeight: '900',
-        color: '#111827',
-        flex: 1,
-    },
-    desc: { color: '#374151', marginTop: 12, lineHeight: 20 },
-    footer: {
-        marginTop: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    holderTxt: { color: '#374151', flexShrink: 1 },
-    closeBtn: {
-        marginTop: 18,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 10,
-        backgroundColor: '#111827',
-        alignSelf: 'center',
-    },
-    closeTxt: { color: 'white', fontWeight: '800' },
-});

@@ -1,12 +1,13 @@
+// app/(tabs)/profile.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {Animated, ActivityIndicator, Image, Pressable, Text, View, ScrollView} from 'react-native';
+import { Animated, ActivityIndicator, Image, Pressable, Text, View, ScrollView } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import FadeWrapper from '../../components/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
 import { PerfilResumen } from '../../models/PerfilResumen';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import LevelUpOverlay from '../../components/LevelUpOverlay';
+import { useTheme } from '../../theme/ThemeProvider';
 
 const AVATAR_SIZE = 110;
 
@@ -19,7 +20,7 @@ function initials(nombre?: string, apellido?: string) {
 }
 
 export default function ProfileScreen() {
-
+    const { colors, isDark } = useTheme();
     const router = useRouter();
 
     const lastLevelRef = useRef<number | null>(null);
@@ -33,14 +34,12 @@ export default function ProfileScreen() {
     const fmtRecompensa = (r?: string) => (r ? (r.trim().startsWith('+') ? r.trim() : `+ ${r.trim()}`) : '');
 
     const triggerNickCelebrate = useCallback(() => {
-        // Shake
         shake.setValue(0);
         Animated.sequence([
             Animated.timing(shake, { toValue: 1, duration: 380, useNativeDriver: true }),
             Animated.timing(shake, { toValue: 0, duration: 120, useNativeDriver: true }),
         ]).start();
 
-        // Sparkle
         spark.setValue(0);
         Animated.sequence([
             Animated.timing(spark, { toValue: 1, duration: 120, useNativeDriver: true }),
@@ -87,24 +86,19 @@ export default function ProfileScreen() {
     };
 
     useEffect(() => {
-        // --- Nickname cambiado → animación ---
         const currentNick = data?.usuario.nickname ?? null;
         const prevNick = lastNickRef.current;
-
         if (currentNick && prevNick && currentNick !== prevNick) {
             triggerNickCelebrate();
         }
         lastNickRef.current = currentNick;
 
-        // --- Nivel subió → overlay de level up ---
         const lvl = data?.stats?.nivel;
         const prevLvl = lastLevelRef.current;
-
         if (typeof lvl === 'number') {
             if (prevLvl !== null && lvl > prevLvl) {
                 setNewLevel(lvl);
                 setShowLevelUp(true);
-                // opcional: haptics aquí
             }
             lastLevelRef.current = lvl;
         }
@@ -118,12 +112,102 @@ export default function ProfileScreen() {
         [data?.usuario.nombre, data?.usuario.apellido]
     );
 
+    // 🎨 Paleta: en CLARO uso EXACTAMENTE los hex originales.
+    // En OSCURO mapeo a tu ThemeProvider para no tocar layout, solo colores.
+    const P = isDark ? {
+        bg: colors.bg,
+        headerBg: colors.bg,
+        iconPen: colors.text,
+
+        avatarBg: colors.brandBlueSoft,
+        avatarBorder: colors.brandBlueBorder,
+        avatarInitials: colors.primary,
+
+        nick: colors.text,
+        fullname: colors.secondaryText,
+
+        levelCardBg: colors.mutedBg,
+        levelText: colors.text,
+        levelCircleBorder: colors.brandBlueBorder,
+        levelCircleBg: colors.brandBlueSoft,
+        levelNumber: colors.primary,
+        xpText: colors.text,
+
+        progressTrack: colors.outline,     // contraste claro sobre mutedBg
+        progressFill: colors.primary,
+
+        progressHint: colors.mutedText,
+
+        sectionTitle: colors.text,
+
+        streakIcon: colors.streak,
+        streakBg: colors.streakBg,
+        coinIcon: colors.coin,
+        coinBg: colors.coinBg,
+
+        chipBg: colors.mutedBg,
+        chipText: colors.text,
+
+        logroItemBg: colors.cardTint,
+        logroItemBorder: colors.divider,
+        logroImgBg: colors.imageBg,
+        logroTitle: colors.text,
+        logroSubtitle: colors.mutedText,
+        logroReward: colors.text,
+
+        star: colors.warning,
+    } : {
+        // === MODO CLARO: EXACTAMENTE tus colores del archivo original ===
+        bg: '#fff',
+        headerBg: '#fff',
+        iconPen: '#333',
+
+        avatarBg: '#EEF2FF',
+        avatarBorder: '#C7D2FE',
+        avatarInitials: '#4F46E5',
+
+        nick: '#111',
+        fullname: '#555',
+
+        levelCardBg: '#F3F4F6',
+        levelText: '#111',
+        levelCircleBorder: '#A5B4FC',
+        levelCircleBg: '#EEF2FF',
+        levelNumber: '#4338CA',
+        xpText: '#111',
+
+        // Barra experiencia (track/fill exactos)
+        progressTrack: '#E5E7EB',
+        progressFill: '#6366F1',
+
+        progressHint: '#6B7280',
+
+        sectionTitle: '#000', // como por defecto en RN (negro)
+
+        streakIcon: '#fc4103',
+        streakBg: '#ffcfbf',
+        coinIcon: '#cca700',
+        coinBg: '#fff3bd',
+
+        chipBg: '#E5E7EB',
+        chipText: '#000',
+
+        logroItemBg: '#F9FAFB',
+        logroItemBorder: '#E5E7EB',
+        logroImgBg: '#E5E7EB',
+        logroTitle: '#111',
+        logroSubtitle: '#6B7280',
+        logroReward: '#111',
+
+        star: '#F59E0B',
+    };
+
     if (loading) {
         return (
             <FadeWrapper>
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                    <ActivityIndicator size="large" />
-                    <Text style={{ marginTop: 16 }}>Cargando perfil…</Text>
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: P.bg }}>
+                    <ActivityIndicator size="large" color={isDark ? colors.primary : undefined} />
+                    <Text style={{ marginTop: 16, color: P.nick }}>Cargando perfil…</Text>
                 </View>
             </FadeWrapper>
         );
@@ -131,12 +215,15 @@ export default function ProfileScreen() {
     if (err || !data) {
         return (
             <FadeWrapper>
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36 }}>
-                    <Text style={{ textAlign: 'center', marginBottom: 12 }}>
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, backgroundColor: P.bg }}>
+                    <Text style={{ textAlign: 'center', marginBottom: 12, color: P.nick }}>
                         {err || 'Uy, algo pasó cargando el perfil.'}
                     </Text>
-                    <Pressable onPress={cargar} style={{ backgroundColor: '#e5e7eb', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 }}>
-                        <Text>Reintentar</Text>
+                    <Pressable
+                        onPress={cargar}
+                        style={{ backgroundColor: P.chipBg, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 }}
+                    >
+                        <Text style={{ color: P.chipText }}>Reintentar</Text>
                     </Pressable>
                 </View>
             </FadeWrapper>
@@ -146,23 +233,21 @@ export default function ProfileScreen() {
     const { stats, logros } = data;
     const pct = Math.min(1, Math.max(0, stats.progreso));
 
-
-
     return (
         <FadeWrapper>
             {/* Scroll con header sticky */}
             <ScrollView
-                style={{ flex: 1, backgroundColor: '#fff' }}
+                style={{ flex: 1, backgroundColor: P.bg }}
                 contentContainerStyle={{ paddingBottom: 40 }}
                 stickyHeaderIndices={[0]}
                 showsVerticalScrollIndicator={false}
             >
                 {/* === Sticky Header: Avatar + Nick + Nombre === */}
-                <View style={{ backgroundColor: '#fff', paddingTop: 56, paddingBottom: 16 }}>
+                <View style={{ backgroundColor: P.headerBg, paddingTop: 56, paddingBottom: 16 }}>
                     {/* Lápiz editar arriba a la derecha */}
                     <View style={{ alignItems: 'flex-end', paddingHorizontal: 20 }}>
                         <Pressable onPress={() => router.push('/(modals)/editar-perfil')}>
-                            <FontAwesome5 name="pen" size={16} color="#333" />
+                            <FontAwesome5 name="pen" size={16} color={P.iconPen} />
                         </Pressable>
                     </View>
 
@@ -171,33 +256,27 @@ export default function ProfileScreen() {
                         <View
                             style={{
                                 width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2,
-                                backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center',
-                                borderWidth: 3, borderColor: '#C7D2FE'
+                                backgroundColor: P.avatarBg, alignItems: 'center', justifyContent: 'center',
+                                borderWidth: 3, borderColor: P.avatarBorder
                             }}
                         >
-                            <Text style={{ fontSize: 40, fontWeight: '800', color: '#4F46E5' }}>
+                            <Text style={{ fontSize: 40, fontWeight: '800', color: P.avatarInitials }}>
                                 {initials(data.usuario.nombre, data.usuario.apellido)}
                             </Text>
                         </View>
 
                         {/* Nickname animado */}
                         <View style={{ marginTop: 12, alignItems: 'center', position: 'relative' }}>
-                            <Animated.Text style={[{ fontWeight: '700', fontSize: 18, color: '#111' }, shakeStyle]}>
+                            <Animated.Text style={[{ fontWeight: '700', fontSize: 18, color: P.nick }, shakeStyle]}>
                                 {nickname}
                             </Animated.Text>
-                            <Animated.View style={{
-                                position: 'absolute', right: -12, top: -8, opacity: spark,
-                                transform: [
-                                    { scale: spark.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1.4] }) },
-                                    { rotate: spark.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '25deg'] }) },
-                                ],
-                            }}>
-                                <FontAwesome5 name="star" size={14} color="#F59E0B" />
+                            <Animated.View style={starStyle}>
+                                <FontAwesome5 name="star" size={14} color={P.star} />
                             </Animated.View>
                         </View>
 
                         {/* Nombre completo */}
-                        <Text style={{ marginTop: 2, fontSize: 14, color: '#555' }}>{fullname}</Text>
+                        <Text style={{ marginTop: 2, fontSize: 14, color: P.fullname }}>{fullname}</Text>
                     </View>
                 </View>
 
@@ -207,61 +286,61 @@ export default function ProfileScreen() {
                 <View
                     style={{
                         marginTop: 8, marginHorizontal: 18, padding: 16,
-                        backgroundColor: '#F3F4F6', borderRadius: 14,
+                        backgroundColor: P.levelCardBg, borderRadius: 14,
                         shadowColor: '#000', shadowOpacity: 0.05, shadowOffset: { width: 0, height: 4 }, shadowRadius: 6, elevation: 2
                     }}
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <Text style={{ fontSize: 16, color: '#111' }}>Nivel</Text>
+                            <Text style={{ fontSize: 16, color: P.levelText }}>Nivel</Text>
                             <View style={{
                                 width: 36, height: 36, borderRadius: 18,
-                                borderWidth: 2, borderColor: '#A5B4FC', alignItems: 'center', justifyContent: 'center',
-                                backgroundColor: '#EEF2FF'
+                                borderWidth: 2, borderColor: P.levelCircleBorder, alignItems: 'center', justifyContent: 'center',
+                                backgroundColor: P.levelCircleBg
                             }}>
-                                <Text style={{ fontSize: 16, fontWeight: '800', color: '#4338CA' }}>{stats.nivel}</Text>
+                                <Text style={{ fontSize: 16, fontWeight: '800', color: P.levelCircleBorder }}>{stats.nivel}</Text>
                             </View>
                         </View>
-                        <Text style={{ fontSize: 14, color: '#111' }}>EXP {stats.xp}</Text>
+                        <Text style={{ fontSize: 14, color: P.xpText }}>EXP {stats.xp}</Text>
                     </View>
 
                     {/* Barra de progreso */}
-                    <View style={{ height: 10, backgroundColor: '#E5E7EB', borderRadius: 999, marginTop: 12, overflow: 'hidden' }}>
+                    <View style={{ height: 10, backgroundColor: P.progressTrack, borderRadius: 999, marginTop: 12, overflow: 'hidden' }}>
                         <Animated.View
                             style={{
                                 width: `${Math.round(pct * 100)}%`,
                                 height: '100%',
-                                backgroundColor: '#6366F1',
+                                backgroundColor: P.progressFill,
                             }}
                         />
                     </View>
 
-                    <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 8 }}>
+                    <Text style={{ fontSize: 12, color: P.progressHint, marginTop: 8 }}>
                         a {stats.faltante} EXP para llegar al nivel {stats.nivel + 1}
                     </Text>
                 </View>
 
                 {/* Resumen */}
                 <View style={{ marginTop: 18, paddingHorizontal: 18 }}>
-                    <Text style={{ fontWeight: '800', fontSize: 18 }}>Resumen</Text>
+                    <Text style={{ fontWeight: '800', fontSize: 18, color: P.sectionTitle }}>Resumen</Text>
 
                     {/* Racha */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
-                        <View style={{ backgroundColor: '#ffcfbf', padding: 10, borderRadius: 12 }}>
-                            <FontAwesome5 name="fire" size={24} color="#fc4103" />
+                        <View style={{ backgroundColor: P.streakBg, padding: 10, borderRadius: 12 }}>
+                            <FontAwesome5 name="fire" size={24} color={P.streakIcon} />
                         </View>
-                        <Text style={{ marginLeft: 12, fontSize: 16 }}>
-                            <Text style={{ fontWeight: '700' }}>{stats.racha}</Text> días de racha
+                        <Text style={{ marginLeft: 12, fontSize: 16, color: P.sectionTitle }}>
+                            <Text style={{ fontWeight: '700', color: P.sectionTitle }}>{stats.racha}</Text> días de racha
                         </Text>
                     </View>
 
                     {/* Monedas */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
-                        <View style={{ backgroundColor: '#fff3bd', padding: 10, borderRadius: 12 }}>
-                            <FontAwesome5 name="coins" size={24} color="#cca700" />
+                        <View style={{ backgroundColor: P.coinBg, padding: 10, borderRadius: 12 }}>
+                            <FontAwesome5 name="coins" size={24} color={P.coinIcon} />
                         </View>
-                        <Text style={{ marginLeft: 12, fontSize: 16 }}>
-                            <Text style={{ fontWeight: '700' }}>{stats.monedas}</Text> denigues
+                        <Text style={{ marginLeft: 12, fontSize: 16, color: P.sectionTitle }}>
+                            <Text style={{ fontWeight: '700', color: P.sectionTitle }}>{stats.monedas}</Text> denigues
                         </Text>
                     </View>
                 </View>
@@ -269,12 +348,12 @@ export default function ProfileScreen() {
                 {/* Logros — estilo como tu mock */}
                 <View style={{ marginTop: 22, paddingHorizontal: 18, marginBottom: 36 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ fontWeight: '800', fontSize: 18 }}>Logros</Text>
+                        <Text style={{ fontWeight: '800', fontSize: 18, color: P.sectionTitle }}>Logros</Text>
                         <Pressable
                             onPress={() => router.push('/(modals)/logros')}
-                            style={{ paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#E5E7EB', borderRadius: 999 }}
+                            style={{ paddingVertical: 6, paddingHorizontal: 12, backgroundColor: P.chipBg, borderRadius: 999 }}
                         >
-                            <Text style={{ fontSize: 12 }}>Ver todos</Text>
+                            <Text style={{ fontSize: 12, color: P.chipText }}>Ver todos</Text>
                         </Pressable>
                     </View>
 
@@ -288,30 +367,31 @@ export default function ProfileScreen() {
                                     style={{
                                         flexDirection: 'row',
                                         alignItems: 'center',
-                                        backgroundColor: '#F9FAFB',
+                                        backgroundColor: P.logroItemBg,
                                         borderRadius: 14,
                                         padding: 12,
-                                        shadowColor: '#000', shadowOpacity: 0.04, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, elevation: 1
+                                        shadowColor: '#000', shadowOpacity: 0.04, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, elevation: 1,
+                                        borderWidth: 1,
+                                        borderColor: P.logroItemBorder
                                     }}
                                 >
                                     {/* Icono grande a la izquierda */}
-                                    <View style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', backgroundColor: '#E5E7EB' }}>
+                                    <View style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', backgroundColor: P.logroImgBg }}>
                                         <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                                     </View>
 
-                                    {/* Centro: nombre + subtítulo (usamos nombre y debajo una versión “explicada”) */}
+                                    {/* Centro: nombre + subtítulo */}
                                     <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={{ fontWeight: '800', fontSize: 16 }} numberOfLines={1}>
+                                        <Text style={{ fontWeight: '800', fontSize: 16, color: P.logroTitle }} numberOfLines={1}>
                                             {l.nombre}
                                         </Text>
-                                        <Text style={{ color: '#6B7280', marginTop: 2 }} numberOfLines={1}>
-                                            {/* subtítulo simple; si quieres algo específico, trae `descripcion` en /mi-perfil/resumen */}
+                                        <Text style={{ color: P.logroSubtitle, marginTop: 2 }} numberOfLines={1}>
                                             {l.nombre}
                                         </Text>
                                     </View>
 
-                                    {/* Derecha: recompensa tipo “+ 83 xp” */}
-                                    <Text style={{ fontWeight: '800', fontSize: 16, color: '#111' }}>
+                                    {/* Derecha: recompensa */}
+                                    <Text style={{ fontWeight: '800', fontSize: 16, color: P.logroReward }}>
                                         {fmtRecompensa(l.recompensa)}
                                     </Text>
                                 </Pressable>
@@ -320,7 +400,11 @@ export default function ProfileScreen() {
                     </View>
                 </View>
             </ScrollView>
+
+            {/* Overlay de level up (si lo usas) */}
+            {showLevelUp && (
+                <LevelUpOverlay visible={showLevelUp} level={newLevel} onClose={() => setShowLevelUp(false)} />
+            )}
         </FadeWrapper>
     );
 }
-

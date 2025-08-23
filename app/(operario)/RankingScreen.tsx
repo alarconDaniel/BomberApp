@@ -1,11 +1,12 @@
-// app/(tabs)/ranking.tsx (o donde tengas RankingScreen)
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+// app/(operario)/RankingScreen.tsx
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import FadeWrapper from '../../components/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
-import DetailsTrophyModal from '../../components/DetailsTrophyModal'; // 👈 nuevo
+import DetailsTrophyModal from '../../components/DetailsTrophyModal';
+import { useTheme } from '../../theme/ThemeProvider';
 
 type TopItem = {
     codUsuario: number;
@@ -20,7 +21,7 @@ type TrophyItem = {
     codTrofeo: number;
     nombre: string;
     icono: string;
-    descripcion: string; // 👈 nuevo
+    descripcion: string;
     holder: null | { codUsuario: number; nombre: string; nickname: string | null };
 };
 
@@ -42,11 +43,11 @@ function initials(n?: string, a?: string) {
 export default function RankingScreen() {
     const router = useRouter();
     const { fetchJson, baseUrl } = useAuth();
+    const { colors } = useTheme();
     const [data, setData] = useState<RankingResumen | null>(null);
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
-    // Estado del modal de trofeo
     const [selectedTrophy, setSelectedTrophy] = useState<TrophyItem | null>(null);
     const [trophyOpen, setTrophyOpen] = useState(false);
 
@@ -78,9 +79,9 @@ export default function RankingScreen() {
     if (loading) {
         return (
             <FadeWrapper>
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <ActivityIndicator size="large" />
-                    <Text style={{ marginTop: 12 }}>Invocando la tabla del destino…</Text>
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={{ marginTop: 12, color: colors.text }}>Invocando la tabla del destino…</Text>
                 </View>
             </FadeWrapper>
         );
@@ -89,10 +90,10 @@ export default function RankingScreen() {
     if (err || !data) {
         return (
             <FadeWrapper>
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 36 }}>
-                    <Text style={{ textAlign: 'center', marginBottom: 12 }}>{err || 'Ups, no hay ranking disponible.'}</Text>
-                    <Pressable onPress={cargar} style={{ backgroundColor: '#e5e7eb', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 }}>
-                        <Text>Reintentar</Text>
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 36, backgroundColor: colors.bg }}>
+                    <Text style={{ textAlign: 'center', marginBottom: 12, color: colors.text }}>{err || 'Ups, no hay ranking disponible.'}</Text>
+                    <Pressable onPress={cargar} style={{ backgroundColor: colors.mutedBg, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 }}>
+                        <Text style={{ color: colors.text }}>Reintentar</Text>
                     </Pressable>
                 </View>
             </FadeWrapper>
@@ -105,14 +106,14 @@ export default function RankingScreen() {
     return (
         <FadeWrapper>
             <ScrollView
-                style={{ flex: 1, backgroundColor: '#fff', paddingTop: 40 }}
+                style={{ flex: 1, backgroundColor: colors.bg, paddingTop: 40 }}
                 contentContainerStyle={{ paddingBottom: 36 }}
                 showsVerticalScrollIndicator={false}
             >
                 {/* Header */}
-                <View style={{ paddingTop: 18, paddingHorizontal: 18, paddingBottom: 10, backgroundColor: '#fff' }}>
-                    <Text style={{ fontSize: 22, fontWeight: '900' }}>Ranking Global</Text>
-                    <Text style={{ marginTop: 4, color: '#6B7280' }}>Los 5 con más XP total</Text>
+                <View style={{ paddingTop: 18, paddingHorizontal: 18, paddingBottom: 10, backgroundColor: colors.bg }}>
+                    <Text style={{ fontSize: 22, fontWeight: '900', color: colors.text }}>Ranking Global</Text>
+                    <Text style={{ marginTop: 4, color: colors.mutedText }}>Los 5 con más XP total</Text>
                 </View>
 
                 {/* Top 5 */}
@@ -123,7 +124,7 @@ export default function RankingScreen() {
                             style={{
                                 flexDirection: 'row',
                                 alignItems: 'center',
-                                backgroundColor: '#F9FAFB',
+                                backgroundColor: colors.cardTint,
                                 borderRadius: 16,
                                 padding: 12,
                                 shadowColor: '#000',
@@ -132,12 +133,13 @@ export default function RankingScreen() {
                                 shadowRadius: 6,
                                 elevation: 2,
                                 borderWidth: 1,
-                                borderColor: idx === 0 ? '#F59E0B' : idx === 1 ? '#94A3B8' : idx === 2 ? '#A16207' : '#E5E7EB'
+                                // Mantengo el código de medallas: oro/plata/bronce
+                                borderColor: idx === 0 ? '#F59E0B' : idx === 1 ? '#94A3B8' : idx === 2 ? '#A16207' : colors.divider
                             }}
                         >
                             {/* posición */}
                             <View style={{ width: 34, alignItems: 'center' }}>
-                                <Text style={{ fontSize: 18, fontWeight: '800' }}>{idx + 1}</Text>
+                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{idx + 1}</Text>
                             </View>
 
                             {/* avatar */}
@@ -146,25 +148,25 @@ export default function RankingScreen() {
                                     width: AV_SIZE,
                                     height: AV_SIZE,
                                     borderRadius: AV_SIZE / 2,
-                                    backgroundColor: '#EEF2FF',
+                                    backgroundColor: colors.brandBlueSoft,
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     borderWidth: 2,
-                                    borderColor: '#C7D2FE',
+                                    borderColor: colors.brandBlueBorder,
                                     marginRight: 12,
                                 }}
                             >
-                                <Text style={{ fontSize: 18, fontWeight: '800', color: '#4F46E5' }}>
+                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.primary }}>
                                     {initials(t.nombre, t.apellido)}
                                 </Text>
                             </View>
 
                             {/* info */}
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontWeight: '800', fontSize: 16 }} numberOfLines={1}>
+                                <Text style={{ fontWeight: '800', fontSize: 16, color: colors.text }} numberOfLines={1}>
                                     {t.nickname?.trim() || `${t.nombre} ${t.apellido}`}
                                 </Text>
-                                <Text style={{ color: '#6B7280', marginTop: 2 }} numberOfLines={1}>
+                                <Text style={{ color: colors.mutedText, marginTop: 2 }} numberOfLines={1}>
                                     Nivel {t.nivel} • {t.xp} XP
                                 </Text>
                             </View>
@@ -185,36 +187,36 @@ export default function RankingScreen() {
                         marginTop: 18,
                         marginHorizontal: 16,
                         padding: 16,
-                        backgroundColor: '#EFF6FF',
+                        backgroundColor: colors.brandBlueSoft,
                         borderRadius: 16,
                         borderWidth: 1,
-                        borderColor: '#BFDBFE'
+                        borderColor: colors.brandBlueBorder
                     }}
                 >
-                    <Text style={{ fontSize: 16 }}>
-                        Estás en la <Text style={{ fontWeight: '800' }}>posición #{me.position}</Text> — Nivel {me.nivel} • {me.xp} XP
+                    <Text style={{ fontSize: 16, color: colors.text }}>
+                        Estás en la <Text style={{ fontWeight: '800', color: colors.text }}>posición #{me.position}</Text> — Nivel {me.nivel} • {me.xp} XP
                     </Text>
-                    <Text style={{ marginTop: 6, fontSize: 14, color: '#111' }}>
+                    <Text style={{ marginTop: 6, fontSize: 14, color: colors.text }}>
                         {data.mensaje}
                     </Text>
                 </View>
 
                 {/* Trofeos */}
                 <View style={{ marginTop: 24, paddingHorizontal: 16, marginBottom: 32 }}>
-                    <Text style={{ fontWeight: '900', fontSize: 20 }}>Trofeos en juego</Text>
-                    <Text style={{ color: '#6B7280', marginTop: 4 }}>El trono cambia de manos todos los dias a las 10PM… si te lo ganas 😉</Text>
+                    <Text style={{ fontWeight: '900', fontSize: 20, color: colors.text }}>Trofeos en juego</Text>
+                    <Text style={{ color: colors.mutedText, marginTop: 4 }}>El trono cambia de manos todos los dias a las 10PM… si te lo ganas 😉</Text>
 
                     <View style={{ marginTop: 14, gap: 12 }}>
                         {data.trofeos.map((t) => {
                             const uri = t.icono.startsWith('http') ? t.icono : `${baseUrl}${t.icono}`;
                             return (
                                 <Pressable
-                                    onPress={() => openTrophy(t)} // 👈 abrir modal
+                                    onPress={() => openTrophy(t)}
                                     key={t.codTrofeo}
                                     style={{
                                         flexDirection: 'row',
                                         alignItems: 'center',
-                                        backgroundColor: '#F9FAFB',
+                                        backgroundColor: colors.cardTint,
                                         borderRadius: 14,
                                         padding: 12,
                                         shadowColor: '#000',
@@ -223,7 +225,7 @@ export default function RankingScreen() {
                                         shadowRadius: 4,
                                         elevation: 1,
                                         borderWidth: 1,
-                                        borderColor: '#E5E7EB',
+                                        borderColor: colors.divider,
                                     }}
                                 >
                                     {/* Icono trofeo */}
@@ -233,7 +235,7 @@ export default function RankingScreen() {
                                             height: 56,
                                             borderRadius: 10,
                                             overflow: 'hidden',
-                                            backgroundColor: '#E5E7EB',
+                                            backgroundColor: colors.imageBg,
                                             marginRight: 12,
                                         }}
                                     >
@@ -242,17 +244,17 @@ export default function RankingScreen() {
 
                                     {/* Nombre trofeo + holder */}
                                     <View style={{ flex: 1 }}>
-                                        <Text style={{ fontWeight: '800', fontSize: 16 }} numberOfLines={1}>
+                                        <Text style={{ fontWeight: '800', fontSize: 16, color: colors.text }} numberOfLines={1}>
                                             {t.nombre}
                                         </Text>
-                                        <Text style={{ color: '#6B7280', marginTop: 2 }} numberOfLines={1}>
+                                        <Text style={{ color: colors.mutedText, marginTop: 2 }} numberOfLines={1}>
                                             {t.holder
                                                 ? `Lo tiene: ${t.holder.nickname?.trim() || t.holder.nombre}`
                                                 : 'Sin dueño — ¿te atreves?'}
                                         </Text>
                                     </View>
 
-                                    <FontAwesome5 name="trophy" size={18} color="#F59E0B" />
+                                    <FontAwesome5 name="trophy" size={18} color={colors.warning} />
                                 </Pressable>
                             );
                         })}
