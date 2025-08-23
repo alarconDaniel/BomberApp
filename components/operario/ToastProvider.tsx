@@ -2,8 +2,8 @@
 import React, {createContext, useContext, useEffect, useRef, useState} from 'react';
 import {Animated, Easing, StyleSheet, View, Text, Pressable} from 'react-native';
 import {FontAwesome5} from '@expo/vector-icons';
-import { useTheme } from '../theme/ThemeProvider';
-import { makeGlobalStyles } from '../theme/GlobalStyles';
+import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 type ToastType = 'success' | 'error' | 'info';
 type Toast = { id: number; type: ToastType; text: string };

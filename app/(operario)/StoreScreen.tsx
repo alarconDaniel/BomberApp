@@ -3,13 +3,13 @@ import React, {useEffect, useMemo, useState} from 'react';
 import { View, Text, ActivityIndicator, Pressable, StyleSheet, FlatList, ScrollView, Dimensions } from 'react-native';
 import {useRouter} from 'expo-router';
 import {ItemTienda} from "../../models/ItemTienda";
-import FadeWrapper from "../../components/FadeWrapper";
-import StoreItemCard from "../../components/StoreItemCard";
-import DetailsStoreItemModal from "../../components/DetailsStoreItemModal";
+import FadeWrapper from "../../components/operario/FadeWrapper";
+import StoreItemCard from "../../components/operario/StoreItemCard";
+import DetailsStoreItemModal from "../../components/operario/DetailsStoreItemModal";
 import {useAuth} from "../../auth/AuthContext";
 import {StatsUsuario} from "../../models/StatsUsuario";
-import PurchaseSuccessOverlay from '../../components/PurchaseSuccessOverlay';
-import { useToast } from '../../components/ToastProvider';
+import PurchaseSuccessOverlay from '../../components/operario/PurchaseSuccessOverlay';
+import { useToast } from '../../components/operario/ToastProvider';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 

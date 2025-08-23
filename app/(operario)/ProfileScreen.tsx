@@ -2,11 +2,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, ActivityIndicator, Image, Pressable, Text, View, ScrollView } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
-import FadeWrapper from '../../components/FadeWrapper';
+import FadeWrapper from '../../components/operario/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
 import { PerfilResumen } from '../../models/PerfilResumen';
 import { useRouter, useFocusEffect } from 'expo-router';
-import LevelUpOverlay from '../../components/LevelUpOverlay';
+import LevelUpOverlay from '../../components/operario/LevelUpOverlay';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 

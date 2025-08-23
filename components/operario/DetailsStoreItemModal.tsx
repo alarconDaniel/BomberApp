@@ -4,9 +4,9 @@ import { Modal, View, Text, Pressable, StyleSheet, Dimensions, Image, Animated, 
 import { BlurView } from 'expo-blur';
 import Slider from '@react-native-community/slider';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { ItemTienda } from '../models/ItemTienda';
-import { useTheme } from '../theme/ThemeProvider';
-import { makeGlobalStyles } from '../theme/GlobalStyles';
+import { ItemTienda } from '../../models/ItemTienda';
+import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 

@@ -3,8 +3,8 @@ import React, {useEffect, useRef, useState} from 'react';
 import {View, Text, StyleSheet, Animated, Easing, Pressable} from 'react-native';
 import {BlurView} from 'expo-blur';
 import {FontAwesome5} from '@expo/vector-icons';
-import { useTheme } from '../theme/ThemeProvider';
-import { makeGlobalStyles } from '../theme/GlobalStyles';
+import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 type Props = {
     visible: boolean;

@@ -2,8 +2,8 @@
 import React, { ReactNode, useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
-import { useTheme } from '../theme/ThemeProvider';
-import { wasModalClosedRecently } from '../navigation/ModalTracker';
+import { useTheme } from '../../theme/ThemeProvider';
+import { wasModalClosedRecently } from '../../navigation/ModalTracker';
 
 interface FadeWrapperProps {
     children: ReactNode;

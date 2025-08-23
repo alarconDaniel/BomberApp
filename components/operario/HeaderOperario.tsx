@@ -3,9 +3,9 @@ import { Text, View } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { useAuth } from "../auth/AuthContext";
-import { StatsUsuario } from "../models/StatsUsuario";
-import { useTheme } from '../theme/ThemeProvider'; // ⬅
+import { useAuth } from "../../auth/AuthContext";
+import { StatsUsuario } from "../../models/StatsUsuario";
+import { useTheme } from '../../theme/ThemeProvider'; // ⬅
 import {styles} from "../styles/globalStyles";
 
 export default function HeaderOperario() {

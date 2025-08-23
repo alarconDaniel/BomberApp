@@ -3,8 +3,8 @@ import React, { useMemo } from 'react';
 import { Modal, View, Text, Pressable, StyleSheet, Dimensions, Image } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { useTheme } from '../theme/ThemeProvider';
-import { makeGlobalStyles } from '../theme/GlobalStyles';
+import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 

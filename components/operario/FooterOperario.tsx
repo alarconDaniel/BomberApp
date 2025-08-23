@@ -2,7 +2,7 @@
 import { View, TouchableOpacity, Text } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { styles as global } from '../styles/globalStyles';
-import { useTheme } from '../theme/ThemeProvider';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export default function FooterOperario({ state, descriptors, navigation }: BottomTabBarProps) {
     const { colors } = useTheme();

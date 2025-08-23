@@ -1,6 +1,6 @@
 // app/(operario)/_layout.tsx
 import { Tabs } from 'expo-router';
-import FooterOperario from '../../components/FooterOperario';
+import FooterOperario from '../../components/operario/FooterOperario';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
 

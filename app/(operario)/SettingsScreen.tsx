@@ -4,7 +4,7 @@ import {
     View, Text, StyleSheet, Switch, Pressable, Modal, ScrollView, SafeAreaView, Alert,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import FadeWrapper from '../../components/FadeWrapper';
+import FadeWrapper from '../../components/operario/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
 import { router } from 'expo-router';
 import { useTheme } from '../../theme/ThemeProvider';

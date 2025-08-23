@@ -8,8 +8,8 @@ import Svg, { Polyline } from 'react-native-svg';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import HeaderOperario from '../../components/HeaderOperario';
-import FadeWrapper from "../../components/FadeWrapper";
+import HeaderOperario from '../../components/operario/HeaderOperario';
+import FadeWrapper from "../../components/operario/FadeWrapper";
 import { Reto } from '../../models/Reto';
 import { useAuth } from "../../auth/AuthContext";
 import { useTheme } from '../../theme/ThemeProvider';

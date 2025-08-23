@@ -14,8 +14,8 @@ import type {RouteProp} from '@react-navigation/native';
 
 import {useAuth} from '../../auth/AuthContext';
 import {ItemInventario, InventarioResponse} from '../../models/ItemInventario';
-import FadeWrapper from '../../components/FadeWrapper';
-import DetailsInventoryItemModal from "../../components/DetailsInventoryItemModal";
+import FadeWrapper from '../../components/operario/FadeWrapper';
+import DetailsInventoryItemModal from "../../components/operario/DetailsInventoryItemModal";
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 

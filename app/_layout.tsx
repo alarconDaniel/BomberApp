@@ -2,7 +2,7 @@
 import {Stack, useRouter, useSegments, useRootNavigationState} from 'expo-router';
 import {useEffect} from 'react';
 import {AuthProvider, useAuth} from '../auth/AuthContext';
-import {ToastProvider} from '../components/ToastProvider';
+import {ToastProvider} from '../components/operario/ToastProvider';
 import {ThemeProvider} from "../theme/ThemeProvider";
 
 function AuthGate() {

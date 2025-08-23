@@ -2,9 +2,9 @@
 import React from 'react';
 import {View, Text, Pressable, StyleSheet, Dimensions} from 'react-native';
 import {FontAwesome5} from '@expo/vector-icons';
-import {ItemTienda} from '../models/ItemTienda';
-import {useTheme} from '../theme/ThemeProvider';
-import { makeGlobalStyles } from '../theme/GlobalStyles';
+import {ItemTienda} from '../../models/ItemTienda';
+import {useTheme} from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 const {width: SCREEN_W} = Dimensions.get('window');
 
@@ -149,7 +149,7 @@ export default function StoreItemCard({
     );
 }
 
-const s = (c: import('../theme/ThemeProvider').Palette) => StyleSheet.create({
+const s = (c: import('../../theme/ThemeProvider').Palette) => StyleSheet.create({
     card: {
         width: SCREEN_W * 0.45,
         flex: 1,

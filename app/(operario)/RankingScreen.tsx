@@ -3,9 +3,9 @@ import React, { useCallback } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
-import FadeWrapper from '../../components/FadeWrapper';
+import FadeWrapper from '../../components/operario/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
-import DetailsTrophyModal from '../../components/DetailsTrophyModal';
+import DetailsTrophyModal from '../../components/operario/DetailsTrophyModal';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
