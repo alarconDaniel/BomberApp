@@ -4,6 +4,7 @@ import {
   SafeAreaView, View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, FlatList, Alert, ActivityIndicator
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import FadeWrapper from '../components/FadeWrapper';
 import HeaderOperario from '../components/HeaderOperario';
 import { colors } from '../styles/globalStyles1';
@@ -23,13 +24,14 @@ type RetoDTO = {
   nombreReto: string;
   descripcionReto?: string | null;
   tiempoEstimadoSegReto?: number | null;
-  fechaInicioReto?: string | null;  // 'YYYY-MM-DD'
-  fechaFinReto?: string | null;     // 'YYYY-MM-DD'
+  fechaInicioReto?: string | null;
+  fechaFinReto?: string | null;
 };
+
+type ParUI = { id: string; izquierda: string; derecha: string }; // 👈 para Emparejar
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
-// Normaliza objetos que puedan venir en snake_case desde el backend
 const normalizeReto = (x: any): RetoDTO => ({
   codReto: x?.codReto ?? x?.cod_reto ?? x?.id ?? 0,
   nombreReto: x?.nombreReto ?? x?.nombre_reto ?? '',
@@ -40,6 +42,9 @@ const normalizeReto = (x: any): RetoDTO => ({
 });
 
 export default function RetosScreen() {
+  const navigation = useNavigation<any>();
+
+  // Campos del form general
   const [nombre, setNombre] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [cargo, setCargo] = useState<Cargo>('Operario');
@@ -48,6 +53,33 @@ export default function RetosScreen() {
 
   const [cargando, setCargando] = useState(false);
   const [retos, setRetos] = useState<RetoDTO[]>([]);
+
+  // ---------- Config específica por tipo ----------
+  // Opción múltiple (simple demo: cambia en tu UI si quieres)
+  const [pregunta, setPregunta] = useState('¿Cuál es de EPP?');
+  const [opciones, setOpciones] = useState<
+    { id: string; texto: string; correcta?: boolean }[]
+  >([
+    { id: 'a', texto: 'Casco', correcta: true },
+    { id: 'b', texto: 'Gorra' },
+    { id: 'c', texto: 'Guantes', correcta: true },
+    { id: 'd', texto: 'Sandalias' },
+  ]);
+  const [multiple, setMultiple] = useState(true);
+
+  // Emparejar
+  const [pares, setPares] = useState<ParUI[]>([
+    { id: 'p1', izquierda: '', derecha: '' },
+    { id: 'p2', izquierda: '', derecha: '' },
+  ]);
+  const addPar = () =>
+    setPares((prev) => [...prev, { id: `p${Date.now()}`, izquierda: '', derecha: '' }]);
+  const removePar = (id: string) =>
+    setPares((prev) => (prev.length > 2 ? prev.filter((p) => p.id !== id) : prev));
+
+  // Rellenar
+  const [fillWord, setFillWord] = useState('escaler');
+  const [fillHint, setFillHint] = useState('Pa ponerse');
 
   const restantes = MAX_DESC - descripcion.length;
 
@@ -62,52 +94,27 @@ export default function RetosScreen() {
   const listarRetos = async () => {
     try {
       setCargando(true);
-
       const res = await fetch(`${API.reto.listar}?_ts=${Date.now()}`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         cache: 'no-store' as any,
       });
-
-      const txt = await res.text(); // leer siempre para loguear si falla
-      if (!res.ok) {
-        console.log('RETOS listar ERROR:', res.status, txt);
-        throw new Error(txt || `HTTP ${res.status}`);
-      }
-
-      if (!txt || txt.trim().length === 0) {
-        console.log('RETOS listar vacío');
-        setRetos([]);
-        return;
-      }
-
-      let json: any;
-      try { json = JSON.parse(txt); } catch {
-        console.log('RETOS listar JSON inválido:', txt);
-        throw new Error('Respuesta inválida del servidor');
-      }
-
-      const rawArr =
-        Array.isArray(json) ? json
+      const txt = await res.text();
+      if (!res.ok) throw new Error(txt || `HTTP ${res.status}`);
+      if (!txt.trim()) { setRetos([]); return; }
+      let json: any; try { json = JSON.parse(txt); } catch { throw new Error('Respuesta inválida'); }
+      const raw = Array.isArray(json) ? json
         : Array.isArray(json?.data) ? json.data
         : Array.isArray(json?.items) ? json.items
-        : Array.isArray(json?.retos) ? json.retos
-        : [];
-
-      const arr: RetoDTO[] = rawArr
-        .map(normalizeReto)
-        .filter((r: RetoDTO) => !!r.codReto);
-
-      setRetos(arr);
+        : Array.isArray(json?.retos) ? json.retos : [];
+      setRetos(raw.map(normalizeReto).filter((r: RetoDTO) => !!r.codReto));
     } catch (e: any) {
-      console.log('listarRetos catch:', e?.message);
       Alert.alert('Error', e?.message ?? 'No se pudo cargar la lista de retos');
     } finally {
       setCargando(false);
     }
   };
 
-  // Borrar reto
   const borrar = (id: string | number) => {
     Alert.alert('Confirmar', '¿Deseas borrar este reto?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -119,13 +126,9 @@ export default function RetosScreen() {
             setCargando(true);
             const res = await fetch(API.reto.borrar(id), { method: 'DELETE' });
             const txt = await res.text();
-            if (!res.ok) {
-              console.log('RETOS borrar ERROR:', res.status, txt);
-              throw new Error(txt || `HTTP ${res.status}`);
-            }
+            if (!res.ok) throw new Error(txt || `HTTP ${res.status}`);
             await listarRetos();
           } catch (e: any) {
-            console.log('borrar error:', e?.message);
             Alert.alert('Error', e?.message ?? 'No se pudo borrar');
           } finally {
             setCargando(false);
@@ -136,15 +139,8 @@ export default function RetosScreen() {
   };
 
   const crearReto = async () => {
-    if (!nombre.trim()) {
-      Alert.alert('Falta información', 'El nombre del reto es obligatorio');
-      return;
-    }
-
-    // Fechas por defecto: hoy y hoy + 7 días
-    const hoy = new Date();
-    const fin = new Date(hoy.getTime() + 7 * 24 * 60 * 60 * 1000);
-
+    if (!nombre.trim()) { Alert.alert('Falta información', 'El nombre del reto es obligatorio'); return; }
+    const hoy = new Date(); const fin = new Date(hoy.getTime() + 7 * 24 * 60 * 60 * 1000);
     const payload = {
       nombreReto: nombre.trim(),
       descripcionReto: descripcion.trim() || null,
@@ -152,42 +148,76 @@ export default function RetosScreen() {
       fechaInicioReto: isoDate(hoy),
       fechaFinReto: isoDate(fin),
     };
-
     try {
       setCargando(true);
       const res = await fetch(API.reto.crear, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       const txt = await res.text();
-      if (!res.ok) {
-        console.log('RETOS crear ERROR ->', res.status, txt);
-        throw new Error(txt || 'Falla al registrar');
-      }
-
-      setNombre('');
-      setDescripcion('');
-      setTipo(null);
+      if (!res.ok) throw new Error(txt || 'Falla al registrar');
+      setNombre(''); setDescripcion(''); setTipo(null);
       await listarRetos();
       Alert.alert('OK', 'Reto creado correctamente');
     } catch (e: any) {
-      console.log('crearReto catch:', e?.message);
       Alert.alert('Error', e?.message ?? 'No se pudo crear el reto');
     } finally {
       setCargando(false);
     }
   };
 
-  const dataHistorialBase = [
-    'Tipos de EPP',
-    'Tipos de cascos',
-    'Tipos de guantes',
-    'Tipos de gafas',
-    'Tipos de equipos',
-    'Señales de advertencia',
-  ];
+  // ---------- PROBAR con los datos del admin ----------
+  const probarReto = () => {
+    if (!tipo) { Alert.alert('Selecciona un tipo de reto'); return; }
+
+    if (tipo === 'Emparejar') {
+  const valid = pares
+    .map(p => ({
+      izquierda: (p.izquierda ?? '').trim(),
+      derecha: (p.derecha ?? '').trim(),
+    }))
+    .filter(p => p.izquierda && p.derecha);
+
+  if (valid.length < 2) {
+    Alert.alert('Mínimo 2 pares', 'Completa al menos dos pares válidos.');
+    return;
+  }
+
+  navigation.navigate('RetoEmparejar', { pares: valid });
+  return;
+}
+
+    if (tipo === 'Opción múltiple') {
+      const clean = opciones.map(o => ({ ...o, texto: (o.texto || '').trim() }));
+      if (!pregunta.trim() || clean.some(o => !o.texto)) {
+        Alert.alert('Completa la pregunta y las 4 opciones');
+        return;
+      }
+      if (!clean.some(o => o.correcta)) {
+        Alert.alert('Marca al menos una opción correcta');
+        return;
+      }
+      navigation.navigate('RetoMultiple', {
+        pregunta: pregunta.trim(),
+        opciones: clean,
+        multiple,
+      });
+      return;
+    }
+
+    if (tipo === 'Rellenar') {
+      if (fillWord.trim().length < 2) {
+        Alert.alert('Palabra muy corta'); return;
+      }
+      navigation.navigate('RetoRellenar', {
+        respuesta: fillWord.trim(),
+        pista: fillHint.trim() || undefined,
+      });
+      return;
+    }
+
+    Alert.alert('Info', 'Para "Reporte" no hay preview aún.');
+  };
 
   const retosFiltrados = useMemo(() => {
     const q = query.toLowerCase();
@@ -208,7 +238,7 @@ export default function RetosScreen() {
         >
           <Text style={styles.title}>Crear un nuevo reto</Text>
 
-          {/* Nombre */}
+          {/* Nombre / Descripción */}
           <Text style={styles.label}>Ingrese el nombre del tema :</Text>
           <TextInput
             value={nombre}
@@ -218,7 +248,6 @@ export default function RetosScreen() {
             style={styles.input}
           />
 
-          {/* Descripción */}
           <Text style={[styles.label, { marginTop: 10 }]}>Ingrese la descripción del tema :</Text>
           <View style={styles.textAreaWrap}>
             <TextInput
@@ -240,7 +269,7 @@ export default function RetosScreen() {
             ))}
           </View>
 
-          {/* Tipo de reto */}
+          {/* Tipo */}
           <Text style={[styles.label, { marginTop: 10 }]}>Escoja tipo de reto</Text>
           <View style={styles.chipsRow}>
             {tiposReto.map((t) => (
@@ -253,14 +282,135 @@ export default function RetosScreen() {
             ))}
           </View>
 
-          {/* Botón Guardar */}
-          <View style={{ marginTop: 16 }}>
+          {/* ---------- Config por tipo ---------- */}
+          {tipo === 'Opción múltiple' && (
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>Configurar opción múltiple</Text>
+
+              <Text style={styles.label}>Pregunta</Text>
+              <TextInput
+                value={pregunta}
+                onChangeText={setPregunta}
+                placeholder="Escribe la pregunta…"
+                placeholderTextColor="#9aa4ad"
+                style={styles.input}
+              />
+
+              <Text style={[styles.label, { marginTop: 8 }]}>Opciones</Text>
+              {opciones.map((o, ix) => (
+                <View key={o.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const next = [...opciones];
+                      next[ix] = { ...next[ix], correcta: !next[ix].correcta };
+                      setOpciones(next);
+                    }}
+                    style={[
+                      { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#9AA4AD' },
+                      o.correcta && { backgroundColor: colors.blue },
+                    ]}
+                  />
+                  <TextInput
+                    value={o.texto}
+                    onChangeText={(t) => {
+                      const next = [...opciones];
+                      next[ix] = { ...next[ix], texto: t };
+                      setOpciones(next);
+                    }}
+                    placeholder={`Opción ${ix + 1}`}
+                    placeholderTextColor="#9aa4ad"
+                    style={[styles.input, { flex: 1 }]}
+                  />
+                </View>
+              ))}
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <TouchableOpacity onPress={() => setMultiple((m) => !m)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={[
+                    { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#9AA4AD' },
+                    multiple && { backgroundColor: colors.blue },
+                  ]} />
+                  <Text style={{ color: '#1F2937' }}>Permitir varias correctas</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {tipo === 'Emparejar' && (
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>Configurar emparejar</Text>
+
+              {pares.map((p, ix) => (
+                <View key={p.id} style={styles.pairRow}>
+                  <TextInput
+                    value={p.izquierda}
+                    onChangeText={(t) => {
+                      const next = [...pares];
+                      next[ix] = { ...next[ix], izquierda: t };
+                      setPares(next);
+                    }}
+                    placeholder="Izquierda"
+                    placeholderTextColor="#9aa4ad"
+                    style={[styles.input, { flex: 1 }]}
+                  />
+                  <Text style={{ marginHorizontal: 6, color: '#4b5563' }}>—</Text>
+                  <TextInput
+                    value={p.derecha}
+                    onChangeText={(t) => {
+                      const next = [...pares];
+                      next[ix] = { ...next[ix], derecha: t };
+                      setPares(next);
+                    }}
+                    placeholder="Derecha"
+                    placeholderTextColor="#9aa4ad"
+                    style={[styles.input, { flex: 1 }]}
+                  />
+                  <TouchableOpacity onPress={() => removePar(p.id)} style={{ marginLeft: 8 }}>
+                    <Text style={{ color: '#ef4444', fontWeight: '700' }}>X</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <TouchableOpacity onPress={addPar} style={styles.addBtn}>
+                <Text style={styles.addBtnTxt}>+ Añadir par</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {tipo === 'Rellenar' && (
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>Configurar rellenar</Text>
+              <Text style={styles.label}>Palabra</Text>
+              <TextInput
+                value={fillWord}
+                onChangeText={setFillWord}
+                placeholder="Palabra objetivo"
+                placeholderTextColor="#9aa4ad"
+                style={styles.input}
+              />
+              <Text style={[styles.label, { marginTop: 8 }]}>Pista</Text>
+              <TextInput
+                value={fillHint}
+                onChangeText={setFillHint}
+                placeholder="Pista (opcional)"
+                placeholderTextColor="#9aa4ad"
+                style={styles.input}
+              />
+            </View>
+          )}
+
+          {/* Acciones */}
+          <View style={{ marginTop: 16, gap: 10 }}>
             <TouchableOpacity style={styles.saveBtn} onPress={crearReto} disabled={cargando}>
               {cargando ? <ActivityIndicator /> : <Text style={styles.saveText}>Guardar reto</Text>}
             </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: '#93c5fd' }]} onPress={probarReto}>
+              <Text style={styles.saveText}>Probar reto</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Buscador lista */}
+          {/* Historial */}
           <Text style={styles.historyTitle}>Historial de retos</Text>
           <View style={styles.searchWrap}>
             <TextInput
@@ -272,7 +422,6 @@ export default function RetosScreen() {
             />
           </View>
 
-          {/* Lista real con borrar; si no hay datos, fallback a placeholders */}
           {cargando ? (
             <View style={{ marginTop: 16 }}>
               <ActivityIndicator />
@@ -282,10 +431,7 @@ export default function RetosScreen() {
               data={retosFiltrados}
               keyExtractor={(item) => String(item.codReto)}
               renderItem={({ item }) => (
-                <RetoItem
-                  item={item}
-                  onDelete={() => borrar(item.codReto)}
-                />
+                <RetoItem item={item} onDelete={() => borrar(item.codReto)} />
               )}
               ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
               scrollEnabled={false}
@@ -293,9 +439,14 @@ export default function RetosScreen() {
             />
           ) : (
             <FlatList
-              data={dataHistorialBase.filter(t =>
-                t.toLowerCase().includes(query.toLowerCase())
-              )}
+              data={[
+                'Tipos de EPP',
+                'Tipos de cascos',
+                'Tipos de guantes',
+                'Tipos de gafas',
+                'Tipos de equipos',
+                'Señales de advertencia',
+              ].filter(t => t.toLowerCase().includes(query.toLowerCase()))}
               keyExtractor={(item) => item}
               renderItem={({ item }) => <HistoryItem title={item} />}
               ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
@@ -336,7 +487,6 @@ function Chip({ label, active, onPress }: { label: string; active?: boolean; onP
     </TouchableOpacity>
   );
 }
-
 function Square({ onPress, danger = false }: { onPress?: () => void; danger?: boolean }) {
   return (
     <TouchableOpacity
@@ -346,19 +496,10 @@ function Square({ onPress, danger = false }: { onPress?: () => void; danger?: bo
     />
   );
 }
-
-function RetoItem({
-  item,
-  onDelete,
-}: {
-  item: RetoDTO;
-  onDelete: () => void;
-}) {
+function RetoItem({ item, onDelete }: { item: RetoDTO; onDelete: () => void }) {
   return (
     <View style={styles.historyItem}>
-      <Text style={styles.historyText} numberOfLines={1}>
-        {item.nombreReto}
-      </Text>
+      <Text style={styles.historyText} numberOfLines={1}>{item.nombreReto}</Text>
       <View style={styles.historyActions}>
         <Square onPress={() => { /* TODO: editar */ }} />
         <Square danger onPress={onDelete} />
@@ -366,7 +507,6 @@ function RetoItem({
     </View>
   );
 }
-
 function HistoryItem({ title }: { title: string }) {
   return (
     <View style={styles.historyItem}>
@@ -408,6 +548,18 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 12, height: 34, borderRadius: 16, borderWidth: 1, justifyContent: 'center' },
   chipText: { fontWeight: '700', color: colors.navy },
 
+  panel: { marginTop: 12, padding: 12, backgroundColor: '#F3F4F6', borderRadius: 10 },
+  panelTitle: { fontWeight: '800', color: '#1F2937', marginBottom: 8 },
+
+  pairRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+
+  addBtn: {
+    marginTop: 6, alignSelf: 'flex-start',
+    backgroundColor: '#e5e7eb', paddingHorizontal: 10, height: 34,
+    borderRadius: 8, justifyContent: 'center',
+  },
+  addBtnTxt: { color: '#111827', fontWeight: '700' },
+
   actionsRow: { flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' },
 
   historyTitle: { fontSize: 18, fontWeight: '800', marginTop: 18, color: colors.navy },
@@ -431,11 +583,4 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   saveText: { color: colors.white, fontWeight: '800' },
-
-  footer: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, height: FOOTER_HEIGHT,
-    backgroundColor: colors.white, elevation: 8,
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8,
-    shadowOffset: { width: 0, height: -2 },
-  },
 });
