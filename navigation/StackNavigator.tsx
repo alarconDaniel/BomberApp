@@ -16,10 +16,12 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function StackNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName="Login"             // 👈 fuerza la primera pantalla
+    >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="OperarioTabs" component={OperarioTabs} />
-      {/* header on para el form */}
       <Stack.Screen
         name="OperarioForm"
         component={OperarioFormScreen}
@@ -28,4 +30,5 @@ export default function StackNavigator() {
     </Stack.Navigator>
   );
 }
+
 

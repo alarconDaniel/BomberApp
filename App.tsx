@@ -1,12 +1,18 @@
+// App.tsx (baseline temporal)
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import StackNavigator from './navigation/StackNavigator';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+
+import StackNavigator from './navigation/StackNavigator'; // default
 
 export default function App() {
-  // ÚNICO NavigationContainer de la app
   return (
-    <NavigationContainer>
-      <StackNavigator />
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <StatusBar style="dark" />
+        <StackNavigator />
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
