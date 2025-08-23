@@ -22,10 +22,12 @@ type RetoDTO = {
   codReto: number;
   nombreReto: string;
   descripcionReto?: string | null;
-  tiempoReto?: number | null;
-  fechaInicioReto?: string | null;
-  fechaFinReto?: string | null;
+  tiempoEstimadoSegReto?: number | null; // <-- nombre correcto
+  fechaInicioReto?: string | null;       // 'YYYY-MM-DD'
+  fechaFinReto?: string | null;          // 'YYYY-MM-DD'
 };
+
+const isoDate = (d: Date) => d.toISOString().slice(0, 10); // util
 
 export default function RetosScreen() {
   const [nombre, setNombre] = useState('');
@@ -50,7 +52,8 @@ export default function RetosScreen() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: RetoDTO[] = await res.json();
       setRetos(Array.isArray(json) ? json : []);
-    } catch {
+    } catch (e: any) {
+      console.log('listarRetos error:', e?.message);
       Alert.alert('Error', 'No se pudo cargar la lista de retos');
     } finally {
       setCargando(false);
@@ -74,6 +77,7 @@ export default function RetosScreen() {
             }
             await listarRetos();
           } catch (e: any) {
+            console.log('borrar error:', e?.message);
             Alert.alert('Error', e?.message ?? 'No se pudo borrar');
           } finally {
             setCargando(false);
@@ -89,12 +93,17 @@ export default function RetosScreen() {
       return;
     }
 
+    // Fechas por defecto: hoy y hoy + 7 días
+    const hoy = new Date();
+    const fin = new Date(hoy.getTime() + 7 * 24 * 60 * 60 * 1000);
+
     const payload = {
       nombreReto: nombre.trim(),
       descripcionReto: descripcion.trim() || null,
-      tiempoReto: 0,
-      // fechaInicioReto: '2025-09-01',
-      // fechaFinReto: '2025-09-07',
+      tiempoEstimadoSegReto: 0,     // <-- nombre correcto
+      fechaInicioReto: isoDate(hoy),// <-- requerido si tu columna no es nullable
+      fechaFinReto: isoDate(fin),   // <-- fin >= inicio
+      // (si tu backend no exige fechas, podrías enviar null y marcar las columnas como nullable)
     };
 
     try {
@@ -107,6 +116,7 @@ export default function RetosScreen() {
 
       if (!res.ok) {
         const txt = await res.text();
+        console.log('crearReto error ->', res.status, txt);
         throw new Error(txt || 'Falla al registrar');
       }
 
@@ -116,6 +126,7 @@ export default function RetosScreen() {
       await listarRetos();
       Alert.alert('OK', 'Reto creado correctamente');
     } catch (e: any) {
+      console.log('crearReto catch:', e?.message);
       Alert.alert('Error', e?.message ?? 'No se pudo crear el reto');
     } finally {
       setCargando(false);
@@ -131,7 +142,6 @@ export default function RetosScreen() {
     'Señales de advertencia',
   ];
 
-  // Filtra por búsqueda cuando hay datos reales
   const retosFiltrados = useMemo(() => {
     const q = query.toLowerCase();
     return retos.filter(r => (r.nombreReto || '').toLowerCase().includes(q));
@@ -298,7 +308,6 @@ function RetoItem({
       </Text>
       <View style={styles.historyActions}>
         <Square onPress={() => { /* TODO: editar */ }} />
-        {/* 2º botón: borrar */}
         <Square danger onPress={onDelete} />
       </View>
     </View>
@@ -309,7 +318,6 @@ function HistoryItem({ title }: { title: string }) {
   return (
     <View style={styles.historyItem}>
       <Text style={styles.historyText}>{title}</Text>
-      {/* placeholder sin acciones */}
     </View>
   );
 }
