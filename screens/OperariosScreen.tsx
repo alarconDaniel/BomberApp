@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// screens/OperariosScreen.tsx
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView,
   View,
@@ -10,16 +11,21 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/StackNavigator';
+
 import FadeWrapper from '../components/FadeWrapper';
 import HeaderOperario from '../components/HeaderOperario';
 import { colors } from '../styles/globalStyles1';
 import { API } from '../config/api';
 
-
 const FOOTER_HEIGHT = 64;
 
+/* ---------- Tipos ---------- */
 type OperarioUI = {
-  id: string; // para la FlatList
+  id: string; // para la FlatList y navegación
   nombre: string;
   cargo: 'Operativo' | 'Mantenimiento' | 'Supervisión';
 };
@@ -30,16 +36,16 @@ type UsuarioDTO = {
   apellidoUsuario: string;
   correoUsuario: string;
   contrasenaUsuario: string;
-  cargoUsuario: string; // p.ej. "Operario" / "Mantenimiento" / "Supervisor"
+  cargoUsuario: string; // "Operario" | "Mantenimiento" | "Supervisor"
   codRol: number;
 };
 
-// Mapea cargo del backend a etiquetas de UI
+/* ---------- Mapeos ---------- */
 function mapCargo(c: string): OperarioUI['cargo'] {
   const norm = (c || '').toLowerCase();
-  if (norm.startsWith('opera')) return 'Operativo';      // "Operario" -> "Operativo" (tu UI)
+  if (norm.startsWith('opera')) return 'Operativo';
   if (norm.startsWith('mante')) return 'Mantenimiento';
-  return 'Supervisión';                                   // "Supervisor" -> "Supervisión"
+  return 'Supervisión';
 }
 
 function mapUsuarioToUI(u: UsuarioDTO): OperarioUI {
@@ -50,13 +56,17 @@ function mapUsuarioToUI(u: UsuarioDTO): OperarioUI {
   };
 }
 
+/* ---------- Pantalla ---------- */
 export default function OperariosScreen() {
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
   const [query, setQuery] = useState('');
   const [data, setData] = useState<OperarioUI[]>([]);
   const [cargando, setCargando] = useState(false);
 
   // Cargar lista desde backend
-  const listar = async () => {
+  const listar = useCallback(async () => {
     try {
       setCargando(true);
       const res = await fetch(API.usuario.listar);
@@ -68,11 +78,18 @@ export default function OperariosScreen() {
     } finally {
       setCargando(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     listar();
-  }, []);
+  }, [listar]);
+
+  // Refrescar al volver de Crear/Editar
+  useFocusEffect(
+    useCallback(() => {
+      listar();
+    }, [listar]),
+  );
 
   // Borrar operario
   const borrar = (id: string) => {
@@ -131,7 +148,7 @@ export default function OperariosScreen() {
           <TouchableOpacity
             activeOpacity={0.9}
             style={styles.createBtn}
-            onPress={() => Alert.alert('Crear', 'Conectemos este botón a /usuario/crear cuando tengas el formulario.')}
+            onPress={() => navigation.navigate('OperarioForm', { mode: 'create' })}
           >
             <Text style={styles.createText}>Crear</Text>
           </TouchableOpacity>
@@ -157,6 +174,9 @@ export default function OperariosScreen() {
             renderItem={({ item }) => (
               <OperarioItem
                 item={item}
+                onEdit={() =>
+                  navigation.navigate('OperarioForm', { mode: 'edit', id: item.id })
+                }
                 onDelete={() => borrar(item.id)}
               />
             )}
@@ -168,12 +188,18 @@ export default function OperariosScreen() {
       </SafeAreaView>
     </FadeWrapper>
   );
-  
 }
 
 /* ---------- Item de la lista ---------- */
-
-function OperarioItem({ item, onDelete }: { item: OperarioUI; onDelete: () => void }) {
+function OperarioItem({
+  item,
+  onEdit,
+  onDelete,
+}: {
+  item: OperarioUI;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
     <View style={itemStyles.card}>
       {/* Avatar circular con “grilla” tipo wireframe */}
@@ -183,8 +209,6 @@ function OperarioItem({ item, onDelete }: { item: OperarioUI; onDelete: () => vo
         <View style={itemStyles.crossH} />
       </View>
 
-      
-
       <View style={itemStyles.info}>
         <Text numberOfLines={1} style={itemStyles.name}>
           {item.nombre}
@@ -193,9 +217,10 @@ function OperarioItem({ item, onDelete }: { item: OperarioUI; onDelete: () => vo
       </View>
 
       <View style={itemStyles.actions}>
-        {/* aquí podrías poner Ver / Editar en el primero y segundo */}
-        <Square onPress={() => {}} />
-        <Square danger onPress={onDelete} />{/* borrar */}
+        {/* Editar */}
+        <Square onPress={onEdit} />
+        {/* Borrar */}
+        <Square danger onPress={onDelete} />
       </View>
     </View>
   );
@@ -212,7 +237,6 @@ function Square({ onPress, danger = false }: { onPress?: () => void; danger?: bo
 }
 
 /* ---------- Estilos ---------- */
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   headerRow: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
@@ -232,7 +256,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  
+
   square: { width: 20, height: 20, backgroundColor: '#BDBDBD', borderRadius: 4 },
 
   createBtn: {
@@ -291,10 +315,4 @@ const itemStyles = StyleSheet.create({
   role: { marginTop: 2, fontSize: 12, color: '#5F6B7A', fontStyle: 'italic' },
 
   actions: { flexDirection: 'row', gap: 6, marginLeft: 6 },
-  square: {
-    width: 22,
-    height: 22,
-    backgroundColor: '#B0B0B0',
-    borderRadius: 6,
-  },
 });
