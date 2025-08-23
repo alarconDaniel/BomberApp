@@ -1,15 +1,7 @@
-// screens/OperariosScreen.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  SafeAreaView,
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  Alert,
-  ActivityIndicator,
+  SafeAreaView, View, Text, StyleSheet, TextInput,
+  TouchableOpacity, FlatList, Alert, ActivityIndicator,
 } from 'react-native';
 
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -27,7 +19,7 @@ const FOOTER_HEIGHT = 64;
 type OperarioUI = {
   id: string; // para la FlatList y navegación
   nombre: string;
-  cargo: 'Operativo' | 'Mantenimiento' | 'Supervisión';
+  cargo: 'Administrador' | 'Operario';
 };
 
 type UsuarioDTO = {
@@ -36,23 +28,15 @@ type UsuarioDTO = {
   apellidoUsuario: string;
   correoUsuario: string;
   contrasenaUsuario: string;
-  cargoUsuario: string; // "Operario" | "Mantenimiento" | "Supervisor"
-  codRol: number;
+  codRol: number; // 1 = Administrador, 2 = Operario (ajústalo si difiere)
 };
 
 /* ---------- Mapeos ---------- */
-function mapCargo(c: string): OperarioUI['cargo'] {
-  const norm = (c || '').toLowerCase();
-  if (norm.startsWith('opera')) return 'Operativo';
-  if (norm.startsWith('mante')) return 'Mantenimiento';
-  return 'Supervisión';
-}
-
 function mapUsuarioToUI(u: UsuarioDTO): OperarioUI {
   return {
     id: String(u.codUsuario),
     nombre: `${u.nombreUsuario} ${u.apellidoUsuario}`.trim(),
-    cargo: mapCargo(u.cargoUsuario),
+    cargo: u.codRol === 1 ? 'Administrador' : 'Operario',
   };
 }
 
@@ -70,9 +54,12 @@ export default function OperariosScreen() {
     try {
       setCargando(true);
       const res = await fetch(API.usuario.listar);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: UsuarioDTO[] = await res.json();
-      setData(Array.isArray(json) ? json.map(mapUsuarioToUI) : []);
+      const txt = await res.text();
+      if (!res.ok) throw new Error(txt || `HTTP ${res.status}`);
+      let json: unknown;
+      try { json = JSON.parse(txt); } catch { throw new Error('JSON inválido'); }
+      const arr = Array.isArray(json) ? (json as UsuarioDTO[]).map(mapUsuarioToUI) : [];
+      setData(arr);
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'No se pudo cargar la lista');
     } finally {
@@ -101,11 +88,20 @@ export default function OperariosScreen() {
         onPress: async () => {
           try {
             setCargando(true);
-            const res = await fetch(API.usuario.borrar(id), { method: 'DELETE' });
+            const res = await fetch(API.usuario.borrar(Number(id)), { method: 'DELETE' });
+            const txt = await res.text();
+
             if (!res.ok) {
-              const txt = await res.text();
-              throw new Error(txt || `HTTP ${res.status}`);
+              if (res.status === 409 || /1451|referenciad/i.test(txt)) {
+                Alert.alert('No se puede borrar', 'El usuario está referenciado por otros registros.');
+              } else if (res.status === 404) {
+                Alert.alert('No existe', 'Usuario no encontrado');
+              } else {
+                Alert.alert('Error', txt || `HTTP ${res.status}`);
+              }
+              return;
             }
+
             await listar();
           } catch (e: any) {
             Alert.alert('Error', e?.message ?? 'No se pudo borrar');
@@ -120,7 +116,7 @@ export default function OperariosScreen() {
   // Filtro local por nombre
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? data.filter((o) => o.nombre.toLowerCase().includes(q)) : data;
+    return q ? data.filter((o: OperarioUI) => o.nombre.toLowerCase().includes(q)) : data;
   }, [query, data]);
 
   return (
@@ -175,7 +171,7 @@ export default function OperariosScreen() {
               <OperarioItem
                 item={item}
                 onEdit={() =>
-                  navigation.navigate('OperarioForm', { mode: 'edit', id: item.id })
+                  navigation.navigate('OperarioForm', { mode: 'edit', id: String(item.id) })
                 }
                 onDelete={() => borrar(item.id)}
               />
@@ -202,7 +198,7 @@ function OperarioItem({
 }) {
   return (
     <View style={itemStyles.card}>
-      {/* Avatar circular con “grilla” tipo wireframe */}
+      {/* Avatar circular */}
       <View style={itemStyles.avatarWrap}>
         <View style={itemStyles.avatar} />
         <View style={itemStyles.crossV} />
@@ -217,9 +213,7 @@ function OperarioItem({
       </View>
 
       <View style={itemStyles.actions}>
-        {/* Editar */}
         <Square onPress={onEdit} />
-        {/* Borrar */}
         <Square danger onPress={onDelete} />
       </View>
     </View>
@@ -242,38 +236,21 @@ const styles = StyleSheet.create({
   headerRow: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
   title: { fontSize: 20, fontWeight: '900', letterSpacing: 0.5, color: colors.navy },
 
-  searchWrap: {
-    marginHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: '#E6E9ED',
-  },
+  searchWrap: { marginHorizontal: 16, borderRadius: 10, backgroundColor: '#E6E9ED' },
   searchInput: { height: 36, paddingHorizontal: 12, color: '#1F2937' },
 
   actionsRow: {
-    marginTop: 8,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    marginTop: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10,
   },
 
   square: { width: 20, height: 20, backgroundColor: '#BDBDBD', borderRadius: 4 },
 
   createBtn: {
-    backgroundColor: '#BDBDBD',
-    paddingHorizontal: 14,
-    height: 32,
-    borderRadius: 8,
-    justifyContent: 'center',
+    backgroundColor: '#BDBDBD', paddingHorizontal: 14, height: 32, borderRadius: 8, justifyContent: 'center',
   },
   createText: { color: colors.navy, fontWeight: '700' },
 
-  roundIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#9AA4AD',
-  },
+  roundIcon: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#9AA4AD' },
 });
 
 const itemStyles = StyleSheet.create({
@@ -286,33 +263,11 @@ const itemStyles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarWrap: { width: 40, height: 40, marginRight: 10 },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#C4C4C4',
-  },
-  crossV: {
-    position: 'absolute',
-    left: 19,
-    top: 6,
-    bottom: 6,
-    width: 2,
-    backgroundColor: '#A9A9A9',
-    borderRadius: 1,
-  },
-  crossH: {
-    position: 'absolute',
-    top: 19,
-    left: 6,
-    right: 6,
-    height: 2,
-    backgroundColor: '#A9A9A9',
-    borderRadius: 1,
-  },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#C4C4C4' },
+  crossV: { position: 'absolute', left: 19, top: 6, bottom: 6, width: 2, backgroundColor: '#A9A9A9', borderRadius: 1 },
+  crossH: { position: 'absolute', top: 19, left: 6, right: 6, height: 2, backgroundColor: '#A9A9A9', borderRadius: 1 },
   info: { flex: 1, paddingRight: 8 },
   name: { fontWeight: '800', color: '#2A2A2A' },
   role: { marginTop: 2, fontSize: 12, color: '#5F6B7A', fontStyle: 'italic' },
-
   actions: { flexDirection: 'row', gap: 6, marginLeft: 6 },
 });

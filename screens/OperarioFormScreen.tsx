@@ -1,4 +1,3 @@
-// screens/OperarioFormScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, Alert,
@@ -22,27 +21,39 @@ type UsuarioResponse = {
   cod_cargo_usuario?: number | null;
 };
 
-type UsuarioPayload = {
+type UsuarioPayloadCreate = {
   codRol: number;
   nombreUsuario: string;
   apellidoUsuario: string;
   nicknameUsuario?: string | null;
   correoUsuario: string;
-  contrasenaUsuario?: string; // sólo en create o si cambias
+  contrasenaUsuario: string;
   cedulaUsuario: string;
-  codCargoUsuario?: number | null;
+};
+
+type UsuarioPayloadUpdate = {
+  codUsuario: number;
+  nombreUsuario: string;
+  apellidoUsuario: string;
+  nicknameUsuario?: string | null;
+  correoUsuario: string;
+  contrasenaUsuario?: string;
+  cedulaUsuario: string;
 };
 
 const ROLES = [
   { label: 'Administrador', value: 1 },
   { label: 'Operario', value: 2 },
-] as const; // ← AJUSTA a tus IDs reales
+] as const;
 
 export default function OperarioFormScreen() {
   const navigation = useNavigation<any>();
   const { params } = useRoute<RouteProp<RootStackParamList, 'OperarioForm'>>();
   const mode: Mode = params?.mode ?? 'create';
-  const editingId = params?.id as number | undefined;
+
+  // id puede venir como string → a número
+  const rawId = params?.id as number | string | undefined;
+  const editingId = typeof rawId === 'string' ? parseInt(rawId, 10) : rawId;
 
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
@@ -51,7 +62,6 @@ export default function OperarioFormScreen() {
   const [contrasena, setContrasena] = useState('');
   const [cedula, setCedula] = useState('');
   const [codRol, setCodRol] = useState<number>(ROLES[1].value); // default Operario
-  const [codCargoUsuario, setCodCargoUsuario] = useState<string>(''); // opcional (num o vacío)
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -70,9 +80,6 @@ export default function OperarioFormScreen() {
           setCorreo(u.correoUsuario ?? u.correo_usuario ?? '');
           setCedula(u.cedulaUsuario ?? u.cedula_usuario ?? '');
           setCodRol(u.codRol ?? ROLES[1].value);
-          setCodCargoUsuario(
-            u.cod_cargo_usuario === null || u.cod_cargo_usuario === undefined ? '' : String(u.cod_cargo_usuario)
-          );
           setContrasena('');
         } catch (e: any) {
           Alert.alert('Error', e?.message ?? 'No se pudo cargar el usuario');
@@ -84,7 +91,7 @@ export default function OperarioFormScreen() {
   }, [mode, editingId]);
 
   const validar = () => {
-    if (!codRol) { Alert.alert('Falta rol', 'Selecciona un rol'); return false; }
+    if (mode === 'create' && !codRol) { Alert.alert('Falta rol', 'Selecciona un rol'); return false; }
     if (!nombre.trim() || !apellido.trim() || !correo.trim() || !cedula.trim()) {
       Alert.alert('Datos incompletos', 'Completa nombre, apellido, correo y cédula.');
       return false;
@@ -107,20 +114,32 @@ export default function OperarioFormScreen() {
   const onSubmit = async () => {
     if (!validar()) return;
 
-    const payload: UsuarioPayload = {
-      codRol,
-      nombreUsuario: nombre.trim(),
-      apellidoUsuario: apellido.trim(),
-      nicknameUsuario: nickname.trim() ? nickname.trim() : null,
-      correoUsuario: correo.trim(),
-      cedulaUsuario: cedula.trim(),
-      codCargoUsuario: codCargoUsuario.trim() ? Number(codCargoUsuario.trim()) : null,
-    };
-
     const isCreate = mode === 'create';
-    const body: Record<string, any> = { ...payload };
-    if (isCreate || contrasena.trim()) body.contrasenaUsuario = contrasena.trim();
-    if (!isCreate) body.codUsuario = editingId;
+
+    let body: Record<string, any>;
+    if (isCreate) {
+      const payload: UsuarioPayloadCreate = {
+        codRol,
+        nombreUsuario: nombre.trim(),
+        apellidoUsuario: apellido.trim(),
+        nicknameUsuario: nickname.trim() ? nickname.trim() : null,
+        correoUsuario: correo.trim(),
+        contrasenaUsuario: contrasena.trim(),
+        cedulaUsuario: cedula.trim(),
+      };
+      body = payload;
+    } else {
+      const payload: UsuarioPayloadUpdate = {
+        codUsuario: Number(editingId),
+        nombreUsuario: nombre.trim(),
+        apellidoUsuario: apellido.trim(),
+        nicknameUsuario: nickname.trim() ? nickname.trim() : null,
+        correoUsuario: correo.trim(),
+        cedulaUsuario: cedula.trim(),
+        ...(contrasena.trim() ? { contrasenaUsuario: contrasena.trim() } : {}),
+      };
+      body = payload;
+    }
 
     try {
       setLoading(true);
@@ -138,7 +157,6 @@ export default function OperarioFormScreen() {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (e: any) {
-      // Mapea errores comunes del service
       const msg = String(e?.message || '');
       if (msg.includes('Correo ya registrado') || msg.includes('duplicate') || msg.includes('1062')) {
         Alert.alert('Duplicado', 'El correo ya está registrado.');
@@ -164,8 +182,9 @@ export default function OperarioFormScreen() {
               {ROLES.map(r => (
                 <TouchableOpacity
                   key={r.value}
-                  onPress={() => setCodRol(r.value)}
-                  style={[s.chip, codRol === r.value && s.chipActive]}
+                  onPress={() => mode === 'create' && setCodRol(r.value)}
+                  style={[s.chip, codRol === r.value && s.chipActive, mode !== 'create' && { opacity: 0.6 }]}
+                  disabled={mode !== 'create'}
                 >
                   <Text style={[s.chipTxt, codRol === r.value && s.chipTxtActive]}>{r.label}</Text>
                 </TouchableOpacity>
@@ -190,15 +209,6 @@ export default function OperarioFormScreen() {
             <Text style={s.label}>Cédula</Text>
             <TextInput style={s.input} value={cedula} onChangeText={setCedula} />
 
-            <Text style={s.label}>codCargoUsuario (opcional)</Text>
-            <TextInput
-              style={s.input}
-              keyboardType="number-pad"
-              value={codCargoUsuario}
-              onChangeText={(t) => setCodCargoUsuario(t.replace(/[^\d]/g, ''))}
-              placeholder="ej. 10 (debe existir en cargos_usuarios)"
-            />
-
             <TouchableOpacity disabled={loading} onPress={onSubmit} style={[s.btn, loading && { opacity: 0.7 }]}>
               {loading ? <ActivityIndicator /> : <Text style={s.btnTxt}>{mode === 'create' ? 'Crear' : 'Guardar'}</Text>}
             </TouchableOpacity>
@@ -214,11 +224,7 @@ const s = StyleSheet.create({
   h1: { fontSize: 20, fontWeight: '900', color: colors.navy, marginBottom: 12 },
   label: { marginTop: 10, fontWeight: '700', color: '#111' },
   input: {
-    height: 36,
-    borderBottomWidth: 1,
-    borderBottomColor: '#999',
-    paddingHorizontal: 8,
-    color: '#1F2937',
+    height: 36, borderBottomWidth: 1, borderBottomColor: '#999', paddingHorizontal: 8, color: '#1F2937',
   },
   chipsRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
   chip: { paddingHorizontal: 10, height: 32, borderRadius: 8, backgroundColor: '#E0E0E0', justifyContent: 'center' },
