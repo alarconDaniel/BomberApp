@@ -65,6 +65,8 @@ export const API = {
   usuario: {
     listar: `${BASE_URL}/usuario/listar`,
     crear: `${BASE_URL}/usuario/crear`,
+    obtener: (id: string|number) => `${BASE_URL}/usuario/${id}`,
+    actualizar: (id: string|number) => `${BASE_URL}/usuario/${id}`,
     modificar: `${BASE_URL}/usuario/modificar`,
     borrar: (cod: number | string) => `${BASE_URL}/usuario/borrar/${cod}`,
   },
