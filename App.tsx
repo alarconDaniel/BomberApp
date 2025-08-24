@@ -3,16 +3,17 @@ import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import StackNavigator from './navigation/StackNavigator';
 import { ThemeProvider } from './theme/ThemeProvider';
+import { AuthProvider } from './auth/AuthContext';
 
 import { BASE_URL } from './config/api';
 
-// 🛡️ Instala un guard que inserta /api si alguna URL se fue sin prefijo
+// 🛡️ Guard que reescribe URLs sin /api
 function installFetchGuard() {
   const orig = global.fetch;
   global.fetch = (input: any, init?: RequestInit) => {
     try {
       const raw = typeof input === 'string' ? input : String(input);
-      // Si apunta a :puerto/(archivos|usuario|reto)/... y NO contiene /api/ → lo reescribimos
+      // Si apunta a :puerto/(archivos|usuario|reto)/... y NO contiene /api/ → reescribe
       if (/^https?:\/\/[^/]+:\d+\/(archivos|usuario|reto)\//i.test(raw) && !/\/api\//i.test(raw)) {
         const fixed = raw.replace(/^(https?:\/\/[^/]+:\d+)(\/.*)$/i, '$1/api$2');
         console.log('🛠️ fetchGuard: reescrito', raw, '→', fixed);
@@ -22,7 +23,6 @@ function installFetchGuard() {
     return orig(input as any, init);
   };
 }
-// Instalar guard una vez en el arranque del módulo
 installFetchGuard();
 
 export default function App() {
@@ -31,10 +31,12 @@ export default function App() {
   }, []);
 
   return (
-    <ThemeProvider>
-      <NavigationContainer>
-        <StackNavigator />
-      </NavigationContainer>
-    </ThemeProvider>
+    <AuthProvider>
+      <ThemeProvider>
+        <NavigationContainer>
+          <StackNavigator />
+        </NavigationContainer>
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
