@@ -1,3 +1,4 @@
+// screens/OperarioFormScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, Alert,
@@ -12,33 +13,15 @@ import { API } from '../config/api';
 type Mode = 'create' | 'edit';
 
 type UsuarioResponse = {
-  codUsuario: number;
-  codRol: number;
-  nombreUsuario?: string; apellidoUsuario?: string; nicknameUsuario?: string | null;
-  correoUsuario?: string; cedulaUsuario?: string;
-  nombre_usuario?: string; apellido_usuario?: string; nickname_usuario?: string | null;
-  correo_usuario?: string; cedula_usuario?: string;
+  codUsuario?: number;        cod_usuario?: number;
+  codRol?: number;            cod_rol?: number;
+  nombreUsuario?: string;     nombre_usuario?: string;
+  apellidoUsuario?: string;   apellido_usuario?: string;
+  nicknameUsuario?: string | null; nickname_usuario?: string | null;
+  correoUsuario?: string;     correo_usuario?: string;
+  contrasenaUsuario?: string; contrasena_usuario?: string;
+  cedulaUsuario?: string;     cedula_usuario?: string;
   cod_cargo_usuario?: number | null;
-};
-
-type UsuarioPayloadCreate = {
-  codRol: number;
-  nombreUsuario: string;
-  apellidoUsuario: string;
-  nicknameUsuario?: string | null;
-  correoUsuario: string;
-  contrasenaUsuario: string;
-  cedulaUsuario: string;
-};
-
-type UsuarioPayloadUpdate = {
-  codUsuario: number;
-  nombreUsuario: string;
-  apellidoUsuario: string;
-  nicknameUsuario?: string | null;
-  correoUsuario: string;
-  contrasenaUsuario?: string;
-  cedulaUsuario: string;
 };
 
 const ROLES = [
@@ -51,7 +34,6 @@ export default function OperarioFormScreen() {
   const { params } = useRoute<RouteProp<RootStackParamList, 'OperarioForm'>>();
   const mode: Mode = params?.mode ?? 'create';
 
-  // id puede venir como string → a número
   const rawId = params?.id as number | string | undefined;
   const editingId = typeof rawId === 'string' ? parseInt(rawId, 10) : rawId;
 
@@ -61,7 +43,7 @@ export default function OperarioFormScreen() {
   const [correo, setCorreo] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [cedula, setCedula] = useState('');
-  const [codRol, setCodRol] = useState<number>(ROLES[1].value); // default Operario
+  const [codRol, setCodRol] = useState<number>(ROLES[1].value); // Operario
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -79,7 +61,7 @@ export default function OperarioFormScreen() {
           setNickname((u.nicknameUsuario ?? u.nickname_usuario ?? '') || '');
           setCorreo(u.correoUsuario ?? u.correo_usuario ?? '');
           setCedula(u.cedulaUsuario ?? u.cedula_usuario ?? '');
-          setCodRol(u.codRol ?? ROLES[1].value);
+          setCodRol(u.codRol ?? u.cod_rol ?? ROLES[1].value); // 👈 acepta snake_case
           setContrasena('');
         } catch (e: any) {
           Alert.alert('Error', e?.message ?? 'No se pudo cargar el usuario');
@@ -113,33 +95,28 @@ export default function OperarioFormScreen() {
 
   const onSubmit = async () => {
     if (!validar()) return;
-
     const isCreate = mode === 'create';
 
-    let body: Record<string, any>;
-    if (isCreate) {
-      const payload: UsuarioPayloadCreate = {
-        codRol,
-        nombreUsuario: nombre.trim(),
-        apellidoUsuario: apellido.trim(),
-        nicknameUsuario: nickname.trim() ? nickname.trim() : null,
-        correoUsuario: correo.trim(),
-        contrasenaUsuario: contrasena.trim(),
-        cedulaUsuario: cedula.trim(),
-      };
-      body = payload;
-    } else {
-      const payload: UsuarioPayloadUpdate = {
-        codUsuario: Number(editingId),
-        nombreUsuario: nombre.trim(),
-        apellidoUsuario: apellido.trim(),
-        nicknameUsuario: nickname.trim() ? nickname.trim() : null,
-        correoUsuario: correo.trim(),
-        cedulaUsuario: cedula.trim(),
-        ...(contrasena.trim() ? { contrasenaUsuario: contrasena.trim() } : {}),
-      };
-      body = payload;
-    }
+    // ⬇⬇⬇ ENVÍO EN snake_case (lo que espera tu backend)
+    const body = isCreate
+      ? {
+          cod_rol: codRol,
+          nombre_usuario: nombre.trim(),
+          apellido_usuario: apellido.trim(),
+          nickname_usuario: nickname.trim() ? nickname.trim() : null,
+          correo_usuario: correo.trim(),
+          contrasena_usuario: contrasena.trim(),
+          cedula_usuario: cedula.trim(),
+        }
+      : {
+          cod_usuario: Number(editingId),
+          nombre_usuario: nombre.trim(),
+          apellido_usuario: apellido.trim(),
+          nickname_usuario: nickname.trim() ? nickname.trim() : null,
+          correo_usuario: correo.trim(),
+          cedula_usuario: cedula.trim(),
+          ...(contrasena.trim() ? { contrasena_usuario: contrasena.trim() } : {}),
+        };
 
     try {
       setLoading(true);
@@ -162,6 +139,8 @@ export default function OperarioFormScreen() {
         Alert.alert('Duplicado', 'El correo ya está registrado.');
       } else if (msg.includes('Rol/Cargo inválido') || msg.includes('1452')) {
         Alert.alert('Dato inválido', 'El rol o cargo no existe (violación de FK).');
+      } else if (msg.includes('cod_rol') || msg.toLowerCase().includes('rol')) {
+        Alert.alert('Rol requerido', 'Selecciona un rol válido.');
       } else {
         Alert.alert('Error', msg || 'No se pudo guardar');
       }

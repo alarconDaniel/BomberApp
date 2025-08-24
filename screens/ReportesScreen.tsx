@@ -211,18 +211,24 @@ export default function ReportesScreen() {
   );
 }
 
-/** Icono simple por tipo */
+/** Icono simple por tipo (extensión > mime) */
 function pickIcon(mime: string, name: string) {
-  const lower = (mime || '').toLowerCase();
   const ext = (name.split('.').pop() || '').toLowerCase();
+  const lower = (mime || '').toLowerCase();
 
-  if (lower.includes('pdf') || ext === 'pdf') return { label: 'PDF', bg: '#e74c3c' };
-  if (lower.includes('sheet') || lower.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext))
-    return { label: 'XLS', bg: '#27ae60' };
-  if (lower.includes('word') || ['doc', 'docx'].includes(ext))
-    return { label: 'DOC', bg: '#2980b9' };
-  if (lower.includes('powerpoint') || ['ppt', 'pptx'].includes(ext))
-    return { label: 'PPT', bg: '#e67e22' };
+  // 1) Reglas por extensión (más confiables)
+  if (['pdf'].includes(ext)) return { label: 'PDF', bg: '#e74c3c' };
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return { label: 'XLS', bg: '#27ae60' };
+  if (['doc', 'docx'].includes(ext)) return { label: 'DOC', bg: '#2980b9' };
+  if (['ppt', 'pptx'].includes(ext)) return { label: 'PPT', bg: '#e67e22' };
+
+  // 2) Fallback por MIME
+  if (lower.includes('pdf')) return { label: 'PDF', bg: '#e74c3c' };
+  if (lower.includes('sheet') || lower.includes('excel')) return { label: 'XLS', bg: '#27ae60' };
+  if (lower.includes('word')) return { label: 'DOC', bg: '#2980b9' };
+  if (lower.includes('powerpoint')) return { label: 'PPT', bg: '#e67e22' };
+
+  // 3) Desconocido
   return { label: 'FILE', bg: '#7f8c8d' };
 }
 
