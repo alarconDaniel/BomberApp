@@ -22,16 +22,13 @@ export default function ReportesScreen() {
   const scheme = useColorScheme();
   const dark = scheme === 'dark';
 
-  // paleta neutral como tu mock (fondo claro)
   const c = {
     bg: dark ? '#0f0f10' : '#f2f2f2',
     card: dark ? '#1b1c1f' : '#e6e6e6',
     section: dark ? '#232428' : '#dcdcdc',
-    text: dark ? '#111' : '#111',
-    textInv: '#fff',
+    text: '#111',
     soft: '#777',
     border: dark ? '#36373b' : '#cfcfcf',
-    chip: dark ? '#2a2b2f' : '#d7d7d7',
     pill: dark ? '#3a3b40' : '#cfcfcf',
   };
 
@@ -41,12 +38,11 @@ export default function ReportesScreen() {
   const [total, setTotal] = useState(0);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const codUsuario = 1; // TODO: toma del contexto/auth
-
+  // ⬇️ NO filtramos por usuario
   const cargar = useCallback(async () => {
     try {
       setLoading(true);
-      const { items, total } = await listarArchivos({ take: 100, skip: 0, codUsuario });
+      const { items, total } = await listarArchivos({ take: 100, skip: 0 });
       setArchivos(items);
       setTotal(total);
     } catch (e: any) {
@@ -55,7 +51,7 @@ export default function ReportesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [codUsuario]);
+  }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -69,6 +65,11 @@ export default function ReportesScreen() {
   }, []);
 
   const borrar = useCallback(async (item: ArchivoItem) => {
+    // si no tenemos codUsuario del dueño, no podemos validar propiedad
+    if (item.codUsuario == null) {
+      Alert.alert('Eliminar', 'No se puede eliminar: falta el propietario del archivo.');
+      return;
+    }
     Alert.alert(
       'Eliminar',
       `¿Borrar "${item.nombreOriginal}"?`,
@@ -79,7 +80,7 @@ export default function ReportesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const ok = await eliminarArchivo(item.path, codUsuario);
+              const ok = await eliminarArchivo(item.path, item.codUsuario!);
               if (ok) setArchivos(prev => prev.filter(a => a.path !== item.path));
               else Alert.alert('Eliminar', 'No se pudo eliminar');
             } catch (e: any) {
@@ -90,7 +91,7 @@ export default function ReportesScreen() {
       ],
       { cancelable: true },
     );
-  }, [codUsuario]);
+  }, []);
 
   // Búsqueda
   const filtrados = useMemo(() => {
@@ -109,7 +110,6 @@ export default function ReportesScreen() {
       const key = a.area?.trim() || 'Otros';
       (res[key] ||= []).push(a);
     }
-    // orden opcional por nombre
     for (const k of Object.keys(res)) {
       res[k].sort((x, y) => x.nombreOriginal.localeCompare(y.nombreOriginal));
     }
@@ -119,18 +119,18 @@ export default function ReportesScreen() {
   const toggleMas = (seccion: string) =>
     setExpanded(prev => ({ ...prev, [seccion]: !prev[seccion] }));
 
-  // --- Render de un item tipo “tarjeta” como el mock ---
   const renderRow = (item: ArchivoItem) => {
-    const { label, bg, fg } = pickIcon(item.contentType, item.nombreOriginal);
+    const { label, bg } = pickIcon(item.contentType, item.nombreOriginal);
     return (
       <View style={[styles.row, { backgroundColor: c.card, borderColor: c.border }]}>
         <View style={[styles.icon, { backgroundColor: bg }]}>
-          <Text style={[styles.iconTxt]}>{label}</Text>
+          <Text style={styles.iconTxt}>{label}</Text>
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={styles.rowTitle} numberOfLines={1}>{item.nombreOriginal}</Text>
-          {/* Autor: no lo tenemos en BD; muestro área o codUsuario como subtítulo */}
+          <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>
+            {item.nombreOriginal}
+          </Text>
           <Text style={[styles.rowSub, { color: c.soft }]} numberOfLines={1}>
             {item.area ?? `Usuario ${item.codUsuario ?? ''}`}
           </Text>
@@ -147,7 +147,6 @@ export default function ReportesScreen() {
     );
   };
 
-  // --- Render de sección (Mantenimiento / Supervisión / Otros) ---
   const renderSection = (title: string, items: ArchivoItem[]) => {
     const isOpen = expanded[title] ?? false;
     const slice = isOpen ? items : items.slice(0, INITIAL_SHOWN);
@@ -156,7 +155,7 @@ export default function ReportesScreen() {
         <Text style={styles.sectionTitle}>{title}</Text>
 
         {slice.map((it) => (
-          <View key={it.path} style={styles.rowWrap}>
+          <View key={`${title}-${it.path}`} style={styles.rowWrap}>
             {renderRow(it)}
           </View>
         ))}
@@ -170,20 +169,19 @@ export default function ReportesScreen() {
     );
   };
 
-  // Secciones en orden alphabético como el mock
   const sectionEntries = Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
 
   return (
     <FadeWrapper>
       <HeaderOperario />
-      <View style={styles.container}>
-        <Text style={styles.pageTitle}>REPORTES</Text>
+      <View style={[styles.container, { backgroundColor: c.bg }]}>
+        <Text style={[styles.pageTitle, { color: c.text }]}>REPORTES</Text>
 
         {/* Buscador */}
         <View style={styles.searchWrap}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: c.text }]}
             placeholder="Buscar un reporte"
             placeholderTextColor="#9d9d9d"
             value={query}
@@ -218,28 +216,22 @@ function pickIcon(mime: string, name: string) {
   const lower = (mime || '').toLowerCase();
   const ext = (name.split('.').pop() || '').toLowerCase();
 
-  if (lower.includes('pdf') || ext === 'pdf') {
-    return { label: 'PDF', bg: '#e74c3c', fg: '#fff' };
-  }
-  if (lower.includes('sheet') || lower.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext)) {
-    return { label: 'XLS', bg: '#27ae60', fg: '#fff' };
-  }
-  if (lower.includes('word') || ['doc', 'docx'].includes(ext)) {
-    return { label: 'DOC', bg: '#2980b9', fg: '#fff' };
-  }
-  if (lower.includes('powerpoint') || ['ppt', 'pptx'].includes(ext)) {
-    return { label: 'PPT', bg: '#e67e22', fg: '#fff' };
-  }
-  return { label: 'FILE', bg: '#7f8c8d', fg: '#fff' };
+  if (lower.includes('pdf') || ext === 'pdf') return { label: 'PDF', bg: '#e74c3c' };
+  if (lower.includes('sheet') || lower.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext))
+    return { label: 'XLS', bg: '#27ae60' };
+  if (lower.includes('word') || ['doc', 'docx'].includes(ext))
+    return { label: 'DOC', bg: '#2980b9' };
+  if (lower.includes('powerpoint') || ['ppt', 'pptx'].includes(ext))
+    return { label: 'PPT', bg: '#e67e22' };
+  return { label: 'FILE', bg: '#7f8c8d' };
 }
 
 const styles = StyleSheet.create({
-  container: { paddingHorizontal: 14, paddingTop: 8 },
+  container: { flex: 1, paddingHorizontal: 14, paddingTop: 8 },
   pageTitle: {
     fontSize: 22,
     fontWeight: '900',
     textAlign: 'center',
-    color: '#111',
     letterSpacing: 1,
     marginBottom: 8,
   },
@@ -252,13 +244,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   searchIcon: { marginRight: 6, color: '#777' },
-  searchInput: { flex: 1, color: '#111', paddingVertical: 4 },
+  searchInput: { flex: 1, paddingVertical: 4 },
 
   sectionWrap: {
     borderRadius: 10,
     padding: 8,
     marginBottom: 14,
-    borderWidth: 2, // borde azul como tu mock
+    borderWidth: 2,
   },
   sectionTitle: {
     fontSize: 16,
@@ -291,8 +283,8 @@ const styles = StyleSheet.create({
   },
   iconTxt: { color: '#fff', fontWeight: '800', fontSize: 12 },
 
-  rowTitle: { fontWeight: '700', color: '#111' },
-  rowSub: { fontSize: 12 },
+  rowTitle: { fontWeight: '700' },
+  rowSub: { fontSize: 12, color: '#777' },
 
   pill: {
     marginHorizontal: 6,
