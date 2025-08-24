@@ -1,238 +1,87 @@
 // screens/archivos/archivos.ts
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
-import { API, BASE_URL } from '../../config/api';
+import { Platform } from 'react-native';
 
-// ===== Tipos (lado front) =====
+const BASE_URL = __DEV__
+  ? 'http://192.168.1.5:3550/api'
+  : 'http://192.168.1.5:3550/api'; // ajusta si usas prod
+
 export type ArchivoItem = {
-  codArchivo?: number;
   nombreOriginal: string;
-  path: string;
-  contentType: string;
-  sizeBytes: number;
-  fechaSubida: string;
+  path: string;            // fileId de Drive (ruta_archivo)
+  contentType: string;     // tipo_contenido
+  sizeBytes: string;       // string para evitar BigInt
+  fechaSubida: string;     // ISO (fecha_creacion)
   area?: string | null;
-  codUsuario?: number;
+  codUsuario?: number | null;
 };
 
-type ListadoRespCamel = {
-  total: number;
-  rows: Array<{
-    codArchivo?: number;
-    nombreOriginal: string;
-    path: string;
-    contentType: string | null;
-    sizeBytes: number | string;
-    fechaSubida: string;
-    area?: string | null;
-    usuario?: { codUsuario?: number };
-  }>;
-};
-
-type ListadoRespSnake = {
-  total: number;
-  rows: Array<{
-    cod_archivo?: number;
-    nombre_original: string;
-    ruta_archivo: string;
-    tipo_contenido: string | null;
-    tamano_bytes: number | string;
-    fecha_creacion: string;
-    area?: string | null;
-    cod_usuario?: number;
-  }>;
-};
-
-type ListadoRespRaw = ListadoRespCamel | ListadoRespSnake;
-type ListadoResp = { total: number; rows: ArchivoItem[] };
-type UrlSubidaResp = { url: string; path: string; precreado?: any | null };
-type UrlDescargaResp = { url: string };
-
-// ===== Helper fetch =====
-async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  console.log('➡️ FETCH', url, init?.method ?? 'GET');
-  const r = await fetch(url, init);
-  if (!r.ok) {
-    const txt = await r.text().catch(() => '');
-    throw new Error(`HTTP ${r.status} ${url}: ${txt || r.statusText}`);
-  }
-  return r.json() as Promise<T>;
-}
-
-// ===== Mapper BD → Front (tolera camelCase y snake_case) =====
-function mapRow(row: (ListadoRespCamel['rows'][number] & ListadoRespSnake['rows'][number])): ArchivoItem {
-  const codArchivo =
-    (row as any).codArchivo ?? (row as any).cod_archivo;
-  const nombreOriginal =
-    (row as any).nombreOriginal ?? (row as any).nombre_original;
-  const path =
-    (row as any).path ?? (row as any).ruta_archivo;
-  const contentType =
-    (row as any).contentType ?? (row as any).tipo_contenido ?? 'application/octet-stream';
-  const sizeRaw =
-    (row as any).sizeBytes ?? (row as any).tamano_bytes ?? 0;
-  const sizeBytes = typeof sizeRaw === 'string' ? Number(sizeRaw) : sizeRaw;
-  const fechaSubida =
-    (row as any).fechaSubida ?? (row as any).fecha_creacion;
-  const codUsuario =
-    (row as any).codUsuario ??
-    (row as any).cod_usuario ??
-    (row as any).usuario?.codUsuario;
-
+function mapRowToArchivoItem(row: any): ArchivoItem {
   return {
-    codArchivo,
-    nombreOriginal,
-    path,
-    contentType,
-    sizeBytes: Number(sizeBytes || 0),
-    fechaSubida,
-    area: (row as any).area ?? null,
-    codUsuario,
+    nombreOriginal: row?.nombreOriginal ?? row?.nombre_original ?? 'archivo',
+    path: row?.rutaArchivo ?? row?.ruta_archivo ?? '',
+    contentType: row?.tipoContenido ?? row?.tipo_contenido ?? 'application/octet-stream',
+    sizeBytes: String(row?.tamanoBytes ?? row?.tamano_bytes ?? '0'),
+    fechaSubida: row?.fechaCreacion ?? row?.fecha_creacion ?? new Date().toISOString(),
+    area: row?.area ?? null,
+    codUsuario: row?.codUsuario ?? row?.cod_usuario ?? null,
   };
 }
 
-// ===== CREATE =====
-
-// Subir con URL firmada (PUT directo a bucket / GCS)
-export async function seleccionarYSubir({
-  carpeta = 'docs',
-  codUsuario,
-}: {
-  carpeta?: string;
-  codUsuario?: number;
-}) {
-  const pick = await DocumentPicker.getDocumentAsync({ multiple: false });
-  if (pick.canceled || !pick.assets?.length) return { cancelado: true };
-
-  const asset = pick.assets[0];
-  const uri = asset.uri;
-  const nombre = asset.name ?? 'archivo.bin';
-  const tipo = asset.mimeType ?? 'application/octet-stream';
-
-  const body: any = { nombre, tipoContenido: tipo, carpeta };
-  if (codUsuario != null) body.codUsuario = codUsuario;
-
-  const { url, path } = await req<UrlSubidaResp>(API.archivo.urlSubida, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+async function safeFetch(url: string, init?: RequestInit) {
+  const res = await fetch(url, {
+    ...(init || {}),
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
   });
+  const text = await res.text();
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* noop */ }
 
-  const put = await FileSystem.uploadAsync(url, uri, {
-    httpMethod: 'PUT',
-    headers: { 'Content-Type': tipo },
-    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-  });
-  if (put.status !== 200 && put.status !== 201) {
-    throw new Error(`PUT upload failed ${put.status}: ${put.body ?? ''}`);
+  if (!res.ok) {
+    const msg = json?.message || `HTTP ${res.status} ${url}`;
+    throw new Error(msg);
   }
-
-  await req(API.archivo.confirmarTamano, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  });
-
-  return { ok: true, path, nombre, tipo };
+  return json;
 }
 
-// Subir pasando por backend (form-data)
-export async function subirViaBackend({ codUsuario }: { codUsuario?: number }) {
-  const pick = await DocumentPicker.getDocumentAsync({ multiple: false });
-  if (pick.canceled || !pick.assets?.length) return { cancelado: true };
-
-  const asset = pick.assets[0];
-  const uri = asset.uri;
-  const nombre = asset.name ?? 'archivo.bin';
-  const tipo = asset.mimeType ?? 'application/octet-stream';
-
-  const fd = new FormData();
-  (fd as any).append('archivo', { uri, name: nombre, type: tipo } as any);
-  if (codUsuario != null) fd.append('codUsuario', String(codUsuario));
-
-  const r = await fetch(API.archivo.subir, { method: 'POST', body: fd });
-  if (!r.ok) throw new Error(`POST /archivos/subir ${r.status}: ${await r.text()}`);
-  return r.json();
-}
-
-// ===== READ =====
-export async function listarArchivos({
-  codUsuario,
-  take = 50,
-  skip = 0,
-  admin = false,
-  q,
-  area,
-}: {
-  codUsuario?: number;
+/** Lista archivos desde /archivos/listar (mapea nombres a los que espera el front) */
+export async function listarArchivos(params: {
   take?: number;
   skip?: number;
-  admin?: boolean;
-  q?: string;
-  area?: string;
-}) {
-  let url: string;
-
-  if (admin) {
-    const params = new URLSearchParams();
-    params.set('take', String(take));
-    params.set('skip', String(skip));
-    if (q) params.set('q', q);
-    if (area) params.set('area', area);
-    url = `${BASE_URL}/archivos/listar?${params.toString()}`;
-  } else {
-    // ✅ API.archivo.listar ahora espera un objeto (no 3 args)
-    url = API.archivo.listar({ codUsuario, take, skip });
-    // Puedes agregar filtros extra si tu backend los soporta
-    if (q || area) {
-      const extra = new URLSearchParams();
-      if (q) extra.set('q', q);
-      if (area) extra.set('area', area);
-      url += `&${extra.toString()}`;
-    }
-  }
-
-  const raw = await req<ListadoRespRaw>(url);
-  const rows = (raw as any).rows?.map(mapRow) ?? [];
-  const total = (raw as any).total ?? rows.length;
-
-  return { total, rows } as ListadoResp;
-}
-
-export async function obtenerUrlDescarga(path: string) {
-  return req<UrlDescargaResp>(API.archivo.urlDescarga(path));
-}
-
-// ===== UPDATE =====
-export async function renombrarArchivo(path: string, nuevoNombre: string) {
-  return req<ArchivoItem>(API.archivo.renombrar, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path, nuevoNombre }),
-  });
-}
-
-// ===== DELETE =====
-export async function eliminarArchivo({
-  path,
-  codUsuario,
-}: {
-  path: string;
   codUsuario?: number;
 }) {
-  // Primero intenta DELETE con body; si falla, fallback a POST
-  try {
-    return await req<{ deleted?: boolean; eliminado?: boolean }>(API.archivo.eliminarDELETE, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codUsuario, path }),
-    });
-  } catch (e) {
-    // Fallback (habilita @Post('eliminar') en el controller si aún no lo tienes)
-    return req<{ deleted?: boolean; eliminado?: boolean }>(API.archivo.eliminarPOST, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codUsuario, path }),
-    });
-  }
+  const take = params.take ?? 100;
+  const skip = params.skip ?? 0;
+  const qs = new URLSearchParams();
+  qs.set('take', String(take));
+  qs.set('skip', String(skip));
+  if (params.codUsuario) qs.set('codUsuario', String(params.codUsuario));
+
+  const url = `${BASE_URL}/archivos/listar?${qs.toString()}`;
+  const data = await safeFetch(url);
+
+  const rows = Array.isArray(data?.rows) ? data.rows : data?.data || [];
+  const total = Number(data?.total ?? 0);
+  const items: ArchivoItem[] = rows.map(mapRowToArchivoItem);
+  return { total, items };
+}
+
+/** Pide URL de descarga pública a /archivos/url-descarga?path=... */
+export async function obtenerUrlDescarga(path: string) {
+  const url = `${BASE_URL}/archivos/url-descarga?path=${encodeURIComponent(path)}`;
+  const data = await safeFetch(url);
+  // backend puede devolver { url } o string; soporta ambos
+  return typeof data === 'string' ? data : (data?.url ?? data);
+}
+
+/** Elimina: usa POST /archivos/eliminar  (body: { path, codUsuario }) */
+export async function eliminarArchivo(path: string, codUsuario: number) {
+  const url = `${BASE_URL}/archivos/eliminar`;
+  const data = await safeFetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ path, codUsuario }),
+  });
+  return data?.deleted === true;
 }

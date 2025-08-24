@@ -1,354 +1,323 @@
 // screens/ReportesScreen.tsx
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  SafeAreaView,
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  ScrollView,
-  Alert,
+  View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, useColorScheme,
 } from 'react-native';
+import * as Linking from 'expo-linking';
 import FadeWrapper from '../components/FadeWrapper';
 import HeaderOperario from '../components/HeaderOperario';
-import { colors } from '../styles/globalStyles1';
 import {
   listarArchivos,
   obtenerUrlDescarga,
   eliminarArchivo,
+  type ArchivoItem,
 } from './archivos/archivos';
-import * as Linking from 'expo-linking';
 
-const FOOTER_HEIGHT = 64;
+type GroupMap = Record<string, ArchivoItem[]>;
 
-type Archivo = {
-  nombreOriginal: string;
-  path: string;
-  contentType: string;
-  sizeBytes: number;
-  fechaSubida: string;
-};
+const FOOTER_HEIGHT = 56;
+const INITIAL_SHOWN = 3;
 
 export default function ReportesScreen() {
+  const scheme = useColorScheme();
+  const dark = scheme === 'dark';
+
+  // paleta neutral como tu mock (fondo claro)
+  const c = {
+    bg: dark ? '#0f0f10' : '#f2f2f2',
+    card: dark ? '#1b1c1f' : '#e6e6e6',
+    section: dark ? '#232428' : '#dcdcdc',
+    text: dark ? '#111' : '#111',
+    textInv: '#fff',
+    soft: '#777',
+    border: dark ? '#36373b' : '#cfcfcf',
+    chip: dark ? '#2a2b2f' : '#d7d7d7',
+    pill: dark ? '#3a3b40' : '#cfcfcf',
+  };
+
   const [query, setQuery] = useState('');
-  const [archivos, setArchivos] = useState<Archivo[]>([]);
+  const [archivos, setArchivos] = useState<ArchivoItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const codUsuario = 1; // TODO: toma del contexto/auth
 
   const cargar = useCallback(async () => {
     try {
       setLoading(true);
-      // 👇 Admin: trae TODOS (no envía codUsuario)
-      const data = await listarArchivos({ admin: true, take: 100, skip: 0 });
-      setArchivos(data.rows ?? []);
+      const { items, total } = await listarArchivos({ take: 100, skip: 0, codUsuario });
+      setArchivos(items);
+      setTotal(total);
     } catch (e: any) {
       console.log('🛑 Error listando archivos:', e?.message);
-      setArchivos([]);
-      Alert.alert('Error', `No se pudo listar los archivos.\n${e?.message ?? ''}`);
+      Alert.alert('Error', e?.message ?? 'No se pudieron cargar los archivos');
     } finally {
       setLoading(false);
     }
+  }, [codUsuario]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const abrir = useCallback(async (item: ArchivoItem) => {
+    try {
+      const url = await obtenerUrlDescarga(item.path);
+      if (url) await Linking.openURL(url);
+    } catch (e: any) {
+      Alert.alert('Descarga', e?.message ?? 'No se pudo obtener la URL de descarga');
+    }
   }, []);
 
-  useEffect(() => {
-    cargar();
-  }, [cargar]);
+  const borrar = useCallback(async (item: ArchivoItem) => {
+    Alert.alert(
+      'Eliminar',
+      `¿Borrar "${item.nombreOriginal}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const ok = await eliminarArchivo(item.path, codUsuario);
+              if (ok) setArchivos(prev => prev.filter(a => a.path !== item.path));
+              else Alert.alert('Eliminar', 'No se pudo eliminar');
+            } catch (e: any) {
+              Alert.alert('Eliminar', e?.message ?? 'Error eliminando archivo');
+            }
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [codUsuario]);
 
-  // Agrupa visualmente: PDFs -> “Mantenimiento”; otros -> “Supervisión”
-  const { mant, sup } = useMemo(() => {
-    const filtra = (arr: Archivo[]) =>
-      arr.filter(a => a.nombreOriginal.toLowerCase().includes(query.toLowerCase()));
-
-    const _mant = archivos.filter(a => getExt(a.nombreOriginal) === 'PDF');
-    const _sup  = archivos.filter(a => getExt(a.nombreOriginal) !== 'PDF');
-
-    return { mant: filtra(_mant), sup: filtra(_sup) };
+  // Búsqueda
+  const filtrados = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return archivos;
+    return archivos.filter(a =>
+      a.nombreOriginal.toLowerCase().includes(q) ||
+      (a.area ?? '').toLowerCase().includes(q),
+    );
   }, [archivos, query]);
+
+  // Agrupar por area (o “Otros”)
+  const grupos: GroupMap = useMemo(() => {
+    const res: GroupMap = {};
+    for (const a of filtrados) {
+      const key = a.area?.trim() || 'Otros';
+      (res[key] ||= []).push(a);
+    }
+    // orden opcional por nombre
+    for (const k of Object.keys(res)) {
+      res[k].sort((x, y) => x.nombreOriginal.localeCompare(y.nombreOriginal));
+    }
+    return res;
+  }, [filtrados]);
+
+  const toggleMas = (seccion: string) =>
+    setExpanded(prev => ({ ...prev, [seccion]: !prev[seccion] }));
+
+  // --- Render de un item tipo “tarjeta” como el mock ---
+  const renderRow = (item: ArchivoItem) => {
+    const { label, bg, fg } = pickIcon(item.contentType, item.nombreOriginal);
+    return (
+      <View style={[styles.row, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={[styles.icon, { backgroundColor: bg }]}>
+          <Text style={[styles.iconTxt]}>{label}</Text>
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Text style={styles.rowTitle} numberOfLines={1}>{item.nombreOriginal}</Text>
+          {/* Autor: no lo tenemos en BD; muestro área o codUsuario como subtítulo */}
+          <Text style={[styles.rowSub, { color: c.soft }]} numberOfLines={1}>
+            {item.area ?? `Usuario ${item.codUsuario ?? ''}`}
+          </Text>
+        </View>
+
+        <TouchableOpacity style={[styles.pill, { backgroundColor: c.pill }]} onPress={() => abrir(item)}>
+          <Text style={styles.pillTxt}>Ver</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.close} onPress={() => borrar(item)}>
+          <Text style={styles.closeTxt}>✕</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // --- Render de sección (Mantenimiento / Supervisión / Otros) ---
+  const renderSection = (title: string, items: ArchivoItem[]) => {
+    const isOpen = expanded[title] ?? false;
+    const slice = isOpen ? items : items.slice(0, INITIAL_SHOWN);
+    return (
+      <View style={[styles.sectionWrap, { backgroundColor: c.section, borderColor: '#7aa3ff' }]}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+
+        {slice.map((it) => (
+          <View key={it.path} style={styles.rowWrap}>
+            {renderRow(it)}
+          </View>
+        ))}
+
+        {items.length > INITIAL_SHOWN && (
+          <TouchableOpacity style={[styles.moreBtn, { backgroundColor: '#cfcfcf' }]} onPress={() => toggleMas(title)}>
+            <Text style={styles.moreTxt}>{isOpen ? 'Menos' : 'Mas'}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  // Secciones en orden alphabético como el mock
+  const sectionEntries = Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
 
   return (
     <FadeWrapper>
-      <SafeAreaView style={styles.container}>
-        <HeaderOperario />
+      <HeaderOperario />
+      <View style={styles.container}>
+        <Text style={styles.pageTitle}>REPORTES</Text>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: FOOTER_HEIGHT + 20 }}
-        >
-          <Text style={styles.title}>REPORTES</Text>
+        {/* Buscador */}
+        <View style={styles.searchWrap}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar un reporte"
+            placeholderTextColor="#9d9d9d"
+            value={query}
+            onChangeText={setQuery}
+          />
+        </View>
 
-          {/* Buscador */}
-          <View style={styles.searchWrap}>
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Buscar un reporte"
-              placeholderTextColor="#9aa4ad"
-              style={styles.searchInput}
-            />
+        <View style={{ height: 10 }} />
+
+        {/* Listado por secciones */}
+        {sectionEntries.length === 0 ? (
+          <View style={{ paddingVertical: 24 }}>
+            <Text style={{ textAlign: 'center', color: '#777' }}>
+              {loading ? '' : 'Sin archivos'}
+            </Text>
           </View>
-
-          {/* Acciones: solo refrescar (botón pequeño) */}
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, gap: 8 }}>
-            <TinyBtn text={loading ? 'Act…' : 'Refrescar'} onPress={cargar} />
-          </View>
-
-          {/* Sección Mantenimiento */}
-          <Section title="Mantenimiento">
-            <FlatList
-              data={mant}
-              keyExtractor={(i) => i.path}
-              renderItem={({ item }) => (
-                <ReportItem
-                  item={item}
-                  onVer={() => handleVer(item)}
-                  onEliminar={() => handleEliminar(item, cargar)}
-                />
-              )}
-              ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
-              scrollEnabled={false}
-              contentContainerStyle={{ paddingVertical: 6 }}
-              ListEmptyComponent={
-                <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 8 }}>
-                  {archivos.length === 0 ? 'No hay archivos.' : 'Sin PDFs por ahora.'}
-                </Text>
-              }
-            />
-            <TinyLink text="Más" onPress={() => {}} />
-          </Section>
-
-          {/* Sección Supervisión */}
-          <Section title="Supervisión">
-            <FlatList
-              data={sup}
-              keyExtractor={(i) => i.path}
-              renderItem={({ item }) => (
-                <ReportItem
-                  item={item}
-                  onVer={() => handleVer(item)}
-                  onEliminar={() => handleEliminar(item, cargar)}
-                />
-              )}
-              ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
-              scrollEnabled={false}
-              contentContainerStyle={{ paddingVertical: 6 }}
-              ListEmptyComponent={
-                <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 8 }}>
-                  {archivos.length === 0 ? 'No hay archivos.' : 'Sin archivos para esta sección.'}
-                </Text>
-              }
-            />
-            <TinyLink text="Más" onPress={() => {}} />
-          </Section>
-        </ScrollView>
-      </SafeAreaView>
+        ) : (
+          <FlatList
+            data={sectionEntries}
+            keyExtractor={([name]) => name}
+            renderItem={({ item: [name, items] }) => renderSection(name, items)}
+            contentContainerStyle={{ paddingBottom: FOOTER_HEIGHT }}
+          />
+        )}
+      </View>
     </FadeWrapper>
   );
 }
 
-/* ---------------- Subcomponentes ---------------- */
+/** Icono simple por tipo */
+function pickIcon(mime: string, name: string) {
+  const lower = (mime || '').toLowerCase();
+  const ext = (name.split('.').pop() || '').toLowerCase();
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={sectionStyles.wrap}>
-      <Text style={sectionStyles.title}>{title}</Text>
-      <View style={sectionStyles.body}>{children}</View>
-    </View>
-  );
-}
-
-function ReportItem({
-  item,
-  onVer,
-  onEliminar,
-}: {
-  item: Archivo;
-  onVer: () => void;
-  onEliminar: () => void;
-}) {
-  const type = mapType(getExt(item.nombreOriginal));
-  return (
-    <View style={itemStyles.card}>
-      <View style={[itemStyles.icon, { backgroundColor: type.bg, borderColor: type.border }]}>
-        <Text style={itemStyles.iconLabel}>{type.label}</Text>
-      </View>
-
-      <View style={itemStyles.info}>
-        <Text numberOfLines={1} style={itemStyles.name}>
-          {item.nombreOriginal}
-        </Text>
-        <Text style={itemStyles.meta}>
-          {(item.sizeBytes / 1024).toFixed(1)} KB • {new Date(item.fechaSubida).toLocaleDateString()}
-        </Text>
-      </View>
-
-      <TouchableOpacity style={itemStyles.viewBtn} activeOpacity={0.9} onPress={onVer}>
-        <Text style={itemStyles.viewText}>Ver</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[itemStyles.viewBtn, { backgroundColor: '#FCE4EC', marginLeft: 6 }]}
-        activeOpacity={0.9}
-        onPress={onEliminar}
-      >
-        <Text style={[itemStyles.viewText, { color: '#C2185B' }]}>X</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-/* Botón pequeño y link pequeño (discretos) */
-function TinyBtn({ text, onPress }: { text: string; onPress: () => void }) {
-  return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      onPress={onPress}
-      style={{
-        height: 26,
-        paddingHorizontal: 10,
-        borderRadius: 10,
-        backgroundColor: '#D7DBDF',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: '#C9CED3',
-        minWidth: 64,
-        alignItems: 'center',
-      }}
-    >
-      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.navy }}>{text}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function TinyLink({ text, onPress }: { text: string; onPress: () => void }) {
-  return (
-    <TouchableOpacity onPress={onPress} style={{ alignSelf: 'flex-end', paddingTop: 6 }}>
-      <Text style={{ fontSize: 12, fontWeight: '700', color: '#1f6feb' }}>{text}</Text>
-    </TouchableOpacity>
-  );
-}
-
-/* ---------------- Handlers ---------------- */
-
-async function handleVer(item: Archivo) {
-  try {
-    const { url } = await obtenerUrlDescarga(item.path);
-    await Linking.openURL(url);
-  } catch (e: any) {
-    Alert.alert('Error', 'No se pudo abrir el archivo.');
+  if (lower.includes('pdf') || ext === 'pdf') {
+    return { label: 'PDF', bg: '#e74c3c', fg: '#fff' };
   }
-}
-
-async function handleEliminar(item: Archivo, recargar: () => Promise<void>) {
-  Alert.alert('Eliminar', '¿Deseas eliminar este archivo?', [
-    { text: 'Cancelar', style: 'cancel' },
-    {
-      text: 'Eliminar',
-      style: 'destructive',
-      onPress: async () => {
-        try {
-          await eliminarArchivo({ codUsuario: 1, path: item.path });
-          await recargar();
-        } catch (e: any) {
-          Alert.alert('Error', 'No se pudo eliminar el archivo.');
-        }
-      },
-    },
-  ]);
-}
-
-/* ---------------- Helpers UI ---------------- */
-
-function getExt(name: string) {
-  const parts = name.split('.');
-  return (parts.length > 1 ? parts.pop()! : '?').toUpperCase();
-}
-
-function mapType(ext: string) {
-  switch (ext) {
-    case 'PDF': return { label: 'PDF', bg: '#EF5350', border: '#C62828' };
-    case 'XLS':
-    case 'XLSX':
-    case 'CSV': return { label: 'XLS', bg: '#66BB6A', border: '#2E7D32' };
-    case 'DOC':
-    case 'DOCX': return { label: 'W', bg: '#42A5F5', border: '#1565C0' };
-    case 'PPT':
-    case 'PPTX': return { label: 'PPT', bg: '#FFA726', border: '#EF6C00' };
-    default: return { label: '?', bg: '#BDBDBD', border: '#9E9E9E' };
+  if (lower.includes('sheet') || lower.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext)) {
+    return { label: 'XLS', bg: '#27ae60', fg: '#fff' };
   }
+  if (lower.includes('word') || ['doc', 'docx'].includes(ext)) {
+    return { label: 'DOC', bg: '#2980b9', fg: '#fff' };
+  }
+  if (lower.includes('powerpoint') || ['ppt', 'pptx'].includes(ext)) {
+    return { label: 'PPT', bg: '#e67e22', fg: '#fff' };
+  }
+  return { label: 'FILE', bg: '#7f8c8d', fg: '#fff' };
 }
-
-/* ---------------- Estilos ---------------- */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-  title: {
-    fontSize: 20,
+  container: { paddingHorizontal: 14, paddingTop: 8 },
+  pageTitle: {
+    fontSize: 22,
     fontWeight: '900',
-    letterSpacing: 0.5,
-    color: colors.navy,
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  searchWrap: {
-    marginHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: '#E6E9ED',
+    textAlign: 'center',
+    color: '#111',
+    letterSpacing: 1,
     marginBottom: 8,
   },
-  searchInput: { height: 36, paddingHorizontal: 12, color: '#1F2937' },
-});
-
-const sectionStyles = StyleSheet.create({
-  wrap: { paddingHorizontal: 16, marginTop: 10, marginBottom: 10 },
-  title: {
-    backgroundColor: '#D0D3D6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    fontWeight: '900',
-    color: colors.navy,
-  },
-  body: {
-    backgroundColor: '#ECEDEE',
-    padding: 8,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-  },
-});
-
-const itemStyles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#D5DADE',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+  searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#dedede',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  searchIcon: { marginRight: 6, color: '#777' },
+  searchInput: { flex: 1, color: '#111', paddingVertical: 4 },
+
+  sectionWrap: {
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 14,
+    borderWidth: 2, // borde azul como tu mock
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#ffffff',
+    backgroundColor: '#7aa3ff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+
+  rowWrap: { marginBottom: 8 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 10,
   },
   icon: {
-    width: 34, height: 34,
+    width: 36,
+    height: 36,
     borderRadius: 6,
-    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
-  iconLabel: { fontWeight: '900', color: colors.white, fontSize: 12 },
-  info: { flex: 1, paddingRight: 8 },
-  name: { fontWeight: '800', color: '#2A2A2A' },
-  meta: { fontSize: 12, color: '#6B7280' },
-  // 🔻 Botones más pequeños
-  viewBtn: {
-    height: 26,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: '#D0D3D6',
+  iconTxt: { color: '#fff', fontWeight: '800', fontSize: 12 },
+
+  rowTitle: { fontWeight: '700', color: '#111' },
+  rowSub: { fontSize: 12 },
+
+  pill: {
+    marginHorizontal: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 100,
+  },
+  pillTxt: { color: '#555', fontWeight: '700' },
+
+  close: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#d9d9d9',
   },
-  viewText: { fontWeight: '800', color: colors.navy, fontSize: 12 },
+  closeTxt: { color: '#333', fontWeight: '700' },
+
+  moreBtn: {
+    alignSelf: 'center',
+    marginTop: 6,
+    paddingHorizontal: 30,
+    paddingVertical: 6,
+    borderRadius: 100,
+  },
+  moreTxt: { color: '#6b6b6b', fontWeight: '800' },
 });
