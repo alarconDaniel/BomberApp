@@ -17,6 +17,8 @@ export default function HeaderOperario() {
   );
 }
 
+
+
 const styles = StyleSheet.create({
   containerHeader: {
     paddingHorizontal: 16,
