@@ -1,5 +1,5 @@
 // screens/ReportesScreen.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView,
   View,
@@ -9,45 +9,62 @@ import {
   TouchableOpacity,
   FlatList,
   ScrollView,
+  Alert,
 } from 'react-native';
 import FadeWrapper from '../components/FadeWrapper';
 import HeaderOperario from '../components/HeaderOperario';
-import CustomFooter from '../components/CustomFooter';
 import { colors } from '../styles/globalStyles1';
+import {
+  listarArchivos,
+  obtenerUrlDescarga,
+  eliminarArchivo,
+} from './archivos/archivos';
+import * as Linking from 'expo-linking';
 
 const FOOTER_HEIGHT = 64;
 
-type FileType = 'pdf' | 'xls' | 'doc' | 'ppt';
-type Report = {
-  id: string;
-  name: string;         // con extensión para mostrar
-  author: string;
-  type: FileType;
+type Archivo = {
+  nombreOriginal: string;
+  path: string;
+  contentType: string;
+  sizeBytes: number;
+  fechaSubida: string;
 };
-
-const MANTENIMIENTO: Report[] = [
-  { id: 'm1', name: 'ManualGrúa.pdf', author: 'Daniel Andres Ulloa', type: 'pdf' },
-  { id: 'm2', name: 'ManualAeroimpresor.pdf', author: 'Luis Carlos Perez', type: 'pdf' },
-  { id: 'm3', name: 'ManualEscalera.pdf', author: 'Juan Andres Silva', type: 'pdf' },
-];
-
-const SUPERVISION: Report[] = [
-  { id: 's1', name: 'inventario.xls', author: 'Daniel Andres Ulloa', type: 'xls' },
-  { id: 's2', name: 'importancia_epp.docx', author: 'Luis Carlos Perez', type: 'doc' },
-  { id: 's3', name: 'EPP.ppt', author: 'Juan Andres Silva', type: 'ppt' },
-];
 
 export default function ReportesScreen() {
   const [query, setQuery] = useState('');
+  const [archivos, setArchivos] = useState<Archivo[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const mantFiltered = useMemo(
-    () => MANTENIMIENTO.filter(r => r.name.toLowerCase().includes(query.toLowerCase())),
-    [query]
-  );
-  const supFiltered = useMemo(
-    () => SUPERVISION.filter(r => r.name.toLowerCase().includes(query.toLowerCase())),
-    [query]
-  );
+  const cargar = useCallback(async () => {
+    try {
+      setLoading(true);
+      // 👇 Admin: trae TODOS (no envía codUsuario)
+      const data = await listarArchivos({ admin: true, take: 100, skip: 0 });
+      setArchivos(data.rows ?? []);
+    } catch (e: any) {
+      console.log('🛑 Error listando archivos:', e?.message);
+      setArchivos([]);
+      Alert.alert('Error', `No se pudo listar los archivos.\n${e?.message ?? ''}`);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  // Agrupa visualmente: PDFs -> “Mantenimiento”; otros -> “Supervisión”
+  const { mant, sup } = useMemo(() => {
+    const filtra = (arr: Archivo[]) =>
+      arr.filter(a => a.nombreOriginal.toLowerCase().includes(query.toLowerCase()));
+
+    const _mant = archivos.filter(a => getExt(a.nombreOriginal) === 'PDF');
+    const _sup  = archivos.filter(a => getExt(a.nombreOriginal) !== 'PDF');
+
+    return { mant: filtra(_mant), sup: filtra(_sup) };
+  }, [archivos, query]);
 
   return (
     <FadeWrapper>
@@ -71,35 +88,59 @@ export default function ReportesScreen() {
             />
           </View>
 
+          {/* Acciones: solo refrescar (botón pequeño) */}
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, gap: 8 }}>
+            <TinyBtn text={loading ? 'Act…' : 'Refrescar'} onPress={cargar} />
+          </View>
+
           {/* Sección Mantenimiento */}
           <Section title="Mantenimiento">
             <FlatList
-              data={mantFiltered}
-              keyExtractor={(i) => i.id}
-              renderItem={({ item }) => <ReportItem item={item} />}
-              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              data={mant}
+              keyExtractor={(i) => i.path}
+              renderItem={({ item }) => (
+                <ReportItem
+                  item={item}
+                  onVer={() => handleVer(item)}
+                  onEliminar={() => handleEliminar(item, cargar)}
+                />
+              )}
+              ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
               scrollEnabled={false}
-              contentContainerStyle={{ paddingVertical: 8 }}
+              contentContainerStyle={{ paddingVertical: 6 }}
+              ListEmptyComponent={
+                <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 8 }}>
+                  {archivos.length === 0 ? 'No hay archivos.' : 'Sin PDFs por ahora.'}
+                </Text>
+              }
             />
-            <RoundedBtn text="Más" onPress={() => {}} />
+            <TinyLink text="Más" onPress={() => {}} />
           </Section>
 
           {/* Sección Supervisión */}
           <Section title="Supervisión">
             <FlatList
-              data={supFiltered}
-              keyExtractor={(i) => i.id}
-              renderItem={({ item }) => <ReportItem item={item} />}
-              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              data={sup}
+              keyExtractor={(i) => i.path}
+              renderItem={({ item }) => (
+                <ReportItem
+                  item={item}
+                  onVer={() => handleVer(item)}
+                  onEliminar={() => handleEliminar(item, cargar)}
+                />
+              )}
+              ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
               scrollEnabled={false}
-              contentContainerStyle={{ paddingVertical: 8 }}
+              contentContainerStyle={{ paddingVertical: 6 }}
+              ListEmptyComponent={
+                <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 8 }}>
+                  {archivos.length === 0 ? 'No hay archivos.' : 'Sin archivos para esta sección.'}
+                </Text>
+              }
             />
-            <RoundedBtn text="Más" onPress={() => {}} />
+            <TinyLink text="Más" onPress={() => {}} />
           </Section>
         </ScrollView>
-
-        {/* Footer fijo */}
-        
       </SafeAreaView>
     </FadeWrapper>
   );
@@ -107,13 +148,7 @@ export default function ReportesScreen() {
 
 /* ---------------- Subcomponentes ---------------- */
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={sectionStyles.wrap}>
       <Text style={sectionStyles.title}>{title}</Text>
@@ -122,69 +157,125 @@ function Section({
   );
 }
 
-function ReportItem({ item }: { item: Report }) {
-  const accent = getTypeColor(item.type);
-  const logo = getTypeLabel(item.type);
-
+function ReportItem({
+  item,
+  onVer,
+  onEliminar,
+}: {
+  item: Archivo;
+  onVer: () => void;
+  onEliminar: () => void;
+}) {
+  const type = mapType(getExt(item.nombreOriginal));
   return (
     <View style={itemStyles.card}>
-      {/* Icono de tipo (cuadro con etiqueta) */}
-      <View style={[itemStyles.icon, { backgroundColor: accent.bg, borderColor: accent.border }]}>
-        <Text style={itemStyles.iconLabel}>{logo}</Text>
+      <View style={[itemStyles.icon, { backgroundColor: type.bg, borderColor: type.border }]}>
+        <Text style={itemStyles.iconLabel}>{type.label}</Text>
       </View>
 
-      {/* Info */}
       <View style={itemStyles.info}>
         <Text numberOfLines={1} style={itemStyles.name}>
-          {item.name}
+          {item.nombreOriginal}
         </Text>
-        <Text style={itemStyles.author}>{item.author}</Text>
+        <Text style={itemStyles.meta}>
+          {(item.sizeBytes / 1024).toFixed(1)} KB • {new Date(item.fechaSubida).toLocaleDateString()}
+        </Text>
       </View>
 
-      {/* Botón Ver */}
-      <TouchableOpacity style={itemStyles.viewBtn} activeOpacity={0.9} onPress={() => {}}>
+      <TouchableOpacity style={itemStyles.viewBtn} activeOpacity={0.9} onPress={onVer}>
         <Text style={itemStyles.viewText}>Ver</Text>
       </TouchableOpacity>
 
-      {/* Dos cuadraditos */}
-      <View style={itemStyles.squares}>
-        <View style={itemStyles.square} />
-        <View style={itemStyles.square} />
-      </View>
+      <TouchableOpacity
+        style={[itemStyles.viewBtn, { backgroundColor: '#FCE4EC', marginLeft: 6 }]}
+        activeOpacity={0.9}
+        onPress={onEliminar}
+      >
+        <Text style={[itemStyles.viewText, { color: '#C2185B' }]}>X</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
-function RoundedBtn({ text, onPress }: { text: string; onPress: () => void }) {
+/* Botón pequeño y link pequeño (discretos) */
+function TinyBtn({ text, onPress }: { text: string; onPress: () => void }) {
   return (
-    <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={roundedStyles.btn}>
-      <Text style={roundedStyles.text}>{text}</Text>
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      style={{
+        height: 26,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        backgroundColor: '#D7DBDF',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#C9CED3',
+        minWidth: 64,
+        alignItems: 'center',
+      }}
+    >
+      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.navy }}>{text}</Text>
     </TouchableOpacity>
   );
 }
 
-/* ---------------- Helpers ---------------- */
+function TinyLink({ text, onPress }: { text: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} style={{ alignSelf: 'flex-end', paddingTop: 6 }}>
+      <Text style={{ fontSize: 12, fontWeight: '700', color: '#1f6feb' }}>{text}</Text>
+    </TouchableOpacity>
+  );
+}
 
-function getTypeColor(type: FileType) {
-  switch (type) {
-    case 'pdf':
-      return { bg: '#EF5350', border: '#C62828' }; // rojo
-    case 'xls':
-      return { bg: '#66BB6A', border: '#2E7D32' }; // verde
-    case 'doc':
-      return { bg: '#42A5F5', border: '#1565C0' }; // azul
-    case 'ppt':
-      return { bg: '#FFA726', border: '#EF6C00' }; // naranja
-    default:
-      return { bg: '#BDBDBD', border: '#9E9E9E' };
+/* ---------------- Handlers ---------------- */
+
+async function handleVer(item: Archivo) {
+  try {
+    const { url } = await obtenerUrlDescarga(item.path);
+    await Linking.openURL(url);
+  } catch (e: any) {
+    Alert.alert('Error', 'No se pudo abrir el archivo.');
   }
 }
-function getTypeLabel(type: FileType) {
-  if (type === 'pdf') return 'PDF';
-  if (type === 'xls') return 'XLS';
-  if (type === 'doc') return 'W';
-  if (type === 'ppt') return 'PPT';
-  return '?';
+
+async function handleEliminar(item: Archivo, recargar: () => Promise<void>) {
+  Alert.alert('Eliminar', '¿Deseas eliminar este archivo?', [
+    { text: 'Cancelar', style: 'cancel' },
+    {
+      text: 'Eliminar',
+      style: 'destructive',
+      onPress: async () => {
+        try {
+          await eliminarArchivo({ codUsuario: 1, path: item.path });
+          await recargar();
+        } catch (e: any) {
+          Alert.alert('Error', 'No se pudo eliminar el archivo.');
+        }
+      },
+    },
+  ]);
+}
+
+/* ---------------- Helpers UI ---------------- */
+
+function getExt(name: string) {
+  const parts = name.split('.');
+  return (parts.length > 1 ? parts.pop()! : '?').toUpperCase();
+}
+
+function mapType(ext: string) {
+  switch (ext) {
+    case 'PDF': return { label: 'PDF', bg: '#EF5350', border: '#C62828' };
+    case 'XLS':
+    case 'XLSX':
+    case 'CSV': return { label: 'XLS', bg: '#66BB6A', border: '#2E7D32' };
+    case 'DOC':
+    case 'DOCX': return { label: 'W', bg: '#42A5F5', border: '#1565C0' };
+    case 'PPT':
+    case 'PPTX': return { label: 'PPT', bg: '#FFA726', border: '#EF6C00' };
+    default: return { label: '?', bg: '#BDBDBD', border: '#9E9E9E' };
+  }
 }
 
 /* ---------------- Estilos ---------------- */
@@ -207,22 +298,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   searchInput: { height: 36, paddingHorizontal: 12, color: '#1F2937' },
-
-  footer: {
-    position: 'absolute',
-    left: 0, right: 0, bottom: 0,
-    height: FOOTER_HEIGHT,
-    backgroundColor: colors.white,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -2 },
-  },
 });
 
 const sectionStyles = StyleSheet.create({
-  wrap: { paddingHorizontal: 16, marginBottom: 10 },
+  wrap: { paddingHorizontal: 16, marginTop: 10, marginBottom: 10 },
   title: {
     backgroundColor: '#D0D3D6',
     paddingHorizontal: 12,
@@ -251,7 +330,6 @@ const itemStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-
   icon: {
     width: 34, height: 34,
     borderRadius: 6,
@@ -261,34 +339,16 @@ const itemStyles = StyleSheet.create({
     marginRight: 10,
   },
   iconLabel: { fontWeight: '900', color: colors.white, fontSize: 12 },
-
   info: { flex: 1, paddingRight: 8 },
   name: { fontWeight: '800', color: '#2A2A2A' },
-  author: { fontSize: 12, color: '#6B7280' },
-
+  meta: { fontSize: 12, color: '#6B7280' },
+  // 🔻 Botones más pequeños
   viewBtn: {
-    height: 30,
-    paddingHorizontal: 12,
-    borderRadius: 16,
+    height: 26,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     backgroundColor: '#D0D3D6',
     justifyContent: 'center',
-    marginRight: 8,
   },
-  viewText: { fontWeight: '800', color: colors.navy },
-
-  squares: { flexDirection: 'row', gap: 6 },
-  square: { width: 22, height: 22, backgroundColor: '#B0B0B0', borderRadius: 6 },
-});
-
-const roundedStyles = StyleSheet.create({
-  btn: {
-    alignSelf: 'center',
-    marginTop: 6,
-    height: 30,
-    paddingHorizontal: 18,
-    backgroundColor: '#D0D3D6',
-    borderRadius: 16,
-    justifyContent: 'center',
-  },
-  text: { fontWeight: '800', color: colors.navy },
+  viewText: { fontWeight: '800', color: colors.navy, fontSize: 12 },
 });

@@ -1,5 +1,5 @@
 // theme/GlobalStyles.ts
-import { StyleSheet } from 'react-native';
+import { StyleSheet, ViewStyle, TextStyle } from 'react-native';
 
 // Mantengo estos estilos "legacy" por compatibilidad con cualquier uso previo.
 // Si no los usas en ninguna parte, puedes eliminarlos con tranquilidad.
@@ -41,6 +41,49 @@ export const styles = StyleSheet.create({
         color: '#007bff',
     },
 });
+
+
+
+export const globalStyles = StyleSheet.create<{
+  container: ViewStyle;
+  title: TextStyle;
+  btn: ViewStyle;
+  text: TextStyle;
+}>({
+  container: { flex: 1, backgroundColor: '#fff' },
+  title: { fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+
+  // 🔹 Botón base
+  btn: {
+    backgroundColor: '#2196F3',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+
+  // 🔹 Texto del botón
+  text: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 16,
+    letterSpacing: 0.5,
+  },
+});
+
+// 🔹 Radios reutilizables
+export type RoundedKey = 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+
+export const rounded = StyleSheet.create<Record<RoundedKey, ViewStyle>>({
+  none: { borderRadius: 0 },
+  sm: { borderRadius: 4 },
+  md: { borderRadius: 10 },
+  lg: { borderRadius: 14 },
+  xl: { borderRadius: 18 },
+  '2xl': { borderRadius: 24 },
+  full: { borderRadius: 9999 },
+});
+
+
 
 /**
  * Variantes tipográficas globales
