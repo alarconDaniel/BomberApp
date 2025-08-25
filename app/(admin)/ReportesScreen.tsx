@@ -11,8 +11,7 @@ import {
   obtenerUrlDescarga,
   eliminarArchivo,
   type ArchivoItem,
-} from './archivos/archivos';
-
+}from '../../config/archivos/archivo';
 type GroupMap = Record<string, ArchivoItem[]>;
 
 const FOOTER_HEIGHT = 56;
