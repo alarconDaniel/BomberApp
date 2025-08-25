@@ -1,14 +1,13 @@
-// screens/OperarioFormScreen.tsx
+// app/(admin)/(tabs)/operarios/crear.tsx  ← o donde tengas la ruta
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, Alert,
   ActivityIndicator, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import type { RootStackParamList } from '../navigation/StackNavigator';
-import FadeWrapper from '../../components/FadeWrapper';
-import { colors } from '../../styles/globalStyles1';
-import { API } from '../../config/api';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import FadeWrapper from '../FadeWrapper';           // ajusta rutas
+import { colors } from '../../styles/globalStyles1';              // ajusta rutas
+import { API } from '../../config/api';                           // ajusta rutas
 
 type Mode = 'create' | 'edit';
 
@@ -30,12 +29,11 @@ const ROLES = [
 ] as const;
 
 export default function OperarioFormScreen() {
-  const navigation = useNavigation<any>();
-  const { params } = useRoute<RouteProp<RootStackParamList, 'OperarioForm'>>();
-  const mode: Mode = params?.mode ?? 'create';
+  const router = useRouter();
+  const { mode: modeParam, id } = useLocalSearchParams<{ mode?: string; id?: string }>();
 
-  const rawId = params?.id as number | string | undefined;
-  const editingId = typeof rawId === 'string' ? parseInt(rawId, 10) : rawId;
+  const mode: Mode = (modeParam === 'edit' ? 'edit' : 'create');
+  const editingId = id ? Number(id) : undefined;
 
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
@@ -54,14 +52,14 @@ export default function OperarioFormScreen() {
           const r = await fetch(API.usuario.obtener(editingId));
           const txt = await r.text();
           if (!r.ok) throw new Error(txt || `HTTP ${r.status}`);
-          let u: UsuarioResponse; try { u = JSON.parse(txt); } catch { throw new Error('JSON inválido'); }
+          const u: UsuarioResponse = JSON.parse(txt);
 
           setNombre(u.nombreUsuario ?? u.nombre_usuario ?? '');
           setApellido(u.apellidoUsuario ?? u.apellido_usuario ?? '');
           setNickname((u.nicknameUsuario ?? u.nickname_usuario ?? '') || '');
           setCorreo(u.correoUsuario ?? u.correo_usuario ?? '');
           setCedula(u.cedulaUsuario ?? u.cedula_usuario ?? '');
-          setCodRol(u.codRol ?? u.cod_rol ?? ROLES[1].value); // 👈 acepta snake_case
+          setCodRol(u.codRol ?? u.cod_rol ?? ROLES[1].value);
           setContrasena('');
         } catch (e: any) {
           Alert.alert('Error', e?.message ?? 'No se pudo cargar el usuario');
@@ -75,21 +73,13 @@ export default function OperarioFormScreen() {
   const validar = () => {
     if (mode === 'create' && !codRol) { Alert.alert('Falta rol', 'Selecciona un rol'); return false; }
     if (!nombre.trim() || !apellido.trim() || !correo.trim() || !cedula.trim()) {
-      Alert.alert('Datos incompletos', 'Completa nombre, apellido, correo y cédula.');
-      return false;
+      Alert.alert('Datos incompletos', 'Completa nombre, apellido, correo y cédula.'); return false;
     }
     if (mode === 'create' && !contrasena.trim()) {
-      Alert.alert('Contraseña requerida', 'Ingresa una contraseña para crear el usuario.');
-      return false;
+      Alert.alert('Contraseña requerida', 'Ingresa una contraseña para crear el usuario.'); return false;
     }
-    if (!/\S+@\S+\.\S+/.test(correo)) {
-      Alert.alert('Correo inválido', 'Verifica el formato del correo.');
-      return false;
-    }
-    if (cedula.length > 45) {
-      Alert.alert('Cédula muy larga', 'Máximo 45 caracteres.');
-      return false;
-    }
+    if (!/\S+@\S+\.\S+/.test(correo)) { Alert.alert('Correo inválido', 'Verifica el formato del correo.'); return false; }
+    if (cedula.length > 45) { Alert.alert('Cédula muy larga', 'Máximo 45 caracteres.'); return false; }
     return true;
   };
 
@@ -97,7 +87,6 @@ export default function OperarioFormScreen() {
     if (!validar()) return;
     const isCreate = mode === 'create';
 
-    // ⬇⬇⬇ ENVÍO EN snake_case (lo que espera tu backend)
     const body = isCreate
       ? {
           cod_rol: codRol,
@@ -131,7 +120,7 @@ export default function OperarioFormScreen() {
       if (!res.ok) throw new Error(txt || `HTTP ${res.status}`);
 
       Alert.alert('Éxito', isCreate ? 'Usuario creado' : 'Usuario actualizado', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+        { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
       const msg = String(e?.message || '');

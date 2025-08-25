@@ -1,27 +1,49 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useLocalSearchParams } from 'expo-router';
 
-import { useTheme } from '../../../theme/ThemeProvider';
-import { makeGlobalStyles } from '../../../styles/globalStyles';
-import type { RootStackParamList } from '../../navigation/StackNavigator';
+import { useTheme } from '../../../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../../../theme/GlobalStyles';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'RetoMultiple'>;
+// Tipo de opción para evitar "any"
+type Opcion = { id: string; texto: string; correcta: boolean };
 
-export default function RetoMultipleScreen({ route }: Props) {
+export default function RetoMultipleScreen() {
   const { colors } = useTheme();
-  const g = makeGlobalStyles(colors);
-  const s = getStyles(colors);
+  const g = useMemo(() => makeGlobalStyles(colors), [colors]);
+  const s = useMemo(() => getStyles(colors), [colors]);
 
-  // Demo si no pasan params
-  const pregunta = route.params?.pregunta ?? '¿Cuál(es) de las siguientes son EPP?';
-  const opciones = route.params?.opciones ?? [
-    { id: 'a', texto: 'Casco', correcta: true },
-    { id: 'b', texto: 'Gorra', correcta: false },
-    { id: 'c', texto: 'Guantes', correcta: true },
-    { id: 'd', texto: 'Sandalias', correcta: false },
-  ];
-  const multiple = route.params?.multiple ?? true;
+  // Params desde Expo Router
+  const params = useLocalSearchParams<{
+    pregunta?: string;
+    opciones?: string; // vendrá serializado casi siempre
+    multiple?: string; // "true"/"false"
+  }>();
+
+  const pregunta =
+    params?.pregunta ?? '¿Cuál(es) de las siguientes son EPP?';
+
+  // Opciones: soporta JSON string o usa demo
+  const opcionesParam = params?.opciones;
+  const opciones: Opcion[] = useMemo(() => {
+    if (typeof opcionesParam === 'string') {
+      try {
+        const parsed = JSON.parse(opcionesParam) as Opcion[];
+        if (Array.isArray(parsed)) return parsed;
+      } catch { /* ignore */ }
+    }
+    return [
+      { id: 'a', texto: 'Casco', correcta: true },
+      { id: 'b', texto: 'Gorra', correcta: false },
+      { id: 'c', texto: 'Guantes', correcta: true },
+      { id: 'd', texto: 'Sandalias', correcta: false },
+    ];
+  }, [opcionesParam]);
+
+  const multiple =
+    (typeof params?.multiple === 'string'
+      ? params.multiple === 'true'
+      : true);
 
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
   const [verResultado, setVerResultado] = useState(false);
@@ -45,27 +67,31 @@ export default function RetoMultipleScreen({ route }: Props) {
   };
 
   const aciertos = useMemo(() => {
-    let ok = 0; seleccion.forEach(id => { if (correctas.has(id)) ok++; });
+    let ok = 0;
+    seleccion.forEach(id => { if (correctas.has(id)) ok++; });
     return ok;
   }, [seleccion, correctas]);
 
   return (
     <ScrollView contentContainerStyle={s.wrap} style={{ backgroundColor: colors.bg }}>
-      <Text style={[g.text.h2, { marginBottom: 6 }]}>
-        {pregunta}
-      </Text>
+      <Text style={[g.text.h2, { marginBottom: 6 }]}>{pregunta}</Text>
 
-      {opciones.map(o => {
+      {opciones.map((o) => {
         const checked = seleccion.has(o.id);
         const esCorrecta = correctas.has(o.id);
 
-        // Colores por estado (tema-aware)
+        // Colores por estado (sin successDark)
         let box = { backgroundColor: colors.card, borderColor: colors.inputBorder };
-        if (checked && !verResultado) box = { backgroundColor: colors.primarySoft, borderColor: colors.primarySoft };
-        if (verResultado) {
-          if (checked && esCorrecta) box = { backgroundColor: colors.successSoft, borderColor: colors.success };
-          else if (checked && !esCorrecta) box = { backgroundColor: colors.dangerSoft ?? 'rgba(239,68,68,0.14)', borderColor: colors.danger };
-          else if (!checked && esCorrecta) box = { backgroundColor: colors.warningSoft, borderColor: colors.warning };
+        if (checked && !verResultado) {
+          box = { backgroundColor: colors.primarySoft, borderColor: colors.primarySoft };
+        } else if (verResultado) {
+          if (checked && esCorrecta) {
+            box = { backgroundColor: colors.successSoft, borderColor: colors.success };
+          } else if (checked && !esCorrecta) {
+            box = { backgroundColor: colors.dangerSoft ?? 'rgba(239,68,68,0.14)', borderColor: colors.danger };
+          } else if (!checked && esCorrecta) {
+            box = { backgroundColor: colors.warningSoft, borderColor: colors.warning };
+          }
         }
 
         return (
@@ -99,7 +125,7 @@ export default function RetoMultipleScreen({ route }: Props) {
   );
 }
 
-function getStyles(c: import('../../../theme/ThemeProvider').Palette) {
+function getStyles(c: import('../../../../theme/ThemeProvider').Palette) {
   return StyleSheet.create({
     wrap: { padding: 16, gap: 10 },
     option: {

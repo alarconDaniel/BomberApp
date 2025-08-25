@@ -1,14 +1,13 @@
+// app/(admin)/(tabs)/operarios/index.tsx  ← o donde tengas esta pantalla
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView, View, Text, StyleSheet, TextInput,
   TouchableOpacity, FlatList, Alert, ActivityIndicator,
 } from 'react-native';
 
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/StackNavigator';
+import { useRouter, useFocusEffect } from 'expo-router';
 
-import FadeWrapper from '../../components/FadeWrapper';
+import FadeWrapper from '../../components/FadeWrapper';          // ajusta rutas si difiere
 import HeaderOperario from '../../components/HeaderOperario';
 import { colors } from '../../styles/globalStyles1';
 import { API } from '../../config/api';
@@ -17,7 +16,7 @@ const FOOTER_HEIGHT = 64;
 
 /* ---------- Tipos ---------- */
 type OperarioUI = {
-  id: string; // para la FlatList y navegación
+  id: string;
   nombre: string;
   cargo: 'Administrador' | 'Operario';
 };
@@ -28,7 +27,7 @@ type UsuarioDTO = {
   apellidoUsuario: string;
   correoUsuario: string;
   contrasenaUsuario: string;
-  codRol: number; // 1 = Administrador, 2 = Operario (ajústalo si difiere)
+  codRol: number; // 1 = Admin, 2 = Operario
 };
 
 /* ---------- Mapeos ---------- */
@@ -42,8 +41,7 @@ function mapUsuarioToUI(u: UsuarioDTO): OperarioUI {
 
 /* ---------- Pantalla ---------- */
 export default function OperariosScreen() {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const router = useRouter();
 
   const [query, setQuery] = useState('');
   const [data, setData] = useState<OperarioUI[]>([]);
@@ -116,7 +114,7 @@ export default function OperariosScreen() {
   // Filtro local por nombre
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? data.filter((o: OperarioUI) => o.nombre.toLowerCase().includes(q)) : data;
+    return q ? data.filter((o) => o.nombre.toLowerCase().includes(q)) : data;
   }, [query, data]);
 
   return (
@@ -144,18 +142,19 @@ export default function OperariosScreen() {
           <TouchableOpacity
             activeOpacity={0.9}
             style={styles.createBtn}
-            onPress={() => navigation.navigate('OperarioForm', { mode: 'create' })}
+            onPress={() =>
+              router.push({
+                pathname: '/(admin)/(tabs)/operarios/crear',
+                params: { mode: 'create' },
+              })
+            }
           >
             <Text style={styles.createText}>Crear</Text>
           </TouchableOpacity>
 
           <View style={{ flex: 1 }} />
 
-          <TouchableOpacity
-            style={styles.roundIcon}
-            activeOpacity={0.8}
-            onPress={listar}
-          />
+          <TouchableOpacity style={styles.roundIcon} activeOpacity={0.8} onPress={listar} />
         </View>
 
         {/* Lista */}
@@ -171,7 +170,10 @@ export default function OperariosScreen() {
               <OperarioItem
                 item={item}
                 onEdit={() =>
-                  navigation.navigate('OperarioForm', { mode: 'edit', id: String(item.id) })
+                  router.push({
+                    pathname: '/(admin)/(tabs)/operarios/crear',
+                    params: { mode: 'edit', id: String(item.id) },
+                  })
                 }
                 onDelete={() => borrar(item.id)}
               />
@@ -198,7 +200,6 @@ function OperarioItem({
 }) {
   return (
     <View style={itemStyles.card}>
-      {/* Avatar circular */}
       <View style={itemStyles.avatarWrap}>
         <View style={itemStyles.avatar} />
         <View style={itemStyles.crossV} />
