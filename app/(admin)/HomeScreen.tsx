@@ -1,8 +1,8 @@
 // screens/HomeScreen.tsx
 import React from 'react';
 import { SafeAreaView, View, Text, StyleSheet } from 'react-native';
-import { useAuth } from '../auth/AuthContext';
-import { colors } from '../styles/globalStyles1';
+import { useAuth } from '../../auth/AuthContext';
+import { colors } from '../../styles/globalStyles1';
 
 export default function HomeScreen() {
   const { user } = useAuth();

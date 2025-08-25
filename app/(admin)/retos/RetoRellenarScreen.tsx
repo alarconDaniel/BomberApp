@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/StackNavigator';
-import { colors } from '../../styles/globalStyles1';
+import { colors } from '../../../styles/globalStyles1';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RetoRellenar'>;
 

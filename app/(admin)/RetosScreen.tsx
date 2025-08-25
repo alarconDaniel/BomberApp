@@ -5,10 +5,10 @@ import {
   TouchableOpacity, FlatList, Alert, ActivityIndicator
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import FadeWrapper from '../components/FadeWrapper';
-import HeaderOperario from '../components/HeaderOperario';
-import { colors } from '../styles/globalStyles1';
-import { BASE_URL, API } from '../config/api';
+import FadeWrapper from '../../components/FadeWrapper';
+import HeaderOperario from '../../components/HeaderOperario';
+import { colors } from '../../styles/globalStyles1';
+import { BASE_URL, API } from '../../config/api';
 
 const FOOTER_HEIGHT = 64;
 const MAX_DESC = 255 as const;

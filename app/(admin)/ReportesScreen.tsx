@@ -4,8 +4,8 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, useColorScheme,
 } from 'react-native';
 import * as Linking from 'expo-linking';
-import FadeWrapper from '../components/FadeWrapper';
-import HeaderOperario from '../components/HeaderOperario';
+import FadeWrapper from '../../components/FadeWrapper';
+import HeaderOperario from '../../components/HeaderOperario';
 import {
   listarArchivos,
   obtenerUrlDescarga,

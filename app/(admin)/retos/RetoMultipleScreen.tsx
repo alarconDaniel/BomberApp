@@ -2,8 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { useTheme } from '../../theme/ThemeProvider';
-import { makeGlobalStyles } from '../../styles/globalStyles';
+import { useTheme } from '../../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../../styles/globalStyles';
 import type { RootStackParamList } from '../../navigation/StackNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RetoMultiple'>;
@@ -99,7 +99,7 @@ export default function RetoMultipleScreen({ route }: Props) {
   );
 }
 
-function getStyles(c: import('../../theme/ThemeProvider').Palette) {
+function getStyles(c: import('../../../theme/ThemeProvider').Palette) {
   return StyleSheet.create({
     wrap: { padding: 16, gap: 10 },
     option: {
