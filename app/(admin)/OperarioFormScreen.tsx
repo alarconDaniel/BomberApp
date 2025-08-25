@@ -6,9 +6,9 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/StackNavigator';
-import FadeWrapper from '../components/FadeWrapper';
-import { colors } from '../styles/globalStyles1';
-import { API } from '../config/api';
+import FadeWrapper from '../../components/FadeWrapper';
+import { colors } from '../../styles/globalStyles1';
+import { API } from '../../config/api';
 
 type Mode = 'create' | 'edit';
 

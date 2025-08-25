@@ -1,8 +1,7 @@
-import { View, ActivityIndicator } from 'react-native';
-export default function IndexSplash() {
-    return (
-        <View style={{flex:1,alignItems:'center',justifyContent:'center'}}>
-            <ActivityIndicator size="large" />
-        </View>
-    );
+// app/index.tsx
+import { Redirect } from 'expo-router';
+
+export default function Index() {
+  // Arranca siempre en el Home del grupo (operario)
+  return <Redirect href='/(admin)/OperariosScreen' />;
 }

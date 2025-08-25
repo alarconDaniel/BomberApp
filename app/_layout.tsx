@@ -32,7 +32,7 @@ function AuthGate() {
             return;
         }
         if (user.rol === 'admin' && group !== '(admin)') {
-            router.replace('/(admin)');
+            router.replace('/(admin)/HomeScreen');
             return;
         }
         // Ya estás en el grupo correcto → nada

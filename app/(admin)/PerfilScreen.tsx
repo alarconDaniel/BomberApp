@@ -1,9 +1,9 @@
 // screens/PerfilScreen.tsx
 import React from 'react';
 import { SafeAreaView, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import FadeWrapper from '../components/FadeWrapper';
-import { colors } from '../styles/globalStyles1';
-import { useAuth } from '../auth/AuthContext';
+import FadeWrapper from '../../components/FadeWrapper';
+import { colors } from '../../styles/globalStyles1';
+import { useAuth } from '../../auth/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 
 export default function PerfilScreen() {
