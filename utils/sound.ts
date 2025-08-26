@@ -3,11 +3,11 @@ import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 
 let enabled = true;
 
-type SoundKey = 'tap' | 'toggle';
+type SoundKey = 'monedas' | 'toggle';
 
 const SOUND_FILES: Record<SoundKey, number> = {
-    tap: require('../assets/sounds/tap.wav'),
     toggle: require('../assets/sounds/toggle.wav'),
+    monedas: require('../assets/sounds/monedas.wav'), // 👈 corregido: key correcta
 };
 
 const cache = new Map<SoundKey, Audio.Sound>();

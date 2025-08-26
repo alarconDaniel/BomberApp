@@ -20,15 +20,8 @@ import {StatsUsuario} from "../../models/StatsUsuario";
 import PurchaseSuccessOverlay from '../../components/PurchaseSuccessOverlay';
 import { useToast } from '../../components/ToastProvider';
 
-// import DetailsStoreItemModal from '../components/DetailsStoreItemModal';
-
-// import HeaderOperario from '../components/HeaderOperario';
-// import FadeWrapper from '../components/FadeWrapper';
-
-// import {ItemTienda} from '../models/ItemTienda';
-// import {ServicioGet} from '../services/ServicioGet';
-// import {styles as global} from '../styles/globalStyles';
-// import StoreItemCard from '../components/StoreItemCard';
+// 👇 Importa el engine de sonido
+import { play } from '../../utils/sound';
 
 const {width: SCREEN_W} = Dimensions.get('window');
 
@@ -93,7 +86,6 @@ export default function StoreScreen() {
         setTimeout(() => setSelected(null), 200);
     };
 
-
     const handleBuy = async (it: ItemTienda, qty: number) => {
         try {
             setComprando(true);
@@ -103,8 +95,10 @@ export default function StoreScreen() {
             // 1) cierra el details primero
             closeDetails();
 
-            // 2) espera su fade (tu setTimeout de 200ms) y luego muestra overlay
+            // 2) espera su fade y luego muestra overlay + SONIDO 🎵
             setTimeout(() => {
+                // 👇 aquí suena monedas.wav (asegúrate de registrarlo en utils/sound)
+                play('monedas');
                 setSuccessInfo({ name: it.nombreItem, qty });
                 setShowSuccess(true);
             }, 240);
@@ -183,7 +177,6 @@ export default function StoreScreen() {
                                             <View style={s.sectionBar}/>
                                         </View>
 
-
                                         <View style={s.sectionBar2}/>
 
                                         <FlatList
@@ -261,7 +254,7 @@ export default function StoreScreen() {
                                         {/* Lista horizontal por sección */}
                                         <FlatList
                                             numColumns={2}
-                                            scrollEnabled={false}              // 👈 clave para quitar el warning
+                                            scrollEnabled={false}
                                             keyExtractor={(it) => `${sec.key}-${it.codItem}`}
                                             showsVerticalScrollIndicator={false}
                                             contentContainerStyle={{ padding: 12 }}
