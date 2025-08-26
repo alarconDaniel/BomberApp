@@ -1,22 +1,14 @@
 // app/(admin)/(tabs)/operarios/OperarioFormScreen.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  SafeAreaView,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
+  View, Text, TextInput, StyleSheet, TouchableOpacity, Alert,
+  ActivityIndicator, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import FadeWrapper from '../../../../components/FadeWrapper';
 import { colors } from '../../../../styles/globalStyles1';
 import { API } from '../../../../config/api';
+import { useAuth } from '../../../../auth/AuthContext'; // ⬅️ usa AuthContext (tokens, user, fetchJson)
 
 type Mode = 'create' | 'edit';
 
@@ -40,9 +32,12 @@ const ROLES = [
 export default function OperarioFormScreen() {
   const router = useRouter();
   const { mode: modeParam, id } = useLocalSearchParams<{ mode?: string; id?: string }>();
-
   const mode: Mode = modeParam === 'edit' ? 'edit' : 'create';
   const editingId = id ? Number(id) : undefined;
+
+  // ⬇️ Seguridad
+  const { user, loading: authLoading, fetchJson } = useAuth();
+  const isAdmin = user?.rol === 'admin';
 
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
@@ -53,21 +48,49 @@ export default function OperarioFormScreen() {
   const [codRol, setCodRol] = useState<number>(ROLES[1].value);
   const [loading, setLoading] = useState(false);
 
-  // Título UI
   const title = useMemo(() => (mode === 'create' ? 'Crear usuario' : 'Editar usuario'), [mode]);
 
-  // Cargar datos si es edición
+  // Bloquea pantalla mientras carga auth
+  if (authLoading) {
+    return (
+      <FadeWrapper>
+        <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator />
+          <Text style={{ marginTop: 8 }}>Verificando sesión…</Text>
+        </SafeAreaView>
+      </FadeWrapper>
+    );
+  }
+
+  // 403 para no admins (la ruta está bajo (admin), pero reforzamos)
+  if (!isAdmin) {
+    return (
+      <FadeWrapper>
+        <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: colors.navy, marginBottom: 8 }}>403 · Sin permisos</Text>
+          <Text style={{ textAlign: 'center', color: '#333' }}>
+            Esta acción requiere rol administrador.
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={[ui.primaryBtn, { marginTop: 18 }]}
+            activeOpacity={0.9}
+          >
+            <Text style={ui.primaryTxt}>Volver</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </FadeWrapper>
+    );
+  }
+
+  // Cargar datos si es edición (con token vía fetchJson)
   useEffect(() => {
     if (mode !== 'edit' || !editingId) return;
 
     (async () => {
       try {
         setLoading(true);
-        const r = await fetch(API.usuario.obtener(editingId));
-        const txt = await r.text();
-        if (!r.ok) throw new Error(txt || `HTTP ${r.status}`);
-
-        const u: UsuarioResponse = JSON.parse(txt);
+        const u = await fetchJson<UsuarioResponse>(API.usuario.obtener(editingId));
         setNombre(u.nombreUsuario ?? u.nombre_usuario ?? '');
         setApellido(u.apellidoUsuario ?? u.apellido_usuario ?? '');
         setNickname((u.nicknameUsuario ?? u.nickname_usuario ?? '') || '');
@@ -81,7 +104,7 @@ export default function OperarioFormScreen() {
         setLoading(false);
       }
     })();
-  }, [mode, editingId]);
+  }, [mode, editingId, fetchJson]);
 
   // Validaciones
   const validar = () => {
@@ -108,7 +131,7 @@ export default function OperarioFormScreen() {
     return true;
   };
 
-  // Guardar
+  // Guardar (usa fetchJson para incluir Authorization y manejar 401/403/refresh)
   const onSubmit = async () => {
     if (!validar()) return;
 
@@ -137,20 +160,23 @@ export default function OperarioFormScreen() {
       setLoading(true);
       const url = isCreate ? API.usuario.crear : API.usuario.modificar;
       const method = isCreate ? 'POST' : 'PUT';
-      const res = await fetch(url, {
+
+      await fetchJson(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const txt = await res.text();
-      if (!res.ok) throw new Error(txt || `HTTP ${res.status}`);
 
       Alert.alert('Éxito', isCreate ? 'Usuario creado' : 'Usuario actualizado', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
       const msg = String(e?.message || '');
-      if (msg.includes('Correo ya registrado') || msg.includes('duplicate') || msg.includes('1062')) {
+      if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
+        Alert.alert('Sesión expirada', 'Vuelve a iniciar sesión.');
+      } else if (msg.includes('403') || msg.toLowerCase().includes('forbidden')) {
+        Alert.alert('Sin permisos', 'No tienes permisos para esta operación.');
+      } else if (msg.includes('Correo ya registrado') || msg.includes('duplicate') || msg.includes('1062')) {
         Alert.alert('Duplicado', 'El correo ya está registrado.');
       } else if (msg.includes('Rol/Cargo inválido') || msg.includes('1452')) {
         Alert.alert('Dato inválido', 'El rol o cargo no existe (violación de FK).');
@@ -176,16 +202,12 @@ export default function OperarioFormScreen() {
           <View style={{ width: 36 }} />
         </View>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           <ScrollView
             contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Card */}
             <View style={ui.card}>
               {/* Rol */}
               <Text style={ui.label}>Rol</Text>
@@ -235,12 +257,7 @@ export default function OperarioFormScreen() {
               <Text style={ui.label}>
                 Contraseña {mode === 'edit' ? '(deja vacío si no cambias)' : ''}
               </Text>
-              <TextInput
-                style={ui.input}
-                secureTextEntry
-                value={contrasena}
-                onChangeText={setContrasena}
-              />
+              <TextInput style={ui.input} secureTextEntry value={contrasena} onChangeText={setContrasena} />
 
               {/* Cédula */}
               <Text style={ui.label}>Cédula</Text>
@@ -253,9 +270,7 @@ export default function OperarioFormScreen() {
                 style={[ui.primaryBtn, loading && { opacity: 0.7 }]}
                 activeOpacity={0.9}
               >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
+                {loading ? <ActivityIndicator color="#fff" /> : (
                   <Text style={ui.primaryTxt}>{mode === 'create' ? 'Crear' : 'Guardar'}</Text>
                 )}
               </TouchableOpacity>
@@ -267,14 +282,11 @@ export default function OperarioFormScreen() {
   );
 }
 
-/* ---------- Estilos UI (elegantes y consistentes) ---------- */
+/* ---------- Estilos UI ---------- */
 const ui = StyleSheet.create({
   header: {
-    paddingTop: 10,
-    paddingHorizontal: 12,
-    paddingBottom: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingTop: 10, paddingHorizontal: 12, paddingBottom: 6,
+    flexDirection: 'row', alignItems: 'center',
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
@@ -285,46 +297,25 @@ const ui = StyleSheet.create({
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '800', color: colors.navy },
 
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#E6E9ED',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#E6E9ED',
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
   },
 
   label: { marginTop: 10, fontWeight: '700', color: '#111' },
   input: {
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#D2D8DE',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#F8FAFC',
-    color: '#1F2937',
+    height: 44, borderWidth: 1, borderColor: '#D2D8DE', borderRadius: 10,
+    paddingHorizontal: 12, backgroundColor: '#F8FAFC', color: '#1F2937',
   },
 
   chipsRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
   chip: {
-    paddingHorizontal: 12,
-    height: 34,
-    borderRadius: 999,
-    borderWidth: 1,
-    backgroundColor: '#EEF2F7',
-    justifyContent: 'center',
+    paddingHorizontal: 12, height: 34, borderRadius: 999, borderWidth: 1,
+    backgroundColor: '#EEF2F7', justifyContent: 'center',
   },
   chipTxt: { color: '#1F2937', fontWeight: '700' },
 
   primaryBtn: {
-    marginTop: 18,
-    height: 46,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 18, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.blue,
   },
   primaryTxt: { color: '#fff', fontWeight: '800' },

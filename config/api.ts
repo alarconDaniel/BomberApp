@@ -1,6 +1,5 @@
 // config/api.ts
-// ⚠️ Cambia HOST si tu IP/puerto cambia (por ejemplo al 10.0.2.2 en emulador Android).
-const HOST = 'http://192.168.1.4:3550';
+const HOST = 'http://192.168.137.180:3550';
 export const BASE_URL = `${HOST}/api`;
 export const API_BASE = BASE_URL;
 
