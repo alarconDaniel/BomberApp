@@ -1,15 +1,23 @@
-// app/(admin)/(tabs)/operarios/index.tsx  ← o donde tengas esta pantalla
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  SafeAreaView, View, Text, StyleSheet, TextInput,
-  TouchableOpacity, FlatList, Alert, ActivityIndicator,
+  SafeAreaView,
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
-import FadeWrapper from '../../components/FadeWrapper';          // ajusta rutas si difiere
-import HeaderOperario from '../../components/HeaderOperario';
-import { colors } from '../../styles/globalStyles1';
+import FadeWrapper from '../../components/FadeWrapper';
+import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { API } from '../../config/api';
 
 const FOOTER_HEIGHT = 64;
@@ -30,7 +38,7 @@ type UsuarioDTO = {
   codRol: number; // 1 = Admin, 2 = Operario
 };
 
-/* ---------- Mapeos ---------- */
+/* ---------- Mapeo ---------- */
 function mapUsuarioToUI(u: UsuarioDTO): OperarioUI {
   return {
     id: String(u.codUsuario),
@@ -42,20 +50,22 @@ function mapUsuarioToUI(u: UsuarioDTO): OperarioUI {
 /* ---------- Pantalla ---------- */
 export default function OperariosScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const g = useMemo(() => makeGlobalStyles(colors), [colors]);
+  const s = useMemo(() => getStyles(colors), [colors]);
 
   const [query, setQuery] = useState('');
   const [data, setData] = useState<OperarioUI[]>([]);
   const [cargando, setCargando] = useState(false);
 
-  // Cargar lista desde backend
   const listar = useCallback(async () => {
     try {
       setCargando(true);
       const res = await fetch(API.usuario.listar);
       const txt = await res.text();
       if (!res.ok) throw new Error(txt || `HTTP ${res.status}`);
-      let json: unknown;
-      try { json = JSON.parse(txt); } catch { throw new Error('JSON inválido'); }
+      const json = JSON.parse(txt) as unknown;
       const arr = Array.isArray(json) ? (json as UsuarioDTO[]).map(mapUsuarioToUI) : [];
       setData(arr);
     } catch (e: any) {
@@ -65,18 +75,10 @@ export default function OperariosScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    listar();
-  }, [listar]);
+  useEffect(() => { listar(); }, [listar]);
 
-  // Refrescar al volver de Crear/Editar
-  useFocusEffect(
-    useCallback(() => {
-      listar();
-    }, [listar]),
-  );
+  useFocusEffect(useCallback(() => { listar(); }, [listar]));
 
-  // Borrar operario
   const borrar = (id: string) => {
     Alert.alert('Confirmar', '¿Deseas borrar este operario?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -99,7 +101,6 @@ export default function OperariosScreen() {
               }
               return;
             }
-
             await listar();
           } catch (e: any) {
             Alert.alert('Error', e?.message ?? 'No se pudo borrar');
@@ -111,50 +112,46 @@ export default function OperariosScreen() {
     ]);
   };
 
-  // Filtro local por nombre
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? data.filter((o) => o.nombre.toLowerCase().includes(q)) : data;
+    return q ? data.filter(o => o.nombre.toLowerCase().includes(q)) : data;
   }, [query, data]);
 
   return (
     <FadeWrapper>
-      <SafeAreaView style={styles.container}>
-        <HeaderOperario />
+      <SafeAreaView style={[s.container, { paddingTop: insets.top || 8 }]}>
+        {/* Header */}
+        <View style={s.header}>
+          <Text style={g.text.h2}>Operarios</Text>
 
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>OPERARIOS</Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: '/(admin)/(tabs)/operarios/OperarioFormScreen',
+                params: { mode: 'create' },
+              })
+            }
+            style={s.primaryBtn}
+            activeOpacity={0.9}
+          >
+            <Ionicons name="person-add" size={18} color="#fff" />
+            <Text style={[g.text.onPrimary, { marginLeft: 6 }]}>Crear</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Buscador */}
-        <View style={styles.searchWrap}>
+        <View style={s.searchWrap}>
+          <Ionicons name="search" size={16} color="#97A0AC" style={{ marginHorizontal: 8 }} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Buscar un operario"
             placeholderTextColor="#9aa4ad"
-            style={styles.searchInput}
+            style={s.searchInput}
           />
-        </View>
-
-        {/* Acciones superiores */}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={styles.createBtn}
-            onPress={() =>
-              router.push({
-                pathname: '/(admin)/(tabs)/operarios/crear',
-                params: { mode: 'create' },
-              })
-            }
-          >
-            <Text style={styles.createText}>Crear</Text>
+          <TouchableOpacity style={s.refreshBtn} onPress={listar} accessibilityLabel="Actualizar">
+            <Ionicons name="refresh" size={18} color={colors.text} />
           </TouchableOpacity>
-
-          <View style={{ flex: 1 }} />
-
-          <TouchableOpacity style={styles.roundIcon} activeOpacity={0.8} onPress={listar} />
         </View>
 
         {/* Lista */}
@@ -171,7 +168,7 @@ export default function OperariosScreen() {
                 item={item}
                 onEdit={() =>
                   router.push({
-                    pathname: '/(admin)/(tabs)/operarios/crear',
+                    pathname: '/(admin)/(tabs)/operarios/OperarioFormScreen',
                     params: { mode: 'edit', id: String(item.id) },
                   })
                 }
@@ -188,7 +185,7 @@ export default function OperariosScreen() {
   );
 }
 
-/* ---------- Item de la lista ---------- */
+/* ---------- Item ---------- */
 function OperarioItem({
   item,
   onEdit,
@@ -200,19 +197,11 @@ function OperarioItem({
 }) {
   return (
     <View style={itemStyles.card}>
-      <View style={itemStyles.avatarWrap}>
-        <View style={itemStyles.avatar} />
-        <View style={itemStyles.crossV} />
-        <View style={itemStyles.crossH} />
-      </View>
-
+      <View style={itemStyles.avatar} />
       <View style={itemStyles.info}>
-        <Text numberOfLines={1} style={itemStyles.name}>
-          {item.nombre}
-        </Text>
+        <Text numberOfLines={1} style={itemStyles.name}>{item.nombre}</Text>
         <Text style={itemStyles.role}>{item.cargo}</Text>
       </View>
-
       <View style={itemStyles.actions}>
         <Square onPress={onEdit} />
         <Square danger onPress={onDelete} />
@@ -226,49 +215,76 @@ function Square({ onPress, danger = false }: { onPress?: () => void; danger?: bo
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.8}
-      style={[styles.square, danger && { backgroundColor: '#ff6b6b' }]}
+      style={[itemStyles.square, danger && { backgroundColor: '#ff6b6b' }]}
     />
   );
 }
 
 /* ---------- Estilos ---------- */
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-  headerRow: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
-  title: { fontSize: 20, fontWeight: '900', letterSpacing: 0.5, color: colors.navy },
-
-  searchWrap: { marginHorizontal: 16, borderRadius: 10, backgroundColor: '#E6E9ED' },
-  searchInput: { height: 36, paddingHorizontal: 12, color: '#1F2937' },
-
-  actionsRow: {
-    marginTop: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10,
-  },
-
-  square: { width: 20, height: 20, backgroundColor: '#BDBDBD', borderRadius: 4 },
-
-  createBtn: {
-    backgroundColor: '#BDBDBD', paddingHorizontal: 14, height: 32, borderRadius: 8, justifyContent: 'center',
-  },
-  createText: { color: colors.navy, fontWeight: '700' },
-
-  roundIcon: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#9AA4AD' },
-});
+function getStyles(c: import('../../theme/ThemeProvider').Palette) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+    },
+    primaryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: c.primary,
+      paddingHorizontal: 14,
+      height: 36,
+      borderRadius: 10,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 6,
+      elevation: 2,
+    },
+    searchWrap: {
+      marginHorizontal: 16,
+      marginBottom: 8,
+      borderRadius: 12,
+      backgroundColor: '#EEF2F7',
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 6,
+      borderWidth: 1,
+      borderColor: '#E1E6EE',
+    },
+    searchInput: { flex: 1, height: 40, paddingHorizontal: 8, color: c.text },
+    refreshBtn: {
+      padding: 6,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+  });
+}
 
 const itemStyles = StyleSheet.create({
   card: {
-    backgroundColor: '#D9D9D9',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E6E9ED',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 1,
   },
-  avatarWrap: { width: 40, height: 40, marginRight: 10 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#C4C4C4' },
-  crossV: { position: 'absolute', left: 19, top: 6, bottom: 6, width: 2, backgroundColor: '#A9A9A9', borderRadius: 1 },
-  crossH: { position: 'absolute', top: 19, left: 6, right: 6, height: 2, backgroundColor: '#A9A9A9', borderRadius: 1 },
+  avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#D1D5DB', marginRight: 12 },
   info: { flex: 1, paddingRight: 8 },
-  name: { fontWeight: '800', color: '#2A2A2A' },
-  role: { marginTop: 2, fontSize: 12, color: '#5F6B7A', fontStyle: 'italic' },
-  actions: { flexDirection: 'row', gap: 6, marginLeft: 6 },
+  name: { fontWeight: '800', fontSize: 15, color: '#111827' },
+  role: { marginTop: 2, fontSize: 13, color: '#6B7280' },
+  actions: { flexDirection: 'row', gap: 8 },
+  square: { width: 24, height: 24, backgroundColor: '#9CA3AF', borderRadius: 6 },
 });

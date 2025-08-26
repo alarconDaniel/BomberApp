@@ -1,13 +1,15 @@
-// screens/RetosScreen.tsx
+// app/(admin)/(tabs)/RetosScreen.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView, View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, FlatList, Alert, ActivityIndicator
+  TouchableOpacity, FlatList, Alert, ActivityIndicator, Pressable
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
 import FadeWrapper from '../../components/FadeWrapper';
-import HeaderOperario from '../../components/HeaderOperario';
-import { colors } from '../../styles/globalStyles1';
+import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { BASE_URL, API } from '../../config/api';
 
 const FOOTER_HEIGHT = 64;
@@ -16,7 +18,8 @@ const MAX_DESC = 255 as const;
 const cargos = ['Operario', 'Mantenimiento', 'Supervisor'] as const;
 type Cargo = (typeof cargos)[number];
 
-const tiposReto = ['Opción múltiple', 'Reporte', 'Emparejar', 'Rellenar'] as const;
+// ⛔️ SIN "Reporte"
+const tiposReto = ['Opción múltiple', 'Emparejar', 'Rellenar'] as const;
 type TipoReto = (typeof tiposReto)[number];
 
 type RetoDTO = {
@@ -28,7 +31,7 @@ type RetoDTO = {
   fechaFinReto?: string | null;
 };
 
-type ParUI = { id: string; izquierda: string; derecha: string }; // 👈 para Emparejar
+type ParUI = { id: string; izquierda: string; derecha: string };
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -42,9 +45,12 @@ const normalizeReto = (x: any): RetoDTO => ({
 });
 
 export default function RetosScreen() {
-  const navigation = useNavigation<any>();
+  const router = useRouter();
+  const { colors } = useTheme();
+  const g = useMemo(() => makeGlobalStyles(colors), [colors]);
+  const s = useMemo(() => getStyles(colors), [colors]);
 
-  // Campos del form general
+  // Form general
   const [nombre, setNombre] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [cargo, setCargo] = useState<Cargo>('Operario');
@@ -54,12 +60,9 @@ export default function RetosScreen() {
   const [cargando, setCargando] = useState(false);
   const [retos, setRetos] = useState<RetoDTO[]>([]);
 
-  // ---------- Config específica por tipo ----------
-  // Opción múltiple (simple demo: cambia en tu UI si quieres)
-  const [pregunta, setPregunta] = useState('¿Cuál es de EPP?');
-  const [opciones, setOpciones] = useState<
-    { id: string; texto: string; correcta?: boolean }[]
-  >([
+  // Opción múltiple
+  const [pregunta, setPregunta] = useState('¿Cuál(es) de las siguientes son EPP?');
+  const [opciones, setOpciones] = useState<{ id: string; texto: string; correcta?: boolean }[]>([
     { id: 'a', texto: 'Casco', correcta: true },
     { id: 'b', texto: 'Gorra' },
     { id: 'c', texto: 'Guantes', correcta: true },
@@ -72,10 +75,8 @@ export default function RetosScreen() {
     { id: 'p1', izquierda: '', derecha: '' },
     { id: 'p2', izquierda: '', derecha: '' },
   ]);
-  const addPar = () =>
-    setPares((prev) => [...prev, { id: `p${Date.now()}`, izquierda: '', derecha: '' }]);
-  const removePar = (id: string) =>
-    setPares((prev) => (prev.length > 2 ? prev.filter((p) => p.id !== id) : prev));
+  const addPar = () => setPares(prev => [...prev, { id: `p${Date.now()}`, izquierda: '', derecha: '' }]);
+  const removePar = (id: string) => setPares(prev => (prev.length > 2 ? prev.filter(p => p.id !== id) : prev));
 
   // Rellenar
   const [fillWord, setFillWord] = useState('escaler');
@@ -166,26 +167,26 @@ export default function RetosScreen() {
     }
   };
 
-  // ---------- PROBAR con los datos del admin ----------
+  // PREVIEW/Probar con navegación Expo Router
   const probarReto = () => {
     if (!tipo) { Alert.alert('Selecciona un tipo de reto'); return; }
 
     if (tipo === 'Emparejar') {
-  const valid = pares
-    .map(p => ({
-      izquierda: (p.izquierda ?? '').trim(),
-      derecha: (p.derecha ?? '').trim(),
-    }))
-    .filter(p => p.izquierda && p.derecha);
+      const valid = pares
+        .map(p => ({ izquierda: (p.izquierda ?? '').trim(), derecha: (p.derecha ?? '').trim() }))
+        .filter(p => p.izquierda && p.derecha);
 
-  if (valid.length < 2) {
-    Alert.alert('Mínimo 2 pares', 'Completa al menos dos pares válidos.');
-    return;
-  }
+      if (valid.length < 2) {
+        Alert.alert('Mínimo 2 pares', 'Completa al menos dos pares válidos.');
+        return;
+      }
 
-  navigation.navigate('RetoEmparejar', { pares: valid });
-  return;
-}
+      router.push({
+        pathname: '/(admin)/(tabs)/retos/RetoEmparejarScreen',
+        params: { pares: JSON.stringify(valid) },
+      });
+      return;
+    }
 
     if (tipo === 'Opción múltiple') {
       const clean = opciones.map(o => ({ ...o, texto: (o.texto || '').trim() }));
@@ -197,390 +198,393 @@ export default function RetosScreen() {
         Alert.alert('Marca al menos una opción correcta');
         return;
       }
-      navigation.navigate('RetoMultiple', {
-        pregunta: pregunta.trim(),
-        opciones: clean,
-        multiple,
+      router.push({
+        pathname: '/(admin)/(tabs)/retos/RetoMultipleScreen',
+        params: {
+          pregunta: pregunta.trim(),
+          opciones: JSON.stringify(clean),
+          multiple: String(multiple),
+        },
       });
       return;
     }
 
     if (tipo === 'Rellenar') {
-      if (fillWord.trim().length < 2) {
-        Alert.alert('Palabra muy corta'); return;
-      }
-      navigation.navigate('RetoRellenar', {
-        respuesta: fillWord.trim(),
-        pista: fillHint.trim() || undefined,
+      if (fillWord.trim().length < 2) { Alert.alert('Palabra muy corta'); return; }
+      router.push({
+        pathname: '/(admin)/(tabs)/retos/RetoRellenarScreen',
+        params: { respuesta: fillWord.trim(), pista: (fillHint.trim() || undefined) as any },
       });
       return;
     }
-
-    Alert.alert('Info', 'Para "Reporte" no hay preview aún.');
   };
 
   const retosFiltrados = useMemo(() => {
     const q = query.toLowerCase();
-    return retos.filter((r: RetoDTO) =>
-      (r.nombreReto || '').toLowerCase().includes(q)
-    );
+    return retos.filter(r => (r.nombreReto || '').toLowerCase().includes(q));
   }, [query, retos]);
 
   return (
     <FadeWrapper>
-      <SafeAreaView style={styles.container}>
-        <HeaderOperario />
-
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.content, { paddingBottom: FOOTER_HEIGHT + 16 }]}
+          contentContainerStyle={{ paddingBottom: FOOTER_HEIGHT + 24 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.title}>Crear un nuevo reto</Text>
+          {/* ===== Header ===== */}
+          <View style={{ paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4 }}>
+            <Text style={g.text.h2}>Crear un nuevo reto</Text>
+          </View>
 
-          {/* Nombre / Descripción */}
-          <Text style={styles.label}>Ingrese el nombre del tema :</Text>
-          <TextInput
-            value={nombre}
-            onChangeText={setNombre}
-            placeholder="Nombre de tema"
-            placeholderTextColor="#9aa4ad"
-            style={styles.input}
-          />
-
-          <Text style={[styles.label, { marginTop: 10 }]}>Ingrese la descripción del tema :</Text>
-          <View style={styles.textAreaWrap}>
+          {/* ===== Card formulario principal ===== */}
+          <View style={[s.card, { marginTop: 8 }]}>
+            <Text style={[g.text.smallStrong, { marginBottom: 6 }]}>Nombre del tema</Text>
             <TextInput
-              value={descripcion}
-              onChangeText={(t) => t.length <= MAX_DESC && setDescripcion(t)}
-              placeholder="Sobre qué trata el tema"
-              placeholderTextColor="#9aa4ad"
-              multiline
-              style={styles.textArea}
+              value={nombre}
+              onChangeText={setNombre}
+              placeholder="Nombre de tema"
+              placeholderTextColor={colors.mutedText}
+              style={s.input}
             />
-            <Text style={styles.counter}>{restantes}</Text>
-          </View>
 
-          {/* Cargo */}
-          <Text style={[styles.label, { marginTop: 10 }]}>Seleccione el cargo</Text>
-          <View style={styles.radioRow}>
-            {cargos.map((c) => (
-              <Radio key={c} label={c} selected={cargo === c} onPress={() => setCargo(c)} />
-            ))}
-          </View>
-
-          {/* Tipo */}
-          <Text style={[styles.label, { marginTop: 10 }]}>Escoja tipo de reto</Text>
-          <View style={styles.chipsRow}>
-            {tiposReto.map((t) => (
-              <Chip
-                key={t}
-                label={t}
-                active={tipo === t}
-                onPress={() => setTipo((prev) => (prev === t ? null : t))}
-              />
-            ))}
-          </View>
-
-          {/* ---------- Config por tipo ---------- */}
-          {tipo === 'Opción múltiple' && (
-            <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Configurar opción múltiple</Text>
-
-              <Text style={styles.label}>Pregunta</Text>
+            <Text style={[g.text.smallStrong, { marginTop: 10, marginBottom: 6 }]}>Descripción del tema</Text>
+            <View style={s.textAreaWrap}>
               <TextInput
-                value={pregunta}
-                onChangeText={setPregunta}
-                placeholder="Escribe la pregunta…"
-                placeholderTextColor="#9aa4ad"
-                style={styles.input}
+                value={descripcion}
+                onChangeText={(t) => t.length <= MAX_DESC && setDescripcion(t)}
+                placeholder="Sobre qué trata el tema"
+                placeholderTextColor={colors.mutedText}
+                multiline
+                style={s.textArea}
               />
+              <Text style={[g.text.caption, { position: 'absolute', right: 8, bottom: 6 }]}>{restantes}</Text>
+            </View>
 
-              <Text style={[styles.label, { marginTop: 8 }]}>Opciones</Text>
-              {opciones.map((o, ix) => (
-                <View key={o.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const next = [...opciones];
-                      next[ix] = { ...next[ix], correcta: !next[ix].correcta };
-                      setOpciones(next);
-                    }}
-                    style={[
-                      { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#9AA4AD' },
-                      o.correcta && { backgroundColor: colors.blue },
-                    ]}
-                  />
-                  <TextInput
-                    value={o.texto}
-                    onChangeText={(t) => {
-                      const next = [...opciones];
-                      next[ix] = { ...next[ix], texto: t };
-                      setOpciones(next);
-                    }}
-                    placeholder={`Opción ${ix + 1}`}
-                    placeholderTextColor="#9aa4ad"
-                    style={[styles.input, { flex: 1 }]}
-                  />
-                </View>
+            <Text style={[g.text.smallStrong, { marginTop: 10, marginBottom: 8 }]}>Seleccione el cargo</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {cargos.map((c) => (
+                <Radio key={c} label={c} selected={cargo === c} onPress={() => setCargo(c)} c={colors} g={g} />
               ))}
+            </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                <TouchableOpacity onPress={() => setMultiple((m) => !m)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={[
-                    { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#9AA4AD' },
-                    multiple && { backgroundColor: colors.blue },
-                  ]} />
-                  <Text style={{ color: '#1F2937' }}>Permitir varias correctas</Text>
+            <Text style={[g.text.smallStrong, { marginTop: 12, marginBottom: 8 }]}>Escoja tipo de reto</Text>
+            <View style={s.chipsRow}>
+              {tiposReto.map((t) => (
+                <Chip
+                  key={t}
+                  label={t}
+                  active={tipo === t}
+                  onPress={() => setTipo(prev => (prev === t ? null : t))}
+                  c={colors}
+                  g={g}
+                />
+              ))}
+            </View>
+
+            {/* ===== Config por tipo ===== */}
+            {tipo === 'Opción múltiple' && (
+              <View style={s.panel}>
+                <Text style={s.panelTitle}>Configurar opción múltiple</Text>
+
+                <Text style={g.text.smallStrong}>Pregunta</Text>
+                <TextInput
+                  value={pregunta}
+                  onChangeText={setPregunta}
+                  placeholder="Escribe la pregunta…"
+                  placeholderTextColor={colors.mutedText}
+                  style={[s.input, { marginTop: 4 }]}
+                />
+
+                <Text style={[g.text.smallStrong, { marginTop: 10 }]}>Opciones</Text>
+                {opciones.map((o, ix) => (
+                  <View key={o.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const next = [...opciones];
+                        next[ix] = { ...next[ix], correcta: !next[ix].correcta };
+                        setOpciones(next);
+                      }}
+                      style={[
+                        s.check,
+                        o.correcta && { backgroundColor: colors.primary, borderColor: colors.primary },
+                      ]}
+                    />
+                    <TextInput
+                      value={o.texto}
+                      onChangeText={(t) => {
+                        const next = [...opciones];
+                        next[ix] = { ...next[ix], texto: t };
+                        setOpciones(next);
+                      }}
+                      placeholder={`Opción ${ix + 1}`}
+                      placeholderTextColor={colors.mutedText}
+                      style={[s.input, { flex: 1 }]}
+                    />
+                  </View>
+                ))}
+
+                <Pressable
+                  onPress={() => setMultiple(m => !m)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}
+                >
+                  <View style={[s.check, multiple && { backgroundColor: colors.primary, borderColor: colors.primary }]} />
+                  <Text style={g.text.body}>Permitir varias correctas</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {tipo === 'Emparejar' && (
+              <View style={s.panel}>
+                <Text style={s.panelTitle}>Configurar emparejar</Text>
+
+                {pares.map((p, ix) => (
+                  <View key={p.id} style={s.pairRow}>
+                    <TextInput
+                      value={p.izquierda}
+                      onChangeText={(t) => {
+                        const next = [...pares]; next[ix] = { ...next[ix], izquierda: t }; setPares(next);
+                      }}
+                      placeholder="Izquierda"
+                      placeholderTextColor={colors.mutedText}
+                      style={[s.input, { flex: 1 }]}
+                    />
+                    <Text style={[g.text.body, { marginHorizontal: 6 }]}>—</Text>
+                    <TextInput
+                      value={p.derecha}
+                      onChangeText={(t) => {
+                        const next = [...pares]; next[ix] = { ...next[ix], derecha: t }; setPares(next);
+                      }}
+                      placeholder="Derecha"
+                      placeholderTextColor={colors.mutedText}
+                      style={[s.input, { flex: 1 }]}
+                    />
+                    <Pressable onPress={() => removePar(p.id)} style={{ marginLeft: 8 }}>
+                      <Ionicons name="close-circle" size={20} color={colors.danger} />
+                    </Pressable>
+                  </View>
+                ))}
+
+                <TouchableOpacity onPress={addPar} style={[s.addBtn, { backgroundColor: colors.mutedBg, borderColor: colors.outline }]}>
+                  <Text style={g.text.bodyStrong}>+ Añadir par</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          )}
+            )}
 
-          {tipo === 'Emparejar' && (
-            <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Configurar emparejar</Text>
+            {tipo === 'Rellenar' && (
+              <View style={s.panel}>
+                <Text style={s.panelTitle}>Configurar rellenar</Text>
 
-              {pares.map((p, ix) => (
-                <View key={p.id} style={styles.pairRow}>
-                  <TextInput
-                    value={p.izquierda}
-                    onChangeText={(t) => {
-                      const next = [...pares];
-                      next[ix] = { ...next[ix], izquierda: t };
-                      setPares(next);
-                    }}
-                    placeholder="Izquierda"
-                    placeholderTextColor="#9aa4ad"
-                    style={[styles.input, { flex: 1 }]}
-                  />
-                  <Text style={{ marginHorizontal: 6, color: '#4b5563' }}>—</Text>
-                  <TextInput
-                    value={p.derecha}
-                    onChangeText={(t) => {
-                      const next = [...pares];
-                      next[ix] = { ...next[ix], derecha: t };
-                      setPares(next);
-                    }}
-                    placeholder="Derecha"
-                    placeholderTextColor="#9aa4ad"
-                    style={[styles.input, { flex: 1 }]}
-                  />
-                  <TouchableOpacity onPress={() => removePar(p.id)} style={{ marginLeft: 8 }}>
-                    <Text style={{ color: '#ef4444', fontWeight: '700' }}>X</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
+                <Text style={g.text.smallStrong}>Palabra</Text>
+                <TextInput
+                  value={fillWord}
+                  onChangeText={setFillWord}
+                  placeholder="Palabra objetivo"
+                  placeholderTextColor={colors.mutedText}
+                  style={[s.input, { marginTop: 4 }]}
+                />
 
-              <TouchableOpacity onPress={addPar} style={styles.addBtn}>
-                <Text style={styles.addBtnTxt}>+ Añadir par</Text>
+                <Text style={[g.text.smallStrong, { marginTop: 10 }]}>Pista</Text>
+                <TextInput
+                  value={fillHint}
+                  onChangeText={setFillHint}
+                  placeholder="Pista (opcional)"
+                  placeholderTextColor={colors.mutedText}
+                  style={[s.input, { marginTop: 4 }]}
+                />
+              </View>
+            )}
+
+            {/* Acciones */}
+            <View style={{ marginTop: 14, gap: 10 }}>
+              <TouchableOpacity style={[s.primaryBtn, { backgroundColor: colors.primary }]} onPress={crearReto} disabled={cargando}>
+                {cargando ? <ActivityIndicator color="#fff" /> : <Text style={g.text.onPrimary}>Guardar reto</Text>}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[s.primaryBtn, { backgroundColor: colors.primarySoft }]} onPress={probarReto}>
+                <Text style={[g.text.bodyStrong]}>Probar reto</Text>
               </TouchableOpacity>
             </View>
-          )}
-
-          {tipo === 'Rellenar' && (
-            <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Configurar rellenar</Text>
-              <Text style={styles.label}>Palabra</Text>
-              <TextInput
-                value={fillWord}
-                onChangeText={setFillWord}
-                placeholder="Palabra objetivo"
-                placeholderTextColor="#9aa4ad"
-                style={styles.input}
-              />
-              <Text style={[styles.label, { marginTop: 8 }]}>Pista</Text>
-              <TextInput
-                value={fillHint}
-                onChangeText={setFillHint}
-                placeholder="Pista (opcional)"
-                placeholderTextColor="#9aa4ad"
-                style={styles.input}
-              />
-            </View>
-          )}
-
-          {/* Acciones */}
-          <View style={{ marginTop: 16, gap: 10 }}>
-            <TouchableOpacity style={styles.saveBtn} onPress={crearReto} disabled={cargando}>
-              {cargando ? <ActivityIndicator /> : <Text style={styles.saveText}>Guardar reto</Text>}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: '#93c5fd' }]} onPress={probarReto}>
-              <Text style={styles.saveText}>Probar reto</Text>
-            </TouchableOpacity>
           </View>
 
-          {/* Historial */}
-          <Text style={styles.historyTitle}>Historial de retos</Text>
-          <View style={styles.searchWrap}>
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Buscar…"
-              placeholderTextColor="#9aa4ad"
-              style={styles.searchInput}
-            />
-          </View>
+          {/* ===== Historial ===== */}
+          <View style={[s.card, { marginTop: 16 }]}>
+            <Text style={g.text.h3}>Historial de retos</Text>
 
-          {cargando ? (
-            <View style={{ marginTop: 16 }}>
-              <ActivityIndicator />
+            <View style={[s.searchWrap, { marginTop: 10 }]}>
+              <Ionicons name="search" size={16} color={colors.mutedText} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Buscar…"
+                placeholderTextColor={colors.mutedText}
+                style={s.searchInput}
+              />
             </View>
-          ) : retos.length > 0 ? (
-            <FlatList
-              data={retosFiltrados}
-              keyExtractor={(item) => String(item.codReto)}
-              renderItem={({ item }) => (
-                <RetoItem item={item} onDelete={() => borrar(item.codReto)} />
-              )}
-              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-              scrollEnabled={false}
-              style={{ marginTop: 8 }}
-            />
-          ) : (
-            <FlatList
-              data={[
-                'Tipos de EPP',
-                'Tipos de cascos',
-                'Tipos de guantes',
-                'Tipos de gafas',
-                'Tipos de equipos',
-                'Señales de advertencia',
-              ].filter(t => t.toLowerCase().includes(query.toLowerCase()))}
-              keyExtractor={(item) => item}
-              renderItem={({ item }) => <HistoryItem title={item} />}
-              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-              scrollEnabled={false}
-              style={{ marginTop: 8 }}
-            />
-          )}
+
+            {cargando ? (
+              <View style={{ marginTop: 12 }}><ActivityIndicator /></View>
+            ) : retos.length > 0 ? (
+              <FlatList
+                data={retosFiltrados}
+                keyExtractor={(item) => String(item.codReto)}
+                renderItem={({ item }) => (
+                  <RetoItem item={item} onDelete={() => borrar(item.codReto)} c={colors} g={g} />
+                )}
+                ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+                scrollEnabled={false}
+                style={{ marginTop: 10 }}
+              />
+            ) : (
+              <FlatList
+                data={[
+                  'Tipos de EPP',
+                  'Tipos de cascos',
+                  'Tipos de guantes',
+                  'Tipos de gafas',
+                  'Tipos de equipos',
+                  'Señales de advertencia',
+                ].filter(t => t.toLowerCase().includes(query.toLowerCase()))}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => <HistoryItem title={item} c={colors} g={g} />}
+                ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+                scrollEnabled={false}
+                style={{ marginTop: 10 }}
+              />
+            )}
+          </View>
         </ScrollView>
       </SafeAreaView>
     </FadeWrapper>
   );
 }
 
-/* ---------- Subcomponentes ---------- */
-function Radio({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void; }) {
+/* ---------- Subcomponentes estilizados ---------- */
+function Radio({ label, selected, onPress, c, g }: { label: string; selected: boolean; onPress: () => void; c: any; g: ReturnType<typeof makeGlobalStyles>; }) {
   return (
-    <TouchableOpacity onPress={onPress} style={styles.radioItem} activeOpacity={0.8}>
-      <View style={[styles.radioOuter, selected && { borderColor: colors.blue }]}>
-        {selected && <View style={styles.radioInner} />}
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <View style={{
+        width: 18, height: 18, borderRadius: 9, borderWidth: 2,
+        borderColor: selected ? c.primary : c.inputBorder, alignItems: 'center', justifyContent: 'center',
+        marginRight: 8
+      }}>
+        {selected ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.primary }} /> : null}
       </View>
-      <Text style={styles.radioLabel}>{label}</Text>
-    </TouchableOpacity>
+      <Text style={g.text.body}>{label}</Text>
+    </Pressable>
   );
 }
-function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void; }) {
+
+function Chip({ label, active, onPress, c, g }: { label: string; active?: boolean; onPress?: () => void; c: any; g: ReturnType<typeof makeGlobalStyles>; }) {
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.85}
+      activeOpacity={0.9}
       style={[
-        styles.chip,
+        {
+          paddingHorizontal: 12, height: 34, borderRadius: 16, borderWidth: 1,
+          justifyContent: 'center',
+        },
         active
-          ? { backgroundColor: colors.blue, borderColor: colors.blue }
-          : { backgroundColor: '#E9EDF1', borderColor: '#D2D8DE' },
+          ? { backgroundColor: c.primary, borderColor: c.primary }
+          : { backgroundColor: c.mutedBg, borderColor: c.outline },
       ]}
     >
-      <Text style={[styles.chipText, active && { color: colors.white }]}>{label}</Text>
+      <Text style={[g.text.smallStrong, active ? g.text.onPrimary : {}]}>{label}</Text>
     </TouchableOpacity>
   );
 }
-function Square({ onPress, danger = false }: { onPress?: () => void; danger?: boolean }) {
+
+function Square({ onPress, danger = false, c }: { onPress?: () => void; danger?: boolean; c: any }) {
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      activeOpacity={0.8}
-      style={[styles.square, danger && { backgroundColor: '#ff6b6b' }]}
-    />
+      style={{
+        width: 28, height: 28, borderRadius: 6,
+        backgroundColor: danger ? c.danger : c.mutedBg,
+        alignItems: 'center', justifyContent: 'center'
+      }}
+    >
+      <Ionicons name={danger ? 'trash' : 'create'} size={16} color={danger ? '#fff' : c.text} />
+    </Pressable>
   );
 }
-function RetoItem({ item, onDelete }: { item: RetoDTO; onDelete: () => void }) {
+
+function RetoItem({ item, onDelete, c, g }: { item: RetoDTO; onDelete: () => void; c: any; g: ReturnType<typeof makeGlobalStyles>; }) {
   return (
-    <View style={styles.historyItem}>
-      <Text style={styles.historyText} numberOfLines={1}>{item.nombreReto}</Text>
-      <View style={styles.historyActions}>
-        <Square onPress={() => { /* TODO: editar */ }} />
-        <Square danger onPress={onDelete} />
+    <View style={{
+      backgroundColor: c.cardTint, borderRadius: 12, paddingHorizontal: 12, minHeight: 52,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: c.tabBorder
+    }}>
+      <Text style={[g.text.bodyStrong]} numberOfLines={1}>{item.nombreReto}</Text>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Square onPress={() => { /* TODO: editar */ }} c={c} />
+        <Square danger onPress={onDelete} c={c} />
       </View>
     </View>
   );
 }
-function HistoryItem({ title }: { title: string }) {
+
+function HistoryItem({ title, c, g }: { title: string; c: any; g: ReturnType<typeof makeGlobalStyles>; }) {
   return (
-    <View style={styles.historyItem}>
-      <Text style={styles.historyText}>{title}</Text>
+    <View style={{
+      backgroundColor: c.cardTint, borderRadius: 12, paddingHorizontal: 12, minHeight: 48,
+      flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: c.tabBorder
+    }}>
+      <Text style={g.text.bodyStrong}>{title}</Text>
     </View>
   );
 }
 
-/* ---------- Estilos ---------- */
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-  content: { paddingHorizontal: 16, paddingTop: 8 },
-  title: { fontSize: 22, fontWeight: '800', marginBottom: 8, color: colors.navy },
-  label: { fontSize: 14, fontWeight: '600', color: colors.navy, marginBottom: 6 },
-  input: {
-    borderWidth: 1, borderColor: '#D2D8DE', borderRadius: 8,
-    paddingHorizontal: 12, height: 40, backgroundColor: '#F8FAFC', color: '#1F2937',
-  },
-  textAreaWrap: {
-    position: 'relative', borderWidth: 1, borderColor: '#D2D8DE',
-    borderRadius: 8, backgroundColor: '#F8FAFC',
-  },
-  textArea: {
-    minHeight: 140, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24,
-    color: '#1F2937', textAlignVertical: 'top',
-  },
-  counter: { position: 'absolute', right: 8, bottom: 6, fontSize: 12, color: '#8A93A0' },
-
-  radioRow: { flexDirection: 'row', gap: 16, alignItems: 'center' },
-  radioItem: { flexDirection: 'row', alignItems: 'center' },
-  radioOuter: {
-    width: 18, height: 18, borderRadius: 9, borderWidth: 2,
-    borderColor: '#9AA4AD', alignItems: 'center', justifyContent: 'center', marginRight: 8,
-  },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.blue },
-  radioLabel: { color: colors.navy },
-
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  chip: { paddingHorizontal: 12, height: 34, borderRadius: 16, borderWidth: 1, justifyContent: 'center' },
-  chipText: { fontWeight: '700', color: colors.navy },
-
-  panel: { marginTop: 12, padding: 12, backgroundColor: '#F3F4F6', borderRadius: 10 },
-  panelTitle: { fontWeight: '800', color: '#1F2937', marginBottom: 8 },
-
-  pairRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-
-  addBtn: {
-    marginTop: 6, alignSelf: 'flex-start',
-    backgroundColor: '#e5e7eb', paddingHorizontal: 10, height: 34,
-    borderRadius: 8, justifyContent: 'center',
-  },
-  addBtnTxt: { color: '#111827', fontWeight: '700' },
-
-  actionsRow: { flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' },
-
-  historyTitle: { fontSize: 18, fontWeight: '800', marginTop: 18, color: colors.navy },
-  searchWrap: {
-    marginTop: 8, borderWidth: 1, borderColor: '#D2D8DE',
-    borderRadius: 8, backgroundColor: '#F8FAFC',
-  },
-  searchInput: { height: 38, paddingHorizontal: 12, color: '#1F2937' },
-
-  historyItem: {
-    backgroundColor: '#D9D9D9', borderRadius: 8, paddingHorizontal: 12, height: 42,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  historyText: { fontWeight: '600', color: '#2A2A2A', flex: 1, marginRight: 8 },
-  historyActions: { flexDirection: 'row', gap: 6 },
-
-  square: { width: 20, height: 20, backgroundColor: '#BDBDBD', borderRadius: 4 },
-
-  saveBtn: {
-    backgroundColor: colors.blue, height: 44, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  saveText: { color: colors.white, fontWeight: '800' },
-});
+/* ---------- Estilos base ---------- */
+function getStyles(c: import('../../theme/ThemeProvider').Palette) {
+  return StyleSheet.create({
+    card: {
+      marginHorizontal: 18,
+      padding: 14,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: c.tabBorder,
+      backgroundColor: c.card,
+      shadowOpacity: 0.06,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2,
+    },
+    input: {
+      borderWidth: 1, borderColor: c.inputBorder, borderRadius: 10,
+      paddingHorizontal: 12, height: 40, backgroundColor: c.card, color: c.text,
+    },
+    textAreaWrap: {
+      position: 'relative', borderWidth: 1, borderColor: c.inputBorder,
+      borderRadius: 10, backgroundColor: c.card,
+    },
+    textArea: {
+      minHeight: 140, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24,
+      color: c.text, textAlignVertical: 'top',
+    },
+    chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+    panel: {
+      marginTop: 12, padding: 12, backgroundColor: c.cardTint, borderRadius: 12,
+      borderWidth: 1, borderColor: c.tabBorder,
+    },
+    panelTitle: { fontWeight: '800', color: c.text, marginBottom: 8 },
+    check: {
+      width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: c.inputBorder,
+    },
+    pairRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+    addBtn: {
+      marginTop: 8, alignSelf: 'flex-start',
+      paddingHorizontal: 12, height: 36, borderRadius: 10, justifyContent: 'center', borderWidth: 1,
+    },
+    primaryBtn: {
+      height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    },
+    searchWrap: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      borderWidth: 1, borderColor: c.inputBorder, borderRadius: 10,
+      backgroundColor: c.card, paddingHorizontal: 10, height: 40,
+    },
+    searchInput: { flex: 1, color: c.text },
+  });
+}
