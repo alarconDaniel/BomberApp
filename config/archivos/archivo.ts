@@ -1,87 +1,91 @@
-// screens/archivos/archivos.ts
-import { Platform } from 'react-native';
+// screens/archivos/archivos.ts (o src/api/archivos.ts)
+import { useAuth } from '../../auth/AuthContext';
 
-const BASE_URL = __DEV__
-  ? 'http://192.168.1.5:3550/api'
-  : 'http://192.168.1.5:3550/api'; // ajusta si usas prod
-
-export type ArchivoItem = {
+/** Modelo que devuelve el backend */
+export type Archivo = {
+  codArchivo: number;
+  codUsuario: number;
+  rutaArchivo: string;            // fileId de Drive
   nombreOriginal: string;
-  path: string;            // fileId de Drive (ruta_archivo)
-  contentType: string;     // tipo_contenido
-  sizeBytes: string;       // string para evitar BigInt
-  fechaSubida: string;     // ISO (fecha_creacion)
+  tipoContenido: string;
+  tamanoBytes: string;            // backend lo envía como string
+  fechaCreacion: string;          // ISO
+  fechaActualizacion?: string;
   area?: string | null;
-  codUsuario?: number | null;
 };
 
-function mapRowToArchivoItem(row: any): ArchivoItem {
+/** Modelo que usa el frontend (ReportesScreen) */
+export type ArchivoItem = {
+  path: string;                   // ← de rutaArchivo
+  nombreOriginal: string;
+  contentType: string;            // ← de tipoContenido
+  fechaSubida: string;            // ← de fechaCreacion
+  codUsuario?: number | null;
+  area?: string | null;
+};
+
+type ListarResp = { total: number; rows: Archivo[] };
+
+/** Mapea Archivo (backend) → ArchivoItem (frontend) */
+function mapToItem(a: Archivo): ArchivoItem {
   return {
-    nombreOriginal: row?.nombreOriginal ?? row?.nombre_original ?? 'archivo',
-    path: row?.rutaArchivo ?? row?.ruta_archivo ?? '',
-    contentType: row?.tipoContenido ?? row?.tipo_contenido ?? 'application/octet-stream',
-    sizeBytes: String(row?.tamanoBytes ?? row?.tamano_bytes ?? '0'),
-    fechaSubida: row?.fechaCreacion ?? row?.fecha_creacion ?? new Date().toISOString(),
-    area: row?.area ?? null,
-    codUsuario: row?.codUsuario ?? row?.cod_usuario ?? null,
+    path: a.rutaArchivo,
+    nombreOriginal: a.nombreOriginal,
+    contentType: a.tipoContenido,
+    fechaSubida: a.fechaCreacion,
+    codUsuario: a.codUsuario,
+    area: a.area ?? null,
   };
 }
 
-async function safeFetch(url: string, init?: RequestInit) {
-  const res = await fetch(url, {
-    ...(init || {}),
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
-  const text = await res.text();
-  let json: any = null;
-  try { json = text ? JSON.parse(text) : null; } catch { /* noop */ }
+/** Factory que usa fetchJson (y opcionalmente baseUrl, aunque fetchJson ya lo incorpora) */
+export function makeArchivosApi(
+  fetchJson: <T = any>(path: string, init?: RequestInit & { noAuth?: boolean }) => Promise<T>,
+  _baseUrl?: string,
+) {
+  const listarArchivos = async (opts?: { take?: number; skip?: number; codUsuario?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.take) params.set('take', String(opts.take));
+    if (opts?.skip) params.set('skip', String(opts.skip));
+    if (opts?.codUsuario) params.set('codUsuario', String(opts.codUsuario));
 
-  if (!res.ok) {
-    const msg = json?.message || `HTTP ${res.status} ${url}`;
-    throw new Error(msg);
-  }
-  return json;
+    const resp = await fetchJson<ListarResp>(`/api/archivos/listar${params.toString() ? `?${params}` : ''}`);
+    const items = (resp.rows || []).map(mapToItem);
+    return { items, total: resp.total ?? items.length };
+  };
+
+  const obtenerUrlDescarga = async (path: string) => {
+    const data = await fetchJson<{ url: string }>(
+      `/api/archivos/url-descarga?path=${encodeURIComponent(path)}`
+    );
+    return data.url;
+  };
+
+  const eliminarArchivo = async (path: string, codUsuario?: number) => {
+    const data = await fetchJson<{ deleted: boolean }>(`/api/archivos/eliminar`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, codUsuario }),
+    });
+    return !!data.deleted;
+  };
+
+  // Subida multipart desde app (FormData con "archivo" y opcional "codUsuario")
+  const subirDesdeApp = async (formData: FormData) => {
+    const data = await fetchJson<{ archivo: Archivo; downloadUrl: string }>(`/api/archivos/subir`, {
+      method: 'POST',
+      // Importantísimo: no forzar 'Content-Type' para que RN ponga el boundary
+      headers: undefined as any,
+      body: formData as any,
+    });
+    return { item: mapToItem(data.archivo), downloadUrl: data.downloadUrl };
+  };
+
+  return { listarArchivos, obtenerUrlDescarga, eliminarArchivo, subirDesdeApp };
 }
 
-/** Lista archivos desde /archivos/listar (mapea nombres a los que espera el front) */
-export async function listarArchivos(params: {
-  take?: number;
-  skip?: number;
-  codUsuario?: number;
-}) {
-  const take = params.take ?? 100;
-  const skip = params.skip ?? 0;
-  const qs = new URLSearchParams();
-  qs.set('take', String(take));
-  qs.set('skip', String(skip));
-  if (params.codUsuario) qs.set('codUsuario', String(params.codUsuario));
-
-  const url = `${BASE_URL}/archivos/listar?${qs.toString()}`;
-  const data = await safeFetch(url);
-
-  const rows = Array.isArray(data?.rows) ? data.rows : data?.data || [];
-  const total = Number(data?.total ?? 0);
-  const items: ArchivoItem[] = rows.map(mapRowToArchivoItem);
-  return { total, items };
-}
-
-/** Pide URL de descarga pública a /archivos/url-descarga?path=... */
-export async function obtenerUrlDescarga(path: string) {
-  const url = `${BASE_URL}/archivos/url-descarga?path=${encodeURIComponent(path)}`;
-  const data = await safeFetch(url);
-  // backend puede devolver { url } o string; soporta ambos
-  return typeof data === 'string' ? data : (data?.url ?? data);
-}
-
-/** Elimina: usa POST /archivos/eliminar  (body: { path, codUsuario }) */
-export async function eliminarArchivo(path: string, codUsuario: number) {
-  const url = `${BASE_URL}/archivos/eliminar`;
-  const data = await safeFetch(url, {
-    method: 'POST',
-    body: JSON.stringify({ path, codUsuario }),
-  });
-  return data?.deleted === true;
+/** Hook de conveniencia, por si quieres usarlo en otras pantallas */
+export function useArchivosApi() {
+  const { fetchJson, baseUrl } = useAuth();
+  return makeArchivosApi(fetchJson, baseUrl);
 }
