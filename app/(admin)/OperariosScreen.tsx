@@ -1,16 +1,9 @@
+// app/(admin)/(tabs)/operarios/index.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  SafeAreaView,
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  Alert,
-  ActivityIndicator,
+  SafeAreaView, View, Text, StyleSheet, TextInput, TouchableOpacity,
+  FlatList, Alert, ActivityIndicator,
 } from 'react-native';
-
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -18,7 +11,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import FadeWrapper from '../../components/FadeWrapper';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
-import { API } from '../../config/api';
+
+// ⬇️ usa el AuthContext en vez de fetch directo
+import { useAuth } from '../../auth/AuthContext';
 
 const FOOTER_HEIGHT = 64;
 
@@ -55,6 +50,9 @@ export default function OperariosScreen() {
   const g = useMemo(() => makeGlobalStyles(colors), [colors]);
   const s = useMemo(() => getStyles(colors), [colors]);
 
+  // ⬇️ trae fetchJson (ya mete Authorization: Bearer)
+  const { fetchJson } = useAuth();
+
   const [query, setQuery] = useState('');
   const [data, setData] = useState<OperarioUI[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -62,21 +60,18 @@ export default function OperariosScreen() {
   const listar = useCallback(async () => {
     try {
       setCargando(true);
-      const res = await fetch(API.usuario.listar);
-      const txt = await res.text();
-      if (!res.ok) throw new Error(txt || `HTTP ${res.status}`);
-      const json = JSON.parse(txt) as unknown;
-      const arr = Array.isArray(json) ? (json as UsuarioDTO[]).map(mapUsuarioToUI) : [];
+      // ⚠️ Usa ruta SIN duplicar /api: tu baseUrl ya lo tiene
+      const json = await fetchJson<UsuarioDTO[]>('/usuario/listar');
+      const arr = Array.isArray(json) ? json.map(mapUsuarioToUI) : [];
       setData(arr);
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'No se pudo cargar la lista');
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [fetchJson]);
 
   useEffect(() => { listar(); }, [listar]);
-
   useFocusEffect(useCallback(() => { listar(); }, [listar]));
 
   const borrar = (id: string) => {
@@ -88,22 +83,18 @@ export default function OperariosScreen() {
         onPress: async () => {
           try {
             setCargando(true);
-            const res = await fetch(API.usuario.borrar(Number(id)), { method: 'DELETE' });
-            const txt = await res.text();
-
-            if (!res.ok) {
-              if (res.status === 409 || /1451|referenciad/i.test(txt)) {
-                Alert.alert('No se puede borrar', 'El usuario está referenciado por otros registros.');
-              } else if (res.status === 404) {
-                Alert.alert('No existe', 'Usuario no encontrado');
-              } else {
-                Alert.alert('Error', txt || `HTTP ${res.status}`);
-              }
-              return;
-            }
+            // DELETE autenticado
+            await fetchJson(`/usuario/borrar/${Number(id)}`, { method: 'DELETE' });
             await listar();
           } catch (e: any) {
-            Alert.alert('Error', e?.message ?? 'No se pudo borrar');
+            const msg = String(e?.message || '');
+            if (/409/.test(msg) || /1451|referenciad/i.test(msg)) {
+              Alert.alert('No se puede borrar', 'El usuario está referenciado por otros registros.');
+            } else if (/404/.test(msg)) {
+              Alert.alert('No existe', 'Usuario no encontrado');
+            } else {
+              Alert.alert('Error', msg || 'No se pudo borrar');
+            }
           } finally {
             setCargando(false);
           }
