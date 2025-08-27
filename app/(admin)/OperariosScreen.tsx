@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView, View, Text, StyleSheet, TextInput, TouchableOpacity,
-  FlatList, Alert, ActivityIndicator,
+  FlatList, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,29 +12,32 @@ import FadeWrapper from '../../components/FadeWrapper';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
-// ⬇️ usa el AuthContext en vez de fetch directo
+// ⬇️ usa el AuthContext (ya mete Authorization: Bearer y baseUrl)
 import { useAuth } from '../../auth/AuthContext';
 
 const FOOTER_HEIGHT = 64;
 
-/* ---------- Tipos ---------- */
+/* ---------- Tipos (alineados al backend) ---------- */
+type UsuarioListDTO = {
+  codUsuario: number;
+  codRol: number;                 // 1=Admin, 2=Operario
+  codCargoUsuario: number | null;
+  nombreUsuario: string;
+  apellidoUsuario: string;
+  cedulaUsuario: string;
+  nicknameUsuario: string | null;
+  correoUsuario: string;
+  tokenVersion: number;
+};
+
 type OperarioUI = {
   id: string;
   nombre: string;
   cargo: 'Administrador' | 'Operario';
 };
 
-type UsuarioDTO = {
-  codUsuario: number;
-  nombreUsuario: string;
-  apellidoUsuario: string;
-  correoUsuario: string;
-  contrasenaUsuario: string;
-  codRol: number; // 1 = Admin, 2 = Operario
-};
-
 /* ---------- Mapeo ---------- */
-function mapUsuarioToUI(u: UsuarioDTO): OperarioUI {
+function mapUsuarioToUI(u: UsuarioListDTO): OperarioUI {
   return {
     id: String(u.codUsuario),
     nombre: `${u.nombreUsuario} ${u.apellidoUsuario}`.trim(),
@@ -50,18 +53,17 @@ export default function OperariosScreen() {
   const g = useMemo(() => makeGlobalStyles(colors), [colors]);
   const s = useMemo(() => getStyles(colors), [colors]);
 
-  // ⬇️ trae fetchJson (ya mete Authorization: Bearer)
   const { fetchJson } = useAuth();
 
   const [query, setQuery] = useState('');
   const [data, setData] = useState<OperarioUI[]>([]);
   const [cargando, setCargando] = useState(false);
+  const [refrescando, setRefrescando] = useState(false);
 
   const listar = useCallback(async () => {
     try {
       setCargando(true);
-      // ⚠️ Usa ruta SIN duplicar /api: tu baseUrl ya lo tiene
-      const json = await fetchJson<UsuarioDTO[]>('/usuario/listar');
+      const json = await fetchJson<UsuarioListDTO[]>('/usuario/listar');
       const arr = Array.isArray(json) ? json.map(mapUsuarioToUI) : [];
       setData(arr);
     } catch (e: any) {
@@ -71,11 +73,23 @@ export default function OperariosScreen() {
     }
   }, [fetchJson]);
 
+  const refrescar = useCallback(async () => {
+    try {
+      setRefrescando(true);
+      const json = await fetchJson<UsuarioListDTO[]>('/usuario/listar');
+      setData((Array.isArray(json) ? json : []).map(mapUsuarioToUI));
+    } catch (e: any) {
+      // silencio: ya hay alerta en listar si lo llamas desde error manual
+    } finally {
+      setRefrescando(false);
+    }
+  }, [fetchJson]);
+
   useEffect(() => { listar(); }, [listar]);
   useFocusEffect(useCallback(() => { listar(); }, [listar]));
 
   const borrar = (id: string) => {
-    Alert.alert('Confirmar', '¿Deseas borrar este operario?', [
+    Alert.alert('Confirmar', '¿Deseas borrar este usuario?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Borrar',
@@ -83,7 +97,6 @@ export default function OperariosScreen() {
         onPress: async () => {
           try {
             setCargando(true);
-            // DELETE autenticado
             await fetchJson(`/usuario/borrar/${Number(id)}`, { method: 'DELETE' });
             await listar();
           } catch (e: any) {
@@ -169,6 +182,14 @@ export default function OperariosScreen() {
             ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
             contentContainerStyle={{ padding: 16, paddingBottom: FOOTER_HEIGHT + 20 }}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refrescando} onRefresh={refrescar} />
+            }
+            ListEmptyComponent={
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <Text style={{ opacity: 0.6 }}>Sin usuarios</Text>
+              </View>
+            }
           />
         )}
       </SafeAreaView>

@@ -6,13 +6,14 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useAuth } from '../../auth/AuthContext';
 
 export default function TabsLayout() {
+  // Hooks SIEMPRE arriba, sin condiciones
   const { colors } = useTheme();
   const { user } = useAuth();
 
   const isAdmin = (() => {
     const r = user?.rol as unknown;
-    if (typeof r === 'number') return r === 1;      // 1 = admin
-    return String(r).toLowerCase() === 'admin';     // 'admin' | 'operario' | ...
+    if (typeof r === 'number') return r === 1; // 1 = admin
+    return String(r ?? '').toLowerCase() === 'admin';
   })();
 
   return (
@@ -31,7 +32,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
       <Tabs.Screen
         name="RetosScreen"
         options={{
@@ -45,7 +45,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
       <Tabs.Screen
         name="OperariosScreen"
         options={{
@@ -59,7 +58,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
       <Tabs.Screen
         name="ReportesScreen"
         options={{
@@ -73,7 +71,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
       <Tabs.Screen
         name="PerfilScreen"
         options={{
@@ -88,25 +85,24 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Ajustes (solo admin) → archivo: app/(admin)/(tabs)/SettingsScreen.tsx */}
-      {isAdmin && (
-        <Tabs.Screen
-          name="SettingsScreen"   // ✅ nombre relativo correcto
-          options={{
-            title: 'Ajustes',
-            tabBarIcon: ({ focused, color, size }) => (
-              <FontAwesome5
-                name="cog"
-                size={size ?? 24}
-                color={color ?? (focused ? colors.tabIconActive : colors.tabIcon)}
-                solid
-              />
-            ),
-          }}
-        />
-      )}
+      {/* Ajustes: SIEMPRE montado, pero oculto si no es admin */}
+      <Tabs.Screen
+        name="SettingsScreen"
+        options={{
+          title: 'Ajustes',
+          href: isAdmin ? undefined : null, // 👈 oculta el tab para no-admin
+          tabBarIcon: ({ focused, color, size }) => (
+            <FontAwesome5
+              name="cog"
+              size={size ?? 24}
+              color={color ?? (focused ? colors.tabIconActive : colors.tabIcon)}
+              solid
+            />
+          ),
+        }}
+      />
 
-      {/* Ocultar rutas internas que no deben aparecer como tab (nombres relativos al folder) */}
+      {/* Rutas internas ocultas */}
       <Tabs.Screen name="retos" options={{ href: null }} />
       <Tabs.Screen name="operarios/OperarioFormScreen" options={{ href: null }} />
     </Tabs>

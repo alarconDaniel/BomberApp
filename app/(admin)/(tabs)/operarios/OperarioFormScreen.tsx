@@ -7,21 +7,20 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import FadeWrapper from '../../../../components/FadeWrapper';
 import { colors } from '../../../../styles/globalStyles1';
-import { API } from '../../../../config/api';
 import { useAuth } from '../../../../auth/AuthContext';
 
 type Mode = 'create' | 'edit';
 
-type UsuarioResponse = {
-  codUsuario?: number;        cod_usuario?: number;
-  codRol?: number;            cod_rol?: number;
-  nombreUsuario?: string;     nombre_usuario?: string;
-  apellidoUsuario?: string;   apellido_usuario?: string;
-  nicknameUsuario?: string | null; nickname_usuario?: string | null;
-  correoUsuario?: string;     correo_usuario?: string;
-  contrasenaUsuario?: string; contrasena_usuario?: string;
-  cedulaUsuario?: string;     cedula_usuario?: string;
-  cod_cargo_usuario?: number | null;
+type UsuarioDTO = {
+  codUsuario: number;
+  codRol: number;
+  codCargoUsuario: number | null;
+  nombreUsuario: string;
+  apellidoUsuario: string;
+  nicknameUsuario: string | null;
+  correoUsuario: string;
+  cedulaUsuario: string;
+  tokenVersion: number;
 };
 
 const ROLES = [
@@ -93,7 +92,7 @@ export default function OperarioFormScreen() {
     );
   }
 
-  // 🧽 Reset de campos al entrar en modo "create" (evita que queden datos de ediciones anteriores)
+  // 🧽 Reset de campos al entrar en modo "create"
   useEffect(() => {
     if (mode === 'create') {
       setNombre(''); setApellido(''); setNickname('');
@@ -102,19 +101,19 @@ export default function OperarioFormScreen() {
     }
   }, [mode]);
 
-  // 📝 Cargar datos si es edición
+  // 📝 Cargar datos si es edición (camelCase del backend)
   useEffect(() => {
     if (mode !== 'edit' || !editingId) return;
     (async () => {
       try {
         setLoading(true);
-        const u = await fetchJson<UsuarioResponse>(API.usuario.obtener(editingId));
-        setNombre(u.nombreUsuario ?? u.nombre_usuario ?? '');
-        setApellido(u.apellidoUsuario ?? u.apellido_usuario ?? '');
-        setNickname((u.nicknameUsuario ?? u.nickname_usuario ?? '') || '');
-        setCorreo(u.correoUsuario ?? u.correo_usuario ?? '');
-        setCedula(u.cedulaUsuario ?? u.cedula_usuario ?? '');
-        setCodRol(u.codRol ?? u.cod_rol ?? ROLES[1].value);
+        const u = await fetchJson<UsuarioDTO>(`/usuario/${editingId}`);
+        setNombre(u?.nombreUsuario ?? '');
+        setApellido(u?.apellidoUsuario ?? '');
+        setNickname(u?.nicknameUsuario ?? '');
+        setCorreo(u?.correoUsuario ?? '');
+        setCedula(u?.cedulaUsuario ?? '');
+        setCodRol(u?.codRol ?? ROLES[1].value);
         setContrasena('');
       } catch (e: any) {
         Alert.alert('Error', e?.message ?? 'No se pudo cargar el usuario');
@@ -149,34 +148,34 @@ export default function OperarioFormScreen() {
     return true;
   };
 
-  // 💾 Guardar
+  // 💾 Guardar (camelCase)
   const onSubmit = async () => {
     if (!validar()) return;
 
     const isCreate = mode === 'create';
     const body = isCreate
       ? {
-          cod_rol: codRol,
-          nombre_usuario: nombre.trim(),
-          apellido_usuario: apellido.trim(),
-          nickname_usuario: nickname.trim() ? nickname.trim() : null,
-          correo_usuario: correo.trim(),
-          contrasena_usuario: contrasena.trim(),
-          cedula_usuario: cedula.trim(),
+          codRol,
+          nombreUsuario: nombre.trim(),
+          apellidoUsuario: apellido.trim(),
+          nicknameUsuario: nickname.trim() ? nickname.trim() : null,
+          correoUsuario: correo.trim().toLowerCase(),
+          contrasenaUsuario: contrasena.trim(),
+          cedulaUsuario: cedula.trim(),
         }
       : {
-          cod_usuario: Number(editingId),
-          nombre_usuario: nombre.trim(),
-          apellido_usuario: apellido.trim(),
-          nickname_usuario: nickname.trim() ? nickname.trim() : null,
-          correo_usuario: correo.trim(),
-          cedula_usuario: cedula.trim(),
-          ...(contrasena.trim() ? { contrasena_usuario: contrasena.trim() } : {}),
+          codUsuario: Number(editingId),
+          nombreUsuario: nombre.trim(),
+          apellidoUsuario: apellido.trim(),
+          nicknameUsuario: nickname.trim() ? nickname.trim() : null,
+          correoUsuario: correo.trim().toLowerCase(),
+          cedulaUsuario: cedula.trim(),
+          ...(contrasena.trim() ? { contrasenaUsuario: contrasena.trim() } : {}),
         };
 
     try {
       setLoading(true);
-      const url = isCreate ? API.usuario.crear : API.usuario.modificar;
+      const url = isCreate ? '/usuario/crear' : '/usuario/modificar';
       const method = isCreate ? 'POST' : 'PUT';
 
       await fetchJson(url, {
@@ -198,7 +197,7 @@ export default function OperarioFormScreen() {
         Alert.alert('Duplicado', 'El correo ya está registrado.');
       } else if (msg.includes('Rol/Cargo inválido') || msg.includes('1452')) {
         Alert.alert('Dato inválido', 'El rol o cargo no existe (violación de FK).');
-      } else if (msg.includes('cod_rol') || msg.toLowerCase().includes('rol')) {
+      } else if (msg.toLowerCase().includes('codrol') || msg.toLowerCase().includes('rol')) {
         Alert.alert('Rol requerido', 'Selecciona un rol válido.');
       } else {
         Alert.alert('Error', msg || 'No se pudo guardar');
@@ -256,7 +255,7 @@ export default function OperarioFormScreen() {
                 style={ui.input}
                 value={nombre}
                 onChangeText={setNombre}
-                placeholder="Ej: Juan Carlos"
+                placeholder="Juan Carlos"
                 placeholderTextColor="#9aa4ad"
                 autoCapitalize="words"
               />
@@ -266,7 +265,7 @@ export default function OperarioFormScreen() {
                 style={ui.input}
                 value={apellido}
                 onChangeText={setApellido}
-                placeholder="Ej: Pérez García"
+                placeholder="Pérez García"
                 placeholderTextColor="#9aa4ad"
                 autoCapitalize="words"
               />
@@ -277,7 +276,7 @@ export default function OperarioFormScreen() {
                 style={ui.input}
                 value={nickname}
                 onChangeText={setNickname}
-                placeholder="Ej: jperez"
+                placeholder="jperez"
                 placeholderTextColor="#9aa4ad"
                 autoCapitalize="none"
               />
@@ -304,7 +303,7 @@ export default function OperarioFormScreen() {
                 secureTextEntry
                 value={contrasena}
                 onChangeText={setContrasena}
-                placeholder={mode === 'edit' ? '••••••••' : 'Mín. 8 caracteres'}
+                placeholder={mode === 'edit' ? '••••••••' : 'Mínimo 8 caracteres'}
                 placeholderTextColor="#9aa4ad"
                 autoComplete="password-new"
               />
@@ -315,7 +314,7 @@ export default function OperarioFormScreen() {
                 style={ui.input}
                 value={cedula}
                 onChangeText={setCedula}
-                placeholder="Ej: 12345678"
+                placeholder="12345678"
                 placeholderTextColor="#9aa4ad"
                 keyboardType="numeric"
               />
