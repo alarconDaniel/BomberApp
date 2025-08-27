@@ -1,12 +1,17 @@
-// screens/ReportesScreen.tsx
+// app/(admin)/ReportesScreen.tsx
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert,
-  useColorScheme, ActivityIndicator,
+  ActivityIndicator, Pressable, SafeAreaView, ScrollView
 } from 'react-native';
 import * as Linking from 'expo-linking';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
 import FadeWrapper from '../../components/FadeWrapper';
 import HeaderOperario from '../../components/HeaderOperario';
+
+import { useTheme } from '../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 // ⬇️ usa el contexto y el factory existente
 import { useAuth } from '../../auth/AuthContext';
@@ -17,22 +22,32 @@ const FOOTER_HEIGHT = 56;
 const INITIAL_SHOWN = 3;
 
 export default function ReportesScreen() {
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
+  // 🎨 Paleta clara inspirada en OperariosScreen (usa ThemeProvider)
+  const { colors } = useTheme();
+  const g = useMemo(() => makeGlobalStyles(colors), [colors]);
 
   const c = {
-    bg: dark ? '#0f0f10' : '#f2f2f2',
-    card: dark ? '#1b1c1f' : '#e6e6e6',
-    section: dark ? '#232428' : '#dcdcdc',
-    text: dark ? '#f5f5f5' : '#111',
-    soft: '#9aa0a6',
-    border: dark ? '#36373b' : '#cfcfcf',
-    pill: dark ? '#3a3b40' : '#cfcfcf',
+    bg: colors.bg,              // fondo app
+    card: '#FFFFFF',            // tarjetas
+    section: '#F6F8FC',         // bloques de sección
+    text: colors.text,          // texto principal
+    soft: '#6B7280',            // texto secundario
+    border: '#E6E9ED',          // borde de tarjetas
+    pill: '#EEF2F7',            // pill / chip claro
+    searchBg: '#EEF2F7',        // buscador
+    searchBorder: '#E1E6EE',    // borde buscador
+    sectionAccent: '#7aa3ff',   // chip de título de sección
   };
 
-  // API de archivos con fetchJson (que ya mete Authorization: Bearer) + baseUrl
-  const { fetchJson, baseUrl } = useAuth();
+  // Auth / permisos
+  const { user, loading: authLoading, fetchJson, baseUrl } = useAuth();
   const archivosApi = useMemo(() => makeArchivosApi(fetchJson, baseUrl), [fetchJson, baseUrl]);
+
+  const isAdmin = (() => {
+    const r = user?.rol as unknown;
+    if (typeof r === 'number') return r === 1;     // numérico
+    return String(r).toLowerCase() === 'admin';     // string 'admin'
+  })();
 
   const [query, setQuery] = useState('');
   const [archivos, setArchivos] = useState<ArchivoItem[]>([]);
@@ -74,7 +89,6 @@ export default function ReportesScreen() {
       const url = await archivosApi.obtenerUrlDescarga(item.path);
       if (!url) return Alert.alert('Descarga', 'No se pudo obtener la URL de descarga');
 
-      // En Android, canOpenURL puede devolver false para http(s) sin intent-filter; abrimos directo
       const can = await Linking.canOpenURL(url).catch(() => false);
       if (!can) {
         await Linking.openURL(url);
@@ -87,6 +101,10 @@ export default function ReportesScreen() {
   }, [archivosApi]);
 
   const borrar = useCallback((item: ArchivoItem) => {
+    if (!isAdmin) {
+      Alert.alert('Sin permisos', 'Solo un administrador puede eliminar archivos.');
+      return;
+    }
     if (item.codUsuario == null) {
       Alert.alert('Eliminar', 'No se puede eliminar: falta el propietario del archivo.');
       return;
@@ -109,14 +127,16 @@ export default function ReportesScreen() {
                 Alert.alert('Eliminar', 'No se pudo eliminar');
               }
             } catch (e: any) {
-              Alert.alert('Eliminar', e?.message ?? 'Error eliminando archivo');
+              const msg = String(e?.message || '');
+              if (msg.includes('403')) Alert.alert('Sin permisos', 'No puedes eliminar archivos.');
+              else Alert.alert('Eliminar', e?.message ?? 'Error eliminando archivo');
             }
           },
         },
       ],
       { cancelable: true },
     );
-  }, [archivosApi]);
+  }, [archivosApi, isAdmin]);
 
   // Búsqueda en memoria
   const filtrados = useMemo(() => {
@@ -148,6 +168,22 @@ export default function ReportesScreen() {
   const toggleMas = (seccion: string) =>
     setExpanded(prev => ({ ...prev, [seccion]: !prev[seccion] }));
 
+  // --- Botón cuadrado reutilizable (como en Retos) ---
+  function Square({ onPress, danger = false, palette }: { onPress?: () => void; danger?: boolean; palette: typeof colors }) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={{
+          width: 28, height: 28, borderRadius: 6,
+          backgroundColor: danger ? palette.danger : palette.mutedBg,
+          alignItems: 'center', justifyContent: 'center'
+        }}
+      >
+        <Ionicons name={danger ? 'trash' : 'create'} size={16} color={danger ? '#fff' : palette.text} />
+      </Pressable>
+    );
+  }
+
   const renderRow = (item: ArchivoItem) => {
     const { label, bg } = pickIcon(item.contentType, item.nombreOriginal);
     return (
@@ -166,12 +202,11 @@ export default function ReportesScreen() {
         </View>
 
         <TouchableOpacity style={[styles.pill, { backgroundColor: c.pill }]} onPress={() => abrir(item)}>
-          <Text style={styles.pillTxt}>Ver</Text>
+          <Text style={styles.pillTxt}>Descargar</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.close} onPress={() => borrar(item)}>
-          <Text style={styles.closeTxt}>✕</Text>
-        </TouchableOpacity>
+        {/* ⬇️ Solo admin ve/elimina */}
+        {isAdmin && <Square onPress={() => borrar(item)} danger palette={colors} />}
       </View>
     );
   };
@@ -180,8 +215,10 @@ export default function ReportesScreen() {
     const isOpen = expanded[title] ?? false;
     const slice = isOpen ? items : items.slice(0, INITIAL_SHOWN);
     return (
-      <View style={[styles.sectionWrap, { backgroundColor: c.section, borderColor: '#7aa3ff' }]}>
-        <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={[styles.sectionWrap, { backgroundColor: c.section, borderColor: c.sectionAccent }]}>
+        <Text style={[styles.sectionTitle, { backgroundColor: c.sectionAccent }]}>
+          {title}
+        </Text>
 
         {slice.map((it) => (
           <View key={`${title}-${it.path}`} style={styles.rowWrap}>
@@ -190,7 +227,10 @@ export default function ReportesScreen() {
         ))}
 
         {items.length > INITIAL_SHOWN && (
-          <TouchableOpacity style={[styles.moreBtn, { backgroundColor: '#cfcfcf' }]} onPress={() => toggleMas(title)}>
+          <TouchableOpacity
+            style={[styles.moreBtn, { backgroundColor: '#cfcfcf' }]}
+            onPress={() => toggleMas(title)}
+          >
             <Text style={styles.moreTxt}>{isOpen ? 'Menos' : 'Más'}</Text>
           </TouchableOpacity>
         )}
@@ -200,6 +240,18 @@ export default function ReportesScreen() {
 
   const sectionEntries = Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
 
+  // Bloqueo mientras valida sesión (coherente con Retos)
+  if (authLoading) {
+    return (
+      <FadeWrapper>
+        <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
+          <ActivityIndicator />
+          <Text style={{ marginTop: 8, color: colors.text }}>Verificando sesión…</Text>
+        </SafeAreaView>
+      </FadeWrapper>
+    );
+    }
+
   return (
     <FadeWrapper>
       <HeaderOperario />
@@ -207,16 +259,19 @@ export default function ReportesScreen() {
         <Text style={[styles.pageTitle, { color: c.text }]}>REPORTES</Text>
 
         {/* Buscador */}
-        <View style={styles.searchWrap}>
+        <View style={[styles.searchWrap, { backgroundColor: c.searchBg, borderColor: c.searchBorder }]}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={[styles.searchInput, { color: c.text }]}
             placeholder="Buscar un reporte"
-            placeholderTextColor="#9d9d9d"
+            placeholderTextColor="#9aa4ad"
             value={query}
             onChangeText={setQuery}
             autoCapitalize="none"
           />
+          <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh} accessibilityLabel="Actualizar">
+            <Text>↻</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={{ height: 10 }} />
@@ -272,16 +327,23 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 22, fontWeight: '900', textAlign: 'center', letterSpacing: 1, marginBottom: 8,
   },
+
+  /* Buscador estilo claro (como Operarios) */
   searchWrap: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#dedede',
-    borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
   },
-  searchIcon: { marginRight: 6, color: '#777' },
+  searchIcon: { marginRight: 6, color: '#97A0AC' },
   searchInput: { flex: 1, paddingVertical: 4 },
+  refreshBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
 
   sectionWrap: { borderRadius: 10, padding: 8, marginBottom: 14, borderWidth: 2 },
   sectionTitle: {
-    fontSize: 16, fontWeight: '800', color: '#ffffff', backgroundColor: '#7aa3ff',
+    fontSize: 16, fontWeight: '800', color: '#ffffff',
     paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, alignSelf: 'flex-start', marginBottom: 6,
   },
 
@@ -298,11 +360,6 @@ const styles = StyleSheet.create({
 
   pill: { marginHorizontal: 6, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100 },
   pillTxt: { color: '#555', fontWeight: '700' },
-
-  close: {
-    width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#d9d9d9',
-  },
-  closeTxt: { color: '#333', fontWeight: '700' },
 
   moreBtn: { alignSelf: 'center', marginTop: 6, paddingHorizontal: 30, paddingVertical: 6, borderRadius: 100 },
   moreTxt: { color: '#6b6b6b', fontWeight: '800' },

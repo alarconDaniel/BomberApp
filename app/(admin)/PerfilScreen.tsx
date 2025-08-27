@@ -1,7 +1,8 @@
 // app/(admin)/(tabs)/PerfilScreen.tsx
 import React, { useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, SafeAreaView, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import FadeWrapper from '../../components/FadeWrapper';
@@ -11,39 +12,41 @@ import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 const AVATAR = 96;
 
+/* helpers */
 function initials(name?: string) {
   const s = (name ?? '').trim();
   if (!s) return '👤';
-  const parts = s.split(/\s+/);
-  const a = parts[0]?.[0] ?? '';
-  const b = parts[1]?.[0] ?? '';
-  return (a + b).toUpperCase();
+  const [a, b] = s.split(/\s+/);
+  return ((a?.[0] ?? '') + (b?.[0] ?? '')).toUpperCase();
 }
 function fromEmail(email?: string | null) {
   if (!email) return undefined;
-  const local = email.split('@')[0];
-  return local.replace(/[._-]+/g, ' ');
+  return email.split('@')[0].replace(/[._-]+/g, ' ');
 }
 function toTitle(s?: string) {
   if (!s) return '';
-  return s
-    .trim()
-    .split(/\s+/)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ');
+  return s.trim().split(/\s+/).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
 export default function PerfilScreen() {
   const router = useRouter();
-  const { user, logout } = useAuth();
-
-  const { colors, scheme, setScheme, isDark } = useTheme();
+  const { user } = useAuth();
+  const { colors } = useTheme();
   const g = useMemo(() => makeGlobalStyles(colors), [colors]);
 
-  // Nombre derivado del email (ya que user no trae displayName)
   const displayName = toTitle(fromEmail(user?.email)) || 'Administrador';
+  const rolLabel = (() => {
+    const r: any = user?.rol ?? (user as any)?.codRol;
+    if (typeof r === 'number') return r === 1 ? 'admin' : 'operario';
+    return (r ? String(r) : '—').toLowerCase();
+  })();
+  const cedula =
+    (user as any)?.cedula ??
+    (user as any)?.cedulaUsuario ??
+    (user as any)?.cedula_usuario ??
+    '—';
 
-  // animación sutil del avatar
+  // animación avatar
   const pulse = useRef(new Animated.Value(0)).current;
   const onPressAvatar = () => {
     Animated.sequence([
@@ -55,17 +58,38 @@ export default function PerfilScreen() {
     transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) }],
   };
 
-  const onLogout = async () => {
-    await logout();
-    router.replace('/(auth)/login'); // ajusta si tu ruta de login es distinta
-  };
-
   return (
     <FadeWrapper>
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-        {/* Header simple */}
-        <View style={{ paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4 }}>
+      {/* 👇 SafeAreaView de safe-area-context para evitar que se meta bajo la status bar */}
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+        {/* Header */}
+        <View
+          style={{
+            paddingHorizontal: 18,
+            paddingTop: 6,
+            paddingBottom: 10,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
           <Text style={g.text.h2}>Mi perfil</Text>
+
+          <Pressable
+            onPress={() => router.push('/(admin)/(tabs)/SettingsScreen')}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.settingsBtn,
+              {
+                backgroundColor: colors.primary,
+                borderColor: colors.primary,
+                shadowColor: colors.primary,
+                opacity: pressed ? 0.92 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="settings-sharp" size={22} color="#fff" />
+          </Pressable>
         </View>
 
         {/* Tarjeta principal */}
@@ -75,7 +99,6 @@ export default function PerfilScreen() {
             { backgroundColor: colors.card, borderColor: colors.tabBorder, shadowColor: colors.tabBorder },
           ]}
         >
-          {/* Avatar + nombre */}
           <Pressable onPress={onPressAvatar} style={{ alignItems: 'center' }}>
             <Animated.View
               style={[
@@ -99,27 +122,15 @@ export default function PerfilScreen() {
           </Pressable>
 
           <Text style={[g.text.h3, { marginTop: 10 }]}>{displayName}</Text>
-          <Text style={[g.text.small, g.text.muted]}>{user?.email ?? '—'}</Text>
+          <Text style={[g.text.small, g.text.muted]}>{user?.email || '—'}</Text>
 
           {/* Fila de info */}
           <View style={styles.infoRow}>
-            <InfoChip
-              icon="id-card-outline"
-              label="Rol"
-              value={String(user?.rol ?? '—')}
-              colors={colors}
-              g={g}
-            />
-            <InfoChip
-              icon="finger-print-outline"
-              label="ID"
-              value={String(user?.id ?? '—')}
-              colors={colors}
-              g={g}
-            />
+            <InfoChip icon="id-card-outline" label="Rol" value={rolLabel} colors={colors} g={g} />
+            <InfoChip icon="finger-print-outline" label="Cédula" value={String(cedula)} colors={colors} g={g} />
           </View>
 
-          {/* Acciones rápidas */}
+          {/* Acción rápida */}
           <View style={styles.actionsRow}>
             <ActionButton
               icon="create-outline"
@@ -128,48 +139,28 @@ export default function PerfilScreen() {
               colors={colors}
               g={g}
             />
-            <ActionButton
-              icon={isDark ? 'moon' : 'sunny'}
-              label={isDark ? 'Oscuro' : 'Claro'}
-              onPress={() => setScheme(scheme === 'dark' ? 'light' : 'dark')}
-              colors={colors}
-              g={g}
-            />
           </View>
         </View>
 
-        {/* Card secundaria: datos disponibles */}
+        {/* Card secundaria */}
         <View
           style={[
             styles.secondary,
             { backgroundColor: colors.cardTint, borderColor: colors.tabBorder },
           ]}
         >
-          <Row label="Correo" value={user?.email ?? '—'} g={g} />
-          <Row label="ID de usuario" value={String(user?.id ?? '—')} g={g} />
-          <Row label="Rol" value={String(user?.rol ?? '—')} g={g} />
+          <Row label="Correo" value={user?.email || '—'} g={g} />
+          <Row label="Cédula" value={String(cedula)} g={g} />
+          <Row label="Rol" value={rolLabel} g={g} />
         </View>
-
-        {/* Botón salir */}
-        <Pressable
-          onPress={onLogout}
-          style={[styles.logoutBtn, { backgroundColor: colors.danger }]}
-        >
-          <Ionicons name="log-out-outline" color="#fff" size={18} />
-          <Text style={[g.text.onPrimary, { marginLeft: 8 }]}>Cerrar sesión</Text>
-        </Pressable>
       </SafeAreaView>
     </FadeWrapper>
   );
 }
 
-/* ---------- Subcomponentes ---------- */
+/* subcomponentes */
 function InfoChip({
-  icon,
-  label,
-  value,
-  colors,
-  g,
+  icon, label, value, colors, g,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -198,11 +189,7 @@ function InfoChip({
 }
 
 function ActionButton({
-  icon,
-  label,
-  onPress,
-  colors,
-  g,
+  icon, label, onPress, colors, g,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -238,8 +225,20 @@ function Row({ label, value, g }: { label: string; value: string; g: ReturnType<
   );
 }
 
-/* ---------- Estilos base ---------- */
+/* estilos */
 const styles = StyleSheet.create({
+  settingsBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
   card: {
     marginHorizontal: 18,
     marginTop: 8,
@@ -261,14 +260,5 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-  },
-  logoutBtn: {
-    marginTop: 18,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    height: 44,
-    borderRadius: 12,
   },
 });

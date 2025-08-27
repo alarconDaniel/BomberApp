@@ -1,27 +1,23 @@
-// app/(operario)/SettingsScreen.tsx
+// app/(admin)/(tabs)/SettingsScreen.tsx
 import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Switch,
-  Pressable,
-  Modal,
-  ScrollView,
-  SafeAreaView,
-  Alert,
+  View, Text, StyleSheet, Switch, Pressable, Modal, ScrollView, Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import FadeWrapper from '../../components/operario/FadeWrapper';
-import { useAuth } from '../../auth/AuthContext';
+import FadeWrapper from '../../../components/FadeWrapper';
+import { useAuth } from '../../../auth/AuthContext';
 import { router } from 'expo-router';
-import { useTheme } from '../../theme/ThemeProvider';
-import { makeGlobalStyles } from '../../theme/GlobalStyles';
+import { useTheme } from '../../../theme/ThemeProvider';
+import { makeGlobalStyles } from '../../../theme/GlobalStyles';
+
+const FOOTER_HEIGHT = 84; // espacio para el tab bar
 
 export default function SettingsScreen() {
   const { logout, user } = useAuth();
   const { colors, isDark, setScheme, scheme } = useTheme();
   const { text } = useMemo(() => makeGlobalStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
   const [notif, setNotif] = useState(true);
   const [sounds, setSounds] = useState(true);
@@ -32,9 +28,18 @@ export default function SettingsScreen() {
 
   return (
     <FadeWrapper>
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
-          {/* Título principal */}
+      {/* 👇 wrapper con bg para cubrir toda la pantalla */}
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <ScrollView
+          style={{ flex: 1, backgroundColor: colors.bg }}
+          contentContainerStyle={{
+            paddingTop: (insets.top || 0) + 8,
+            paddingHorizontal: 16,
+            paddingBottom: FOOTER_HEIGHT + 24,
+            backgroundColor: colors.bg,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={[text.h1, s.titlePad]}>Configuración</Text>
 
           {/* --------- Experiencia de la app --------- */}
@@ -75,19 +80,16 @@ export default function SettingsScreen() {
 
             <Divider colors={colors} />
 
-            {/* Selector de tema (Claro/Oscuro/Sistema) */}
             <Pressable onPress={() => setThemeOpen(true)}>
               <SettingRow
                 colors={colors}
                 text={text}
                 icon={
-                  scheme === 'system' ? (
-                    <MaterialCommunityIcons name="theme-light-dark" size={22} color={colors.text} />
-                  ) : isDark ? (
-                    <Ionicons name="moon" size={22} color={colors.text} />
-                  ) : (
-                    <Ionicons name="sunny-outline" size={22} color={colors.text} />
-                  )
+                  scheme === 'system'
+                    ? <MaterialCommunityIcons name="theme-light-dark" size={22} color={colors.text} />
+                    : isDark
+                      ? <Ionicons name="moon" size={22} color={colors.text} />
+                      : <Ionicons name="sunny-outline" size={22} color={colors.text} />
                 }
                 label="Tema"
                 right={
@@ -129,11 +131,8 @@ export default function SettingsScreen() {
 
             <Pressable
               onPress={async () => {
-                try {
-                  await logout();
-                } catch {
-                  Alert.alert('Ups', 'No pudimos cerrar sesión. Intenta de nuevo.');
-                }
+                try { await logout(); }
+                catch { Alert.alert('Ups', 'No pudimos cerrar sesión. Intenta de nuevo.'); }
               }}
             >
               <SettingRow
@@ -147,12 +146,10 @@ export default function SettingsScreen() {
               />
             </Pressable>
           </Section>
-
-          <View style={{ height: 32 }} />
         </ScrollView>
-      </SafeAreaView>
+      </View>
 
-      {/* ---- Modal de selección de tema ---- */}
+      {/* Modal de tema */}
       <Modal visible={themeOpen} animationType="fade" transparent onRequestClose={() => setThemeOpen(false)}>
         <Pressable style={s.modalBackdrop} onPress={() => setThemeOpen(false)} />
         <View style={s.sheet}>
@@ -164,34 +161,23 @@ export default function SettingsScreen() {
             active={scheme === 'light'}
             icon={<Ionicons name="sunny" size={18} color={colors.text} />}
             label="Claro"
-            onPress={() => {
-              setScheme('light');
-              setThemeOpen(false);
-            }}
+            onPress={() => { setScheme('light'); setThemeOpen(false); }}
           />
-
           <ThemeOption
             colors={colors}
             text={text}
             active={scheme === 'dark'}
             icon={<Ionicons name="moon" size={18} color={colors.text} />}
             label="Oscuro"
-            onPress={() => {
-              setScheme('dark');
-              setThemeOpen(false);
-            }}
+            onPress={() => { setScheme('dark'); setThemeOpen(false); }}
           />
-
           <ThemeOption
             colors={colors}
             text={text}
             active={scheme === 'system'}
             icon={<MaterialCommunityIcons name="theme-light-dark" size={18} color={colors.text} />}
             label="Sistema"
-            onPress={() => {
-              setScheme('system');
-              setThemeOpen(false);
-            }}
+            onPress={() => { setScheme('system'); setThemeOpen(false); }}
           />
         </View>
       </Modal>
@@ -200,24 +186,15 @@ export default function SettingsScreen() {
 }
 
 /* ---------- helpers ---------- */
-type Palette = import('../../theme/ThemeProvider').Palette;
+type Palette = import('../../../theme/ThemeProvider').Palette;
 type TextVariants = ReturnType<typeof makeGlobalStyles>['text'];
 
-function Section({
-  title,
-  children,
-  colors,
-  text,
-}: {
-  title: string;
-  children: React.ReactNode;
-  colors: Palette;
-  text: TextVariants;
+function Section({ title, children, colors, text }:{
+  title: string; children: React.ReactNode; colors: Palette; text: TextVariants;
 }) {
   const s = makeStyles(colors);
   return (
     <View style={s.section}>
-      {/* h2 con color de subtítulo que te gustaba en Settings */}
       <Text style={[text.h2, { color: colors.sub, marginBottom: 8 }]}>{title}</Text>
       <View style={s.card}>{children}</View>
     </View>
@@ -229,21 +206,10 @@ function Divider({ colors }: { colors: Palette }) {
 }
 
 function SettingRow({
-  icon,
-  label,
-  right,
-  subtitle,
-  danger,
-  colors,
-  text,
+  icon, label, right, subtitle, danger, colors, text,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  right?: React.ReactNode;
-  subtitle?: string;
-  danger?: boolean;
-  colors: Palette;
-  text: TextVariants;
+  icon: React.ReactNode; label: string; right?: React.ReactNode; subtitle?: string;
+  danger?: boolean; colors: Palette; text: TextVariants;
 }) {
   const s = makeStyles(colors);
   return (
@@ -259,36 +225,22 @@ function SettingRow({
 }
 
 function ThemeOption({
-  colors,
-  text,
-  active,
-  icon,
-  label,
-  onPress,
-}: {
-  colors: Palette;
-  text: TextVariants;
-  active: boolean;
-  icon: React.ReactNode;
-  label: string;
-  onPress: () => void;
+  colors, text, active, icon, label, onPress,
+}:{
+  colors: Palette; text: TextVariants; active: boolean; icon: React.ReactNode;
+  label: string; onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        {
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingVertical: 12,
-          paddingHorizontal: 12,
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: active ? colors.primary : colors.divider,
-          backgroundColor: pressed ? colors.cardTint : colors.card,
-          marginTop: 10,
-        },
-      ]}
+      style={({ pressed }) => [{
+        flexDirection: 'row', alignItems: 'center',
+        paddingVertical: 12, paddingHorizontal: 12,
+        borderRadius: 12, borderWidth: 1,
+        borderColor: active ? colors.primary : colors.divider,
+        backgroundColor: pressed ? colors.cardTint : colors.card,
+        marginTop: 10,
+      }]}
     >
       <View style={{ width: 28, alignItems: 'center' }}>{icon}</View>
       <Text style={[text.bodyStrong, { flex: 1, marginLeft: 8 }]}>{label}</Text>
@@ -299,8 +251,8 @@ function ThemeOption({
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
-    container: { padding: 16, backgroundColor: c.bg },
-    titlePad: { marginBottom: 12 }, // se combina con text.h1
+    container: { backgroundColor: c.bg },
+    titlePad: { marginBottom: 12 },
 
     section: { marginTop: 12 },
     card: {
@@ -328,23 +280,10 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
       marginRight: 12,
     },
-
-    // Modal
-    modalBackdrop: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.45)',
-    },
+    modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
     sheet: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: c.card,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      padding: 16,
-      borderTopWidth: 1,
-      borderColor: c.divider,
-      paddingBottom: 60,
+      position: 'absolute', left: 0, right: 0, bottom: 0,
+      backgroundColor: c.card, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+      padding: 16, borderTopWidth: 1, borderColor: c.divider, paddingBottom: 60,
     },
   });
