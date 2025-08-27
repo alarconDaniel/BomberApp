@@ -1,11 +1,13 @@
 // app/_layout.tsx
-import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
+import { Slot, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
 import { ToastProvider } from '../components/operario/ToastProvider';
 import { ThemeProvider } from '../theme/ThemeProvider';
+import { ActivityIndicator, View } from 'react-native';
 
-function AuthGate() {
+function Gate() {
+  // 1) Hooks siempre arriba
   const router = useRouter();
   const segments = useSegments();
   const navState = useRootNavigationState();
@@ -14,17 +16,18 @@ function AuthGate() {
   useEffect(() => {
     if (loading || !navState?.key) return;
 
-    const group = segments?.[0];
-    const isModal = group === '(modals)';
+    const group = segments?.[0];              // '(auth)' | '(admin)' | '(operario)' | '(modals)'
+    const isAuth   = group === '(auth)';
+    const isModal  = group === '(modals)';
 
-    // 1) Sin sesión → login (salvo modales públicos)
+    // Sin sesión → ir a login (permitimos modales públicos)
     if (!user) {
-      if (!isModal && group !== '(auth)') router.replace('/(auth)/login');
+      if (!isModal && !isAuth) router.replace('/(auth)/login');
       return;
     }
 
-    // 2) Con sesión y no es modal → forzar grupo por rol
-    if (isModal) return;
+    // Con sesión: mandar al grupo por rol si no coincide
+    if (isModal) return; // no movemos nada si es modal
 
     if (user.rol === 'operario' && group !== '(operario)') {
       router.replace('/(operario)/HomeScreen');
@@ -34,10 +37,19 @@ function AuthGate() {
       router.replace('/(admin)/HomeScreen');
       return;
     }
-    // Ya está en el grupo correcto
-  }, [user, loading, navState?.key, segments]);
+  }, [loading, navState?.key, segments, user, router]);
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  // Mientras no esté lista la navegación o estamos cargando tokens → loader
+  if (loading || !navState?.key) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  // Render estable del árbol actual (auth/admin/operario)
+  return <Slot />;
 }
 
 export default function RootLayout() {
@@ -45,7 +57,7 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <ToastProvider>
-          <AuthGate />
+          <Gate />
         </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
