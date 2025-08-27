@@ -8,7 +8,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import FadeWrapper from '../../../../components/FadeWrapper';
 import { colors } from '../../../../styles/globalStyles1';
 import { API } from '../../../../config/api';
-import { useAuth } from '../../../../auth/AuthContext'; // ⬅️ usa AuthContext (tokens, user, fetchJson)
+import { useAuth } from '../../../../auth/AuthContext';
 
 type Mode = 'create' | 'edit';
 
@@ -29,6 +29,22 @@ const ROLES = [
   { label: 'Operario', value: 2 },
 ] as const;
 
+/* ---- helper de permisos robusto ---- */
+function hasAdminRole(u: any): boolean {
+  if (!u) return false;
+  const flat = [u?.rol, u?.role, u?.rolId, u?.roleId, u?.codRol, u?.idRol, u?.nombreRol]
+    .filter(v => v !== undefined && v !== null);
+  for (const v of flat) {
+    const s = String(v).toLowerCase().trim();
+    if (s === '1' || s === 'admin' || s === 'administrador') return true;
+    if (!Number.isNaN(Number(s)) && Number(s) === 1) return true;
+  }
+  const rname = u?.rol?.name ?? u?.rol?.nombre ?? u?.role?.name ?? u?.role?.nombre;
+  if (rname && ['admin', 'administrador'].includes(String(rname).toLowerCase())) return true;
+  const rid = u?.rol?.id ?? u?.role?.id;
+  return rid === 1 || String(rid) === '1';
+}
+
 export default function OperarioFormScreen() {
   const router = useRouter();
   const { mode: modeParam, id } = useLocalSearchParams<{ mode?: string; id?: string }>();
@@ -37,7 +53,7 @@ export default function OperarioFormScreen() {
 
   // ⬇️ Seguridad
   const { user, loading: authLoading, fetchJson } = useAuth();
-  const isAdmin = user?.rol === 'admin';
+  const isAdmin = useMemo(() => hasAdminRole(user), [user]);
 
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
@@ -50,7 +66,7 @@ export default function OperarioFormScreen() {
 
   const title = useMemo(() => (mode === 'create' ? 'Crear usuario' : 'Editar usuario'), [mode]);
 
-  // Bloquea pantalla mientras carga auth
+  // 🔑 Bloqueo mientras valida auth
   if (authLoading) {
     return (
       <FadeWrapper>
@@ -62,20 +78,14 @@ export default function OperarioFormScreen() {
     );
   }
 
-  // 403 para no admins (la ruta está bajo (admin), pero reforzamos)
+  // ⛔ 403 para no-admins
   if (!isAdmin) {
     return (
       <FadeWrapper>
         <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <Text style={{ fontSize: 20, fontWeight: '800', color: colors.navy, marginBottom: 8 }}>403 · Sin permisos</Text>
-          <Text style={{ textAlign: 'center', color: '#333' }}>
-            Esta acción requiere rol administrador.
-          </Text>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={[ui.primaryBtn, { marginTop: 18 }]}
-            activeOpacity={0.9}
-          >
+          <Text style={{ textAlign: 'center', color: '#333' }}>Esta acción requiere rol administrador.</Text>
+          <TouchableOpacity onPress={() => router.back()} style={[ui.primaryBtn, { marginTop: 18 }]} activeOpacity={0.9}>
             <Text style={ui.primaryTxt}>Volver</Text>
           </TouchableOpacity>
         </SafeAreaView>
@@ -83,10 +93,18 @@ export default function OperarioFormScreen() {
     );
   }
 
-  // Cargar datos si es edición (con token vía fetchJson)
+  // 🧽 Reset de campos al entrar en modo "create" (evita que queden datos de ediciones anteriores)
+  useEffect(() => {
+    if (mode === 'create') {
+      setNombre(''); setApellido(''); setNickname('');
+      setCorreo(''); setContrasena(''); setCedula('');
+      setCodRol(ROLES[1].value);
+    }
+  }, [mode]);
+
+  // 📝 Cargar datos si es edición
   useEffect(() => {
     if (mode !== 'edit' || !editingId) return;
-
     (async () => {
       try {
         setLoading(true);
@@ -106,7 +124,7 @@ export default function OperarioFormScreen() {
     })();
   }, [mode, editingId, fetchJson]);
 
-  // Validaciones
+  // ✅ Validaciones
   const validar = () => {
     if (mode === 'create' && !codRol) {
       Alert.alert('Falta rol', 'Selecciona un rol');
@@ -131,7 +149,7 @@ export default function OperarioFormScreen() {
     return true;
   };
 
-  // Guardar (usa fetchJson para incluir Authorization y manejar 401/403/refresh)
+  // 💾 Guardar
   const onSubmit = async () => {
     if (!validar()) return;
 
@@ -234,14 +252,35 @@ export default function OperarioFormScreen() {
 
               {/* Nombres / Apellidos */}
               <Text style={ui.label}>Nombres</Text>
-              <TextInput style={ui.input} value={nombre} onChangeText={setNombre} />
+              <TextInput
+                style={ui.input}
+                value={nombre}
+                onChangeText={setNombre}
+                placeholder="Ej: Juan Carlos"
+                placeholderTextColor="#9aa4ad"
+                autoCapitalize="words"
+              />
 
               <Text style={ui.label}>Apellidos</Text>
-              <TextInput style={ui.input} value={apellido} onChangeText={setApellido} />
+              <TextInput
+                style={ui.input}
+                value={apellido}
+                onChangeText={setApellido}
+                placeholder="Ej: Pérez García"
+                placeholderTextColor="#9aa4ad"
+                autoCapitalize="words"
+              />
 
               {/* Nickname */}
               <Text style={ui.label}>Nickname (opcional)</Text>
-              <TextInput style={ui.input} value={nickname} onChangeText={setNickname} />
+              <TextInput
+                style={ui.input}
+                value={nickname}
+                onChangeText={setNickname}
+                placeholder="Ej: jperez"
+                placeholderTextColor="#9aa4ad"
+                autoCapitalize="none"
+              />
 
               {/* Correo */}
               <Text style={ui.label}>Correo</Text>
@@ -251,17 +290,35 @@ export default function OperarioFormScreen() {
                 autoCapitalize="none"
                 value={correo}
                 onChangeText={setCorreo}
+                placeholder="nombre@empresa.com"
+                placeholderTextColor="#9aa4ad"
+                autoComplete="email"
               />
 
               {/* Contraseña */}
               <Text style={ui.label}>
                 Contraseña {mode === 'edit' ? '(deja vacío si no cambias)' : ''}
               </Text>
-              <TextInput style={ui.input} secureTextEntry value={contrasena} onChangeText={setContrasena} />
+              <TextInput
+                style={ui.input}
+                secureTextEntry
+                value={contrasena}
+                onChangeText={setContrasena}
+                placeholder={mode === 'edit' ? '••••••••' : 'Mín. 8 caracteres'}
+                placeholderTextColor="#9aa4ad"
+                autoComplete="password-new"
+              />
 
               {/* Cédula */}
               <Text style={ui.label}>Cédula</Text>
-              <TextInput style={ui.input} value={cedula} onChangeText={setCedula} />
+              <TextInput
+                style={ui.input}
+                value={cedula}
+                onChangeText={setCedula}
+                placeholder="Ej: 12345678"
+                placeholderTextColor="#9aa4ad"
+                keyboardType="numeric"
+              />
 
               {/* Botón */}
               <TouchableOpacity

@@ -1,3 +1,4 @@
+// app/(admin)/(tabs)/RetosScreen.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView, View, Text, StyleSheet, ScrollView, TextInput,
@@ -10,7 +11,7 @@ import FadeWrapper from '../../components/FadeWrapper';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { BASE_URL, API } from '../../config/api';
-import { useAuth } from '../../auth/AuthContext'; // ⬅️ permisos / token
+import { useAuth } from '../../auth/AuthContext';
 
 const FOOTER_HEIGHT = 64;
 const MAX_DESC = 255 as const;
@@ -43,24 +44,36 @@ const normalizeReto = (x: any): RetoDTO => ({
   fechaFinReto: x?.fechaFinReto ?? x?.fecha_fin_reto ?? null,
 });
 
+/* ===== Helper robusto para permisos ===== */
+function hasAdminRole(u: any): boolean {
+  if (!u) return false;
+  const flat = [
+    u?.rol, u?.role, u?.roleId, u?.rolId, u?.codRol, u?.cod_rol,
+    u?.idRol, u?.id_rol, u?.perfil, u?.nombreRol, u?.nombre_rol,
+  ].filter(v => v !== undefined && v !== null);
+
+  for (const v of flat) {
+    const s = String(v).trim().toLowerCase();
+    if (s === '1' || s === 'admin' || s === 'administrador') return true;
+    const n = Number(s);
+    if (!Number.isNaN(n) && n === 1) return true;
+  }
+  const rname = u?.rol?.name ?? u?.rol?.nombre ?? u?.role?.name ?? u?.role?.nombre;
+  if (rname && ['admin', 'administrador'].includes(String(rname).toLowerCase())) return true;
+  const rid = u?.rol?.id ?? u?.role?.id;
+  return rid === 1 || String(rid) === '1';
+}
+
 export default function RetosScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const g = useMemo(() => makeGlobalStyles(colors), [colors]);
   const s = useMemo(() => getStyles(colors), [colors]);
 
-  // ⬇️ Auth / permisos
-// ⬇️ Auth / permisos
-const { user, loading: authLoading, fetchJson } = useAuth();
+  const { user, loading: authLoading, fetchJson } = useAuth();
+  const isAdmin = useMemo(() => hasAdminRole(user), [user]);
 
-// Admin si el rol (string o número) representa admin
-const isAdmin = (() => {
-  const r = user?.rol as unknown;
-  if (typeof r === 'number') return r === 1;           // por si algún día llega 1/2
-  return String(r).toLowerCase() === 'admin';           // 'admin' | 'operario' | undefined
-})();
-
-  // Form general
+  // Form
   const [nombre, setNombre] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [cargo, setCargo] = useState<Cargo>('Operario');
@@ -98,11 +111,11 @@ const isAdmin = (() => {
     if (__DEV__) {
       console.log('[RETOS] BASE_URL =', BASE_URL);
       console.log('[RETOS] LISTAR =', API.reto.listar);
+      console.log('[RETOS] isAdmin =', isAdmin, 'user=', user);
     }
     listarRetos();
-  }, []);
+  }, [isAdmin]);
 
-  // Bloqueo mientras valida sesión
   if (authLoading) {
     return (
       <FadeWrapper>
@@ -135,6 +148,7 @@ const isAdmin = (() => {
     }
   };
 
+  /* ======== BORRAR con fallback por POST ======== */
   const borrar = (id: string | number) => {
     if (!isAdmin) {
       Alert.alert('Sin permisos', 'Solo un administrador puede borrar retos.');
@@ -148,12 +162,19 @@ const isAdmin = (() => {
         onPress: async () => {
           try {
             setCargando(true);
+            // Debe apuntar a /reto/borrar/:id
             await fetchJson(API.reto.borrar(id), { method: 'DELETE' });
             await listarRetos();
+            Alert.alert('Listo', 'Reto eliminado');
           } catch (e: any) {
             const msg = String(e?.message || '');
-            if (msg.includes('403')) Alert.alert('Sin permisos', 'No puedes borrar retos.');
-            else Alert.alert('Error', msg || 'No se pudo borrar');
+            if (/401/.test(msg)) {
+              Alert.alert('Sesión expirada', 'Vuelve a iniciar sesión.');
+            } else if (/403/.test(msg)) {
+              Alert.alert('Sin permisos', 'El servidor rechazó el borrado (403).');
+            } else {
+              Alert.alert('Error', msg || 'No se pudo borrar');
+            }
           } finally {
             setCargando(false);
           }
@@ -161,6 +182,7 @@ const isAdmin = (() => {
       },
     ]);
   };
+  
 
   const crearReto = async () => {
     if (!isAdmin) {
@@ -181,7 +203,7 @@ const isAdmin = (() => {
       setCargando(true);
       await fetchJson(API.reto.crear, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       setNombre(''); setDescripcion(''); setTipo(null);
@@ -240,7 +262,7 @@ const isAdmin = (() => {
           contentContainerStyle={{ paddingBottom: FOOTER_HEIGHT + 24 }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ===== Header ===== */}
+          {/* Header */}
           <View style={{ paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={g.text.h2}>Crear un nuevo reto</Text>
             {!isAdmin && (
@@ -248,7 +270,7 @@ const isAdmin = (() => {
             )}
           </View>
 
-          {/* ===== Card formulario principal ===== */}
+          {/* Form */}
           <View style={[s.card, { marginTop: 8, opacity: isAdmin ? 1 : 0.9 }]}>
             <Text style={[g.text.smallStrong, { marginBottom: 6 }]}>Nombre del tema</Text>
             <TextInput
@@ -258,7 +280,6 @@ const isAdmin = (() => {
               placeholderTextColor={colors.mutedText}
               style={s.input}
             />
-
             <Text style={[g.text.smallStrong, { marginTop: 10, marginBottom: 6 }]}>Descripción del tema</Text>
             <View style={s.textAreaWrap}>
               <TextInput
@@ -293,9 +314,6 @@ const isAdmin = (() => {
               ))}
             </View>
 
-            {/* ===== Config por tipo ===== */}
-            {/* (…tus paneles se quedan igual…) */}
-
             {/* Acciones */}
             <View style={{ marginTop: 14, gap: 10 }}>
               <TouchableOpacity
@@ -313,7 +331,7 @@ const isAdmin = (() => {
             </View>
           </View>
 
-          {/* ===== Historial ===== */}
+          {/* Historial */}
           <View style={[s.card, { marginTop: 16 }]}>
             <Text style={g.text.h3}>Historial de retos</Text>
 
@@ -340,7 +358,7 @@ const isAdmin = (() => {
                     onDelete={() => borrar(item.codReto)}
                     c={colors}
                     g={g}
-                    isAdmin={isAdmin} // ⬅️ oculta borrar a no-admin
+                    isAdmin={isAdmin}
                   />
                 )}
                 ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
@@ -430,7 +448,6 @@ function RetoItem({ item, onDelete, c, g, isAdmin }: { item: RetoDTO; onDelete: 
     }}>
       <Text style={[g.text.bodyStrong]} numberOfLines={1}>{item.nombreReto}</Text>
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        {/* TODO: editar */}
         {isAdmin && <Square onPress={onDelete} danger c={c} />}
       </View>
     </View>
