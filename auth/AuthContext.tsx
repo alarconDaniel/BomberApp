@@ -1,10 +1,10 @@
-// auth/AuthContext.tsx(POR EL AMOR DE DIOS DEJEN ESTO QUIETO)
+// auth/AuthContext.tsx (POR EL AMOR DE DIOS DEJEN ESTO QUIETO)
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
 type Rol = 'admin' | 'operario';
 
-type User = { id: number; email: string; rol: Rol } | null;
+type User = { id: number; email: string; rol: Rol; cedula?: string } | null; // 👈 cedula opcional
 
 type Tokens = {
   access_token: string;
@@ -24,7 +24,7 @@ type AuthContextShape = {
 const AuthContext = createContext<AuthContextShape | null>(null);
 
 // ⛓️ HOST fijo + prefijo /api (evita 404)
-const HOST = 'http://172.21.103.54:3550';
+const HOST = 'http://192.168.137.180:3550';
 const API_BASE = `${HOST}/api`;
 
 const ACCESS_KEY = 'auth_access_token';
@@ -47,6 +47,18 @@ function normalizeRol(raw: any): Rol {
   if (['admin', 'administrator', 'administrador', 'adm'].includes(s)) return 'admin';
   if (['operario', 'operador', 'worker', 'user', 'empleado'].includes(s)) return 'operario';
   return 'operario';
+}
+
+// 👇 helper minúsculo para leer la cédula sin romper nada
+function pickCedula(obj: any): string | undefined {
+  const v =
+    obj?.cedula ??
+    obj?.cedulaUsuario ??
+    obj?.cedula_usuario ??
+    obj?.documento ??
+    obj?.dni ??
+    undefined;
+  return v != null ? String(v) : undefined;
 }
 
 async function saveTokens(tokens: Tokens, user: User) {
@@ -112,12 +124,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const data = await res.json();
     const nextTokens = { access_token: data.access_token, refresh_token: data.refresh_token };
+
+    // user básico desde login (si viene)
     const rawUser = data.user || {};
-    const nextUser: User = { id: rawUser.id, email: rawUser.email, rol: normalizeRol(rawUser.rol) };
+    const baseUser: NonNullable<User> = {
+      id: Number(rawUser.id ?? rawUser.codUsuario ?? rawUser.cod_usuario ?? rawUser.userId ?? 0),
+      email: String(rawUser.email ?? rawUser.correoUsuario ?? rawUser.correo_usuario ?? ''),
+      rol: normalizeRol(rawUser.rol ?? rawUser.role),
+      cedula: pickCedula(rawUser), // 👈 intenta leerla del payload del login
+    };
 
     setTokens(nextTokens);
-    setUser(nextUser);
-    await saveTokens(nextTokens, nextUser);
+
+    // Si no vino cédula en el login, intentamos completarla con /auth/me (silencioso)
+    let completedUser = baseUser;
+    if (!baseUser.cedula) {
+      try {
+        const meRes = await fetch(`${API_BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${nextTokens.access_token}` },
+        });
+        if (meRes.ok) {
+          const me = await meRes.json();
+          const ced = pickCedula(me);
+          if (ced) completedUser = { ...baseUser, cedula: ced };
+        }
+      } catch {
+        // sin drama, si falla seguimos con baseUser
+      }
+    }
+
+    setUser(completedUser);
+    await saveTokens(nextTokens, completedUser);
   }, []);
 
   const logout = useCallback(async () => {

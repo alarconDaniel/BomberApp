@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView, View, Text, StyleSheet, TextInput, TouchableOpacity,
-  FlatList, Alert, ActivityIndicator, RefreshControl,
+  FlatList, Alert, ActivityIndicator, RefreshControl
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,8 +11,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import FadeWrapper from '../../components/FadeWrapper';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
-
-// ⬇️ usa el AuthContext (ya mete Authorization: Bearer y baseUrl)
 import { useAuth } from '../../auth/AuthContext';
 
 const FOOTER_HEIGHT = 64;
@@ -36,13 +34,24 @@ type OperarioUI = {
   cargo: 'Administrador' | 'Operario';
 };
 
-/* ---------- Mapeo ---------- */
+/* ---------- Helpers UI ---------- */
 function mapUsuarioToUI(u: UsuarioListDTO): OperarioUI {
   return {
     id: String(u.codUsuario),
     nombre: `${u.nombreUsuario} ${u.apellidoUsuario}`.trim(),
     cargo: u.codRol === 1 ? 'Administrador' : 'Operario',
   };
+}
+
+const getInitial = (name: string) =>
+  (name || '').trim().charAt(0).toUpperCase() || '?';
+
+/** color pastel estable por id (hash tonto) */
+function pastelFromId(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  const hue = Math.abs(h) % 360;
+  return `hsl(${hue} 70% 85%)`;
 }
 
 /* ---------- Pantalla ---------- */
@@ -78,8 +87,8 @@ export default function OperariosScreen() {
       setRefrescando(true);
       const json = await fetchJson<UsuarioListDTO[]>('/usuario/listar');
       setData((Array.isArray(json) ? json : []).map(mapUsuarioToUI));
-    } catch (e: any) {
-      // silencio: ya hay alerta en listar si lo llamas desde error manual
+    } catch {
+      // silencio
     } finally {
       setRefrescando(false);
     }
@@ -123,7 +132,7 @@ export default function OperariosScreen() {
 
   return (
     <FadeWrapper>
-      <SafeAreaView style={[s.container, { paddingTop: insets.top || 8 }]}>
+      <SafeAreaView style={[s.container, { paddingTop: (insets.top || 8) }]}>
         {/* Header */}
         <View style={s.header}>
           <Text style={g.text.h2}>Operarios</Text>
@@ -145,12 +154,12 @@ export default function OperariosScreen() {
 
         {/* Buscador */}
         <View style={s.searchWrap}>
-          <Ionicons name="search" size={16} color="#97A0AC" style={{ marginHorizontal: 8 }} />
+          <Ionicons name="search" size={16} color={colors.mutedText} style={{ marginHorizontal: 8 }} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Buscar un operario"
-            placeholderTextColor="#9aa4ad"
+            placeholderTextColor={colors.mutedText}
             style={s.searchInput}
           />
           <TouchableOpacity style={s.refreshBtn} onPress={listar} accessibilityLabel="Actualizar">
@@ -177,14 +186,13 @@ export default function OperariosScreen() {
                   })
                 }
                 onDelete={() => borrar(item.id)}
+                c={colors}
               />
             )}
             ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
             contentContainerStyle={{ padding: 16, paddingBottom: FOOTER_HEIGHT + 20 }}
             showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refrescando} onRefresh={refrescar} />
-            }
+            refreshControl={<RefreshControl refreshing={refrescando} onRefresh={refrescar} />}
             ListEmptyComponent={
               <View style={{ padding: 20, alignItems: 'center' }}>
                 <Text style={{ opacity: 0.6 }}>Sin usuarios</Text>
@@ -202,33 +210,44 @@ function OperarioItem({
   item,
   onEdit,
   onDelete,
+  c,
 }: {
   item: OperarioUI;
   onEdit: () => void;
   onDelete: () => void;
+  c: import('../../theme/ThemeProvider').Palette;
 }) {
+  const initial = getInitial(item.nombre);
   return (
-    <View style={itemStyles.card}>
-      <View style={itemStyles.avatar} />
-      <View style={itemStyles.info}>
-        <Text numberOfLines={1} style={itemStyles.name}>{item.nombre}</Text>
-        <Text style={itemStyles.role}>{item.cargo}</Text>
+    <View style={[itemStyles.card, { backgroundColor: c.card, borderColor: c.tabBorder }]}>
+      <View style={[itemStyles.avatar, { backgroundColor: pastelFromId(item.id) }]}>
+        <Text style={itemStyles.avatarText}>{initial}</Text>
       </View>
+
+      <View style={itemStyles.info}>
+        <Text numberOfLines={1} style={[itemStyles.name, { color: c.text }]}>{item.nombre}</Text>
+        <Text style={[itemStyles.role, { color: c.mutedText }]}>{item.cargo}</Text>
+      </View>
+
       <View style={itemStyles.actions}>
-        <Square onPress={onEdit} />
-        <Square danger onPress={onDelete} />
+        <TouchableOpacity
+          onPress={onEdit}
+          style={[itemStyles.iconBtn, { backgroundColor: c.mutedBg, borderColor: c.outline }]}
+          activeOpacity={0.85}
+          accessibilityLabel="Editar"
+        >
+          <Ionicons name="create-outline" size={16} color={c.text} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onDelete}
+          style={[itemStyles.iconBtn, { backgroundColor: c.danger, borderColor: c.danger }]}
+          activeOpacity={0.85}
+          accessibilityLabel="Eliminar"
+        >
+          <Ionicons name="trash-outline" size={16} color="#fff" />
+        </TouchableOpacity>
       </View>
     </View>
-  );
-}
-
-function Square({ onPress, danger = false }: { onPress?: () => void; danger?: boolean }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.8}
-      style={[itemStyles.square, danger && { backgroundColor: '#ff6b6b' }]}
-    />
   );
 }
 
@@ -260,12 +279,12 @@ function getStyles(c: import('../../theme/ThemeProvider').Palette) {
       marginHorizontal: 16,
       marginBottom: 8,
       borderRadius: 12,
-      backgroundColor: '#EEF2F7',
+      backgroundColor: c.card,
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 6,
       borderWidth: 1,
-      borderColor: '#E1E6EE',
+      borderColor: c.inputBorder,
     },
     searchInput: { flex: 1, height: 40, paddingHorizontal: 8, color: c.text },
     refreshBtn: {
@@ -279,24 +298,37 @@ function getStyles(c: import('../../theme/ThemeProvider').Palette) {
 
 const itemStyles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E6E9ED',
     shadowColor: '#000',
     shadowOpacity: 0.04,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 6,
     elevation: 1,
   },
-  avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#D1D5DB', marginRight: 12 },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontWeight: '800', color: '#111827', fontSize: 16 },
   info: { flex: 1, paddingRight: 8 },
-  name: { fontWeight: '800', fontSize: 15, color: '#111827' },
-  role: { marginTop: 2, fontSize: 13, color: '#6B7280' },
+  name: { fontWeight: '800', fontSize: 15 },
+  role: { marginTop: 2, fontSize: 13 },
   actions: { flexDirection: 'row', gap: 8 },
-  square: { width: 24, height: 24, backgroundColor: '#9CA3AF', borderRadius: 6 },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
 });
