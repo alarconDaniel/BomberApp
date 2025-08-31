@@ -1,10 +1,10 @@
-// auth/AuthContext.tsx (POR EL AMOR DE DIOS DEJEN ESTO QUIETO)
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+// auth/AuthContext.tsx
+import React, {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
 import * as SecureStore from 'expo-secure-store';
 
 type Rol = 'admin' | 'operario';
 
-type User = { id: number; email: string; rol: Rol; cedula?: string } | null; // 👈 cedula opcional
+type User = { id: number; email: string; rol: Rol } | null; // <-- AÑADIMOS rol
 
 type Tokens = {
   access_token: string;
@@ -17,19 +17,16 @@ type AuthContextShape = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  fetchJson: <T = any>(path: string, init?: RequestInit & { noAuth?: boolean }) => Promise<T>;
+  fetchJson: <T=any>(path: string, init?: RequestInit & { noAuth?: boolean }) => Promise<T>;
   baseUrl: string;
 };
 
 const AuthContext = createContext<AuthContextShape | null>(null);
-
-// ⛓️ HOST fijo + prefijo /api (evita 404)
-const HOST = 'http://192.168.137.251:3550';
-const API_BASE = `${HOST}/api`;
+const BASE_URL = 'http://192.168.20.20:3550';
 
 const ACCESS_KEY = 'auth_access_token';
 const REFRESH_KEY = 'auth_refresh_token';
-const USER_KEY = 'auth_user';
+const USER_KEY   = 'auth_user';
 
 class ApiError extends Error {
   status: number;
@@ -42,23 +39,12 @@ class ApiError extends Error {
   }
 }
 
+// --- Normalizador de rol ---
 function normalizeRol(raw: any): Rol {
   const s = String(raw ?? '').toLowerCase().trim();
   if (['admin', 'administrator', 'administrador', 'adm'].includes(s)) return 'admin';
   if (['operario', 'operador', 'worker', 'user', 'empleado'].includes(s)) return 'operario';
   return 'operario';
-}
-
-// 👇 helper minúsculo para leer la cédula sin romper nada
-function pickCedula(obj: any): string | undefined {
-  const v =
-    obj?.cedula ??
-    obj?.cedulaUsuario ??
-    obj?.cedula_usuario ??
-    obj?.documento ??
-    obj?.dni ??
-    undefined;
-  return v != null ? String(v) : undefined;
 }
 
 async function saveTokens(tokens: Tokens, user: User) {
@@ -73,28 +59,28 @@ async function saveTokens(tokens: Tokens, user: User) {
   await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
 }
 
-async function loadTokens(): Promise<{ tokens: Tokens; user: User }> {
+async function loadTokens(): Promise<{tokens: Tokens, user: User}> {
   const access = await SecureStore.getItemAsync(ACCESS_KEY);
   const refresh = await SecureStore.getItemAsync(REFRESH_KEY);
   const userStr = await SecureStore.getItemAsync(USER_KEY);
   let user: User = userStr ? JSON.parse(userStr) : null;
-  if (user && !(user as any).rol) user = { ...user, rol: 'operario' } as User;
+
+  // por si guardaste usuarios sin rol en el pasado:
+  if (user && !(user as any).rol) {
+    user = { ...user, rol: 'operario' } as User;
+  }
   return {
-    tokens: access && refresh ? { access_token: access, refresh_token: refresh } : null,
-    user,
+    tokens: (access && refresh) ? { access_token: access, refresh_token: refresh } : null,
+    user
   };
 }
 
 async function parseBody(res: Response) {
-  const text = await res.text().catch(() => '');
-  try {
-    return text ? JSON.parse(text) : undefined;
-  } catch {
-    return text;
-  }
+  const text = await res.text().catch(()=> '');
+  try { return text ? JSON.parse(text) : undefined; } catch { return text; }
 }
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{children: React.ReactNode}> = ({children}) => {
   const [tokens, setTokens] = useState<Tokens>(null);
   const [user, setUser] = useState<User>(null);
   const [loading, setLoading] = useState(true);
@@ -102,7 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     (async () => {
-      const { tokens, user } = await loadTokens();
+      const {tokens, user} = await loadTokens();
       setTokens(tokens);
       setUser(user);
       setLoading(false);
@@ -110,51 +96,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const url = `${API_BASE}/auth/login`;
-    const res = await fetch(url, {
+    const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ email, password }),
     });
     if (!res.ok) {
       const body = await parseBody(res);
-      const msg =
-        (body as any)?.message || (res.status === 401 ? 'Correo o contraseña inválidos' : `Error ${res.status}`);
+      const msg = (body as any)?.message || (res.status === 401 ? 'Correo o contraseña inválidos' : `Error ${res.status}`);
       throw new ApiError(res.status, msg, body);
     }
     const data = await res.json();
+    // Esperado del backend:
+    // { user: { id, email, rol }, access_token, refresh_token }
     const nextTokens = { access_token: data.access_token, refresh_token: data.refresh_token };
-
-    // user básico desde login (si viene)
     const rawUser = data.user || {};
-    const baseUser: NonNullable<User> = {
-      id: Number(rawUser.id ?? rawUser.codUsuario ?? rawUser.cod_usuario ?? rawUser.userId ?? 0),
-      email: String(rawUser.email ?? rawUser.correoUsuario ?? rawUser.correo_usuario ?? ''),
-      rol: normalizeRol(rawUser.rol ?? rawUser.role),
-      cedula: pickCedula(rawUser), // 👈 intenta leerla del payload del login
-    };
+    const nextUser = {
+      id: rawUser.id,
+      email: rawUser.email,
+      rol: normalizeRol(rawUser.rol), // <-- aquí normalizamos
+    } as User;
 
     setTokens(nextTokens);
-
-    // Si no vino cédula en el login, intentamos completarla con /auth/me (silencioso)
-    let completedUser = baseUser;
-    if (!baseUser.cedula) {
-      try {
-        const meRes = await fetch(`${API_BASE}/auth/me`, {
-          headers: { Authorization: `Bearer ${nextTokens.access_token}` },
-        });
-        if (meRes.ok) {
-          const me = await meRes.json();
-          const ced = pickCedula(me);
-          if (ced) completedUser = { ...baseUser, cedula: ced };
-        }
-      } catch {
-        // sin drama, si falla seguimos con baseUser
-      }
-    }
-
-    setUser(completedUser);
-    await saveTokens(nextTokens, completedUser);
+    setUser(nextUser);
+    await saveTokens(nextTokens, nextUser);
   }, []);
 
   const logout = useCallback(async () => {
@@ -169,9 +134,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     refreshingRef.current = (async () => {
       try {
-        const res = await fetch(`${API_BASE}/auth/refresh`, {
+        const res = await fetch(`${BASE_URL}/auth/refresh`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ refresh_token: tokens.refresh_token }),
         });
         if (!res.ok) {
@@ -186,7 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           refresh_token: data.refresh_token,
         };
         setTokens(newTokens);
-        await saveTokens(newTokens, user);
+        await saveTokens(newTokens, user); // user ya persistido con rol
         return newTokens;
       } catch (e) {
         console.log('[Auth][Refresh] error', e);
@@ -200,69 +165,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return refreshingRef.current;
   }, [tokens?.refresh_token, user, logout]);
 
-  const fetchJson = useCallback(
-    async <T = any,>(path: string, init: RequestInit & { noAuth?: boolean } = {}): Promise<T> => {
-      // Acepta: full URL, '/api/...' o ruta relativa ('/usuario/listar')
-      const url = path.startsWith('http')
-        ? path
-        : path.startsWith('/api/')
-        ? `${HOST}${path}`
-        : `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  const fetchJson = useCallback(async <T=any,>(path: string, init: RequestInit & { noAuth?: boolean } = {}): Promise<T> => {
+    const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
+    const headers = new Headers(init.headers || {});
+    let useAccess = tokens?.access_token;
 
-      const headers = new Headers(init.headers || {});
-      let useAccess = tokens?.access_token;
+    if (!init.noAuth) {
+      if (!useAccess) throw new ApiError(401, 'No autenticado');
+      headers.set('Authorization', `Bearer ${useAccess}`);
+    }
+    headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
 
-      if (!init.noAuth) {
-        if (!useAccess) throw new ApiError(401, 'No autenticado');
-        headers.set('Authorization', `Bearer ${useAccess}`);
-      }
-      headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
-
-      const doRequest = async (h: Headers) => {
-        const res = await fetch(url, { ...init, headers: h });
-        if (!res.ok) {
-          if (res.status === 401 && !init.noAuth && tokens?.refresh_token) {
-            const refreshed = await doRefresh();
-            if (refreshed?.access_token) {
-              const h2 = new Headers(init.headers || {});
-              h2.set('Authorization', `Bearer ${refreshed.access_token}`);
-              h2.set('Content-Type', headers.get('Content-Type')!);
-              const retry = await fetch(url, { ...init, headers: h2 });
-              if (!retry.ok) {
-                const body2 = await parseBody(retry);
-                const msg2 = (body2 as any)?.message || `Error ${retry.status}`;
-                throw new ApiError(retry.status, msg2, body2);
-              }
-              return retry;
+    const doRequest = async (h: Headers) => {
+      const res = await fetch(url, {...init, headers: h});
+      if (!res.ok) {
+        if (res.status === 401 && !init.noAuth && tokens?.refresh_token) {
+          const refreshed = await doRefresh();
+          if (refreshed?.access_token) {
+            const h2 = new Headers(init.headers || {});
+            h2.set('Authorization', `Bearer ${refreshed.access_token}`);
+            h2.set('Content-Type', headers.get('Content-Type')!);
+            const retry = await fetch(url, {...init, headers: h2});
+            if (!retry.ok) {
+              const body2 = await parseBody(retry);
+              const msg2 = (body2 as any)?.message || `Error ${retry.status}`;
+              throw new ApiError(retry.status, msg2, body2);
             }
+            return retry;
           }
-          const body = await parseBody(res);
-          const msg = (body as any)?.message || `Error ${res.status}`;
-          throw new ApiError(res.status, msg, body);
         }
-        return res;
-      };
+        const body = await parseBody(res);
+        const msg = (body as any)?.message || `Error ${res.status}`;
+        throw new ApiError(res.status, msg, body);
+      }
+      return res;
+    };
 
-      const r = await doRequest(headers);
-      const ct = r.headers.get('content-type') || '';
-      if (ct.includes('application/json')) return r.json() as Promise<T>;
-      return (r.text() as unknown) as T;
-    },
-    [tokens?.access_token, tokens?.refresh_token, doRefresh]
-  );
+    const r = await doRequest(headers);
+    const ct = r.headers.get('content-type') || '';
+    if (ct.includes('application/json')) return r.json() as Promise<T>;
+    return (r.text() as unknown) as T;
+  }, [tokens?.access_token, tokens?.refresh_token, doRefresh]);
 
-  const value = useMemo<AuthContextShape>(
-    () => ({
-      user,
-      tokens,
-      loading,
-      login,
-      logout,
-      fetchJson,
-      baseUrl: API_BASE, // expone base con /api
-    }),
-    [user, tokens, loading, login, logout, fetchJson]
-  );
+  const value = useMemo<AuthContextShape>(() => ({
+    user, tokens, loading, login, logout, fetchJson, baseUrl: BASE_URL
+  }), [user, tokens, loading, login, logout, fetchJson]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
