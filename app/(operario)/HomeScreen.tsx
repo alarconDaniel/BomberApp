@@ -76,7 +76,7 @@ function estadoToIcon(estado: Reto['estado']): { name: any, bg: string, fg: stri
 }
 
 export default function HomeRetosScreen() {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const router = useRouter();
     const { fetchJson } = useAuth();
 
@@ -86,10 +86,15 @@ export default function HomeRetosScreen() {
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [expandedId, setExpandedId] = useState<number | null>(null);
+
+    // ⬇️ Medición para posicionar el calendario flotante justo debajo del header
+    const [headerBottom, setHeaderBottom] = useState<number>(80);
+
     const popAnim = useRef(new Animated.Value(0)).current;
 
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [pickerVisible, setPickerVisible] = useState(false);
+    const togglePicker = () => setPickerVisible(v => !v);
 
     useEffect(() => {
         if (Platform.OS === 'android') {
@@ -187,10 +192,16 @@ export default function HomeRetosScreen() {
                 <HeaderOperario />
 
                 {/* Encabezado de día + botón de calendario */}
-                <View style={{
-                    paddingHorizontal: 18, paddingTop: 8, paddingBottom: 12,
-                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
-                }}>
+                <View
+                    onLayout={(e) => {
+                        const { y, height } = e.nativeEvent.layout;
+                        setHeaderBottom(y + height);
+                    }}
+                    style={{
+                        paddingHorizontal: 18, paddingTop: 8, paddingBottom: 12,
+                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
+                    }}
+                >
                     <View>
                         <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>
                             {headerStr}
@@ -200,7 +211,7 @@ export default function HomeRetosScreen() {
                         </Text>
                     </View>
                     <Pressable
-                        onPress={() => setPickerVisible(true)}
+                        onPress={togglePicker}
                         style={{
                             paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10,
                             backgroundColor: colors.card, borderWidth: 1, borderColor: colors.divider,
@@ -208,18 +219,72 @@ export default function HomeRetosScreen() {
                         }}
                     >
                         <FontAwesome5 name="calendar-alt" size={18} color={colors.primary} />
-                        <Text style={{ color: colors.text, fontWeight: '600' }}>Fecha</Text>
+                        <Text style={{ color: colors.text, fontWeight: '600' }}>
+                            Fecha
+                        </Text>
                     </Pressable>
                 </View>
 
+                {/* 📌 Calendario flotante (no empuja el layout) */}
                 {pickerVisible && (
-                    <RNDateTimePicker
-                        value={selectedDate}
-                        mode="date"
-                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                        onChange={onPickDate}
-                        maximumDate={today}
-                    />
+                    <>
+                        {Platform.OS === 'ios' ? (
+                            <>
+                                {/* Backdrop para cerrar tocando fuera */}
+                                <Pressable
+                                    onPress={() => setPickerVisible(false)}
+                                    style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.12)', zIndex: 999 }]}
+                                />
+                                {/* Card flotante posicionada debajo del header */}
+                                <View
+                                    style={{
+                                        position: 'absolute',
+                                        left: 12,
+                                        right: 12,
+                                        top: headerBottom + 4,
+                                        borderRadius: 12,
+                                        overflow: 'hidden',
+                                        backgroundColor: colors.card,
+                                        borderWidth: 1,
+                                        borderColor: colors.divider,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        paddingVertical: 4,
+                                        zIndex: 1000,
+                                        elevation: 50, // Android ignora (pero no hace daño)
+                                    }}
+                                >
+                                    <RNDateTimePicker
+                                        value={selectedDate}
+                                        mode="date"
+                                        display="inline"
+                                        onChange={onPickDate}
+                                        maximumDate={today}
+                                        themeVariant={isDark ? 'dark' : 'light'}
+                                        // iOS-only (silencia TS si hace falta)
+                                        // @ts-ignore
+                                        textColor={colors.text}
+                                        // @ts-ignore
+                                        accentColor={colors.primary}
+                                        style={{
+                                            backgroundColor: colors.card,
+                                            alignSelf: 'center',
+                                        }}
+                                    />
+                                </View>
+                            </>
+                        ) : (
+                            // ANDROID: usar modal nativo (no desplaza nada)
+                            <RNDateTimePicker
+                                value={selectedDate}
+                                mode="date"
+                                display="default"
+                                onChange={onPickDate}
+                                maximumDate={today}
+                                themeVariant={isDark ? 'dark' : 'light'}
+                            />
+                        )}
+                    </>
                 )}
 
                 <Animated.ScrollView showsVerticalScrollIndicator={false}>
