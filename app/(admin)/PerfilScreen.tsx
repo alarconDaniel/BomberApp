@@ -1,5 +1,5 @@
 // app/(admin)/(tabs)/PerfilScreen.tsx
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import FadeWrapper from '../../components/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
+import { fetchFullNameFromUsuariosList } from './lib/perfil'; // 👈 IMPORT NUEVO
 
 const AVATAR = 96;
 
@@ -42,26 +43,22 @@ function pickFirst<T = any>(...vals: T[]) {
   return undefined;
 }
 
-// Busca la cédula en distintas claves comunes
+// Busca la cédula en distintas claves comunes (y anidadas)
 function extractCedula(u: any): string {
   if (!u) return '—';
   const found = pickFirst(
-    u.cedula,
-    u.cédula,
-    u.cedulaUsuario,
-    u.cedula_usuario,
-    u.dni,
-    u.documento,
-    u.documentNumber,
-    u.numeroDocumento,
-    u.nroDocumento,
-    u.identificacion,
-    u.identification,
-    u.cc,
-    u.perfil?.cedula,
-    u.perfil?.dni,
-    u.datos?.cedula,
-    u.datos?.dni
+    // nivel raíz
+    u.cedula, u.cédula, u.cedulaUsuario, u.cedula_usuario,
+    u.dni, u.documento, u.documentNumber, u.numeroDocumento, u.nroDocumento,
+    u.identificacion, u.identification, u.cc,
+
+    // común en payloads anidados
+    u.usuario?.cedula, u.usuario?.cédula, u.usuario?.cedulaUsuario, u.usuario?.cedula_usuario,
+    u.usuario?.dni, u.usuario?.documento, u.usuario?.numeroDocumento, u.usuario?.identificacion, u.usuario?.cc,
+
+    // perfiles anidados
+    u.perfil?.cedula, u.perfil?.dni,
+    u.datos?.cedula, u.datos?.dni
   );
   return found ?? '—';
 }
@@ -69,9 +66,12 @@ function extractCedula(u: any): string {
 // Normaliza rol (1=admin) o nombre anidado
 function extractRol(u: any): string {
   if (!u) return '—';
-  const id = pickFirst(u.rolId, u.codRol, u.idRol, u.roleId, u.rol?.id, u.role?.id);
+  const id = pickFirst(u.rolId, u.codRol, u.idRol, u.roleId, u.rol?.id, u.role?.id, u.usuario?.rolId, u.usuario?.codRol);
   if (id && Number(id) === 1) return 'admin';
-  const name = pickFirst(u.rol, u.role, u.rol?.nombre, u.rol?.name, u.role?.nombre, u.role?.name);
+  const name = pickFirst(
+    u.rol, u.role, u.rol?.nombre, u.rol?.name, u.role?.nombre, u.role?.name,
+    u.usuario?.rol, u.usuario?.role, u.usuario?.rol?.nombre
+  );
   if (!name) return '—';
   const s = String(name).toLowerCase();
   return s.includes('admin') ? 'admin' : s;
@@ -80,17 +80,54 @@ function extractRol(u: any): string {
 /* ---------------- screen ---------------- */
 export default function PerfilScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, fetchJson } = useAuth();
   const { colors } = useTheme();
   const g = useMemo(() => makeGlobalStyles(colors), [colors]);
 
   // 👇 Casteo local para leer propiedades opcionales sin que TS se queje
   const u = user as any;
 
-  const displayName =
-    toTitle(pickFirst(u?.nombre, u?.name, fromEmail(u?.email)) || 'Administrador');
+  // === Nombre y Apellido desde /usuario/listar (con fallback) ===
+  const [fullName, setFullName] = useState<string>(() =>
+    toTitle(pickFirst(u?.nombre, u?.name, u?.usuario?.nombre, fromEmail(u?.email)) || 'Administrador')
+  );
+
+  const loadFullName = useCallback(async () => {
+    try {
+      const name = await fetchFullNameFromUsuariosList(fetchJson, u);
+      if (name && name.trim()) setFullName(name);
+    } catch {
+      // deja el valor previo
+    }
+  }, [fetchJson, u]);
+
+  useEffect(() => { loadFullName(); }, [loadFullName]);
+
   const rolLabel = extractRol(u);
-  const cedula = extractCedula(u);
+
+  // Estado para reforzar cédula si no viene en user
+  const [cedulaApi, setCedulaApi] = useState<string | null>(null);
+
+  // Cedula directa desde user
+  const cedulaFromUser = extractCedula(u);
+  const cedula = pickFirst(cedulaApi, cedulaFromUser) || '—';
+
+  // Si no hay cédula en user, intenta cargarla desde /mi-perfil/resumen
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        if (cedulaFromUser === '—' && typeof fetchJson === 'function') {
+          const r: any = await fetchJson('/mi-perfil/resumen');
+          const c = extractCedula(r?.usuario);
+          if (isMounted && c && c !== '—') setCedulaApi(c);
+        }
+      } catch {
+        // silencio: si falla, se queda con '—'
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [cedulaFromUser, fetchJson]);
 
   // animación avatar
   const pulse = useRef(new Animated.Value(0)).current;
@@ -161,13 +198,13 @@ export default function PerfilScreen() {
               ]}
             >
               <Text style={{ fontSize: 36, fontWeight: '800', color: colors.primary }}>
-                {initials(displayName)}
+                {initials(fullName)}
               </Text>
             </Animated.View>
           </Pressable>
 
-          <Text style={[g.text.h3, { marginTop: 10 }]}>{displayName}</Text>
-          <Text style={[g.text.small, g.text.muted]}>{pickFirst(u?.email, '—')}</Text>
+          <Text style={[g.text.h3, { marginTop: 10 }]}>{fullName}</Text>
+          <Text style={[g.text.small, g.text.muted]}>{pickFirst(u?.email, u?.usuario?.correo, '—')}</Text>
 
           {/* Fila de info */}
           <View style={styles.infoRow}>
@@ -189,7 +226,7 @@ export default function PerfilScreen() {
 
         {/* Card secundaria */}
         <View style={[styles.secondary, { backgroundColor: colors.cardTint, borderColor: colors.tabBorder }]}>
-          <Row label="Correo" value={pickFirst(u?.email, '—')!} g={g} />
+          <Row label="Correo" value={pickFirst(u?.email, u?.usuario?.correo, '—')!} g={g} />
           <Row label="Cédula" value={cedula} g={g} />
           <Row label="Rol" value={rolLabel} g={g} />
         </View>
