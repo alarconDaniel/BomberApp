@@ -113,6 +113,7 @@ export default function ProfileScreen() {
         () => `${data?.usuario.nombre ?? ''} ${data?.usuario.apellido ?? ''}`.trim(),
         [data?.usuario.nombre, data?.usuario.apellido]
     );
+    const cargo = data?.usuario.cargo ?? null;
 
     // 🎨 Paleta: respetamos exactamente tu mapeo original
     const P = isDark ? {
@@ -276,6 +277,14 @@ export default function ProfileScreen() {
 
                         {/* Nombre completo */}
                         <Text style={[g.text.small, { marginTop: 2, color: P.fullname }]}>{fullname}</Text>
+
+
+                        {/* Cargo debajo del nombre */}
+                        {cargo ? (
+                            <Text style={[g.text.caption, { marginTop: 2, color: P.progressHint }]}>
+                                {cargo}
+                            </Text>
+                        ) : null}
                     </View>
                 </View>
 

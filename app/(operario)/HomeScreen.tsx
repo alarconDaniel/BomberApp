@@ -16,6 +16,9 @@ import { useAuth } from "../../auth/AuthContext";
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from "../../theme/GlobalStyles";
 import RNDateTimePicker from "@react-native-community/datetimepicker";
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
+
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -103,31 +106,48 @@ export default function HomeRetosScreen() {
         }
     }, []);
 
-    const ymd = (d: Date) => d.toISOString().split('T')[0];
+    const ymd = (d: Date) => {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const Y = d.getFullYear();
+        const M = pad(d.getMonth() + 1);
+        const D = pad(d.getDate());
+        return `${Y}-${M}-${D}`;
+    };
 
     const listarRetos = async (d: Date) => {
         try {
             setCargando(true); setError(null);
             const fecha = ymd(d);
-            const resultado = await fetchJson<any[]>(`/mis-retos/listar?fecha=${fecha}`);
-            const mapeados: Reto[] = (resultado ?? []).map((item: any) => new Reto(
-                item.codReto ?? item.cod ?? 0,
-                item.nombreReto ?? item.nombre ?? 'Reto',
-                item.descripcionReto ?? item.descripcion ?? '',
-                item.tiempoEstimadoSegReto ?? item.tiempo ?? 0,
-                item.fechaInicioReto ?? item.fechaInicio ?? '',
-                item.fechaFinReto ?? item.fechaFin ?? '',
-                (item.estado as Reto['estado']) ?? 'asignado',
-                item.fechaObjetivo,
-                item.esAutomatico === 1 || item.esAutomatico === true
-            ));
+            const resultado = await fetchJson<any[]>(`/mis-retos/dia?fecha=${fecha}`);
+
+            const mapeados: Reto[] = (resultado ?? []).map((item: any) => {
+                const r = new Reto(
+                    item.codReto ?? item.cod ?? 0,
+                    item.nombreReto ?? item.nombre ?? 'Reto',
+                    item.descripcionReto ?? item.descripcion ?? '',
+                    item.tiempoEstimadoSegReto ?? item.tiempo ?? 0,
+                    (item.fechaInicioReto ?? item.fechaInicio ?? '').slice(0,10),
+                    (item.fechaFinReto ?? item.fechaFin ?? '').slice(0,10),
+                    (item.estado as Reto['estado']) ?? 'asignado',
+                    item.fechaObjetivo ?? null,
+                    item.esAutomaticoReto === 1 || item.esAutomaticoReto === true
+                );
+                // 👇 NUEVO: conserva la tupla usuarios_retos
+                r.codUsuarioReto = item.codUsuarioReto ?? null;
+                r.ventanaInicio  = item.ventanaInicio ?? null;
+                r.ventanaFin     = item.ventanaFin ?? null;
+                return r;
+            });
             setRetos(mapeados);
         } catch (e: any) {
             setError(e?.message || 'Error cargando retos');
         } finally { setCargando(false); }
     };
 
-    useEffect(() => { listarRetos(selectedDate); }, [selectedDate]);
+
+    useFocusEffect(useCallback(() => {
+        listarRetos(selectedDate);
+    }, [selectedDate]));
 
     const totalHeight = Math.max(SCREEN_H, (retos.length + 1) * STEP_Y);
     const polylinePoints = useMemo(
@@ -424,7 +444,16 @@ export default function HomeRetosScreen() {
                                             ) : null}
 
                                             <Pressable
-                                                onPress={() => router.push(`/(modals)/reto/${active.reto.codReto}`)}
+                                                onPress={() =>
+                                                    router.push({
+                                                        pathname: '/(modals)/reto/[id]',
+                                                        params: {
+                                                            id: String(active.reto.codReto),
+                                                            ur: String(active.reto.codUsuarioReto ?? ''),
+                                                            fecha: ymd(selectedDate), // 👈 importantísimo
+                                                        },
+                                                    })
+                                                }
                                                 style={{
                                                     marginTop: 10,
                                                     paddingVertical: 8,
