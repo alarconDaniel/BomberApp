@@ -1,34 +1,32 @@
 // app/_layout.tsx
-import { Slot, useRouter, useSegments, useRootNavigationState } from 'expo-router';
-import { useEffect } from 'react';
-import { AuthProvider, useAuth } from '../auth/AuthContext';
-import { ToastProvider } from '../components/operario/ToastProvider';
-import { ThemeProvider } from '../theme/ThemeProvider';
-import { ActivityIndicator, View } from 'react-native';
+import {Stack, useRouter, useSegments, useRootNavigationState} from 'expo-router';
+import {useEffect} from 'react';
+import {AuthProvider, useAuth} from '../auth/AuthContext';
+import {ToastProvider} from '../components/operario/ToastProvider';
+import {ThemeProvider} from "../theme/ThemeProvider";
 
-function Gate() {
-  // 1) Hooks siempre arriba
+function AuthGate() {
   const router = useRouter();
   const segments = useSegments();
   const navState = useRootNavigationState();
-  const { user, loading } = useAuth();
+  const {user, loading} = useAuth();
 
   useEffect(() => {
     if (loading || !navState?.key) return;
 
-    const group = segments?.[0];              // '(auth)' | '(admin)' | '(operario)' | '(modals)'
-    const isAuth   = group === '(auth)';
-    const isModal  = group === '(modals)';
+    const group = segments?.[0];
+    const isModal = group === '(modals)';
 
-    // Sin sesión → ir a login (permitimos modales públicos)
+    // 1) Sin sesión: manda a login, pero permite modales públicos si algún día los usas
     if (!user) {
-      if (!isModal && !isAuth) router.replace('/(auth)/login');
+      if (!isModal && group !== '(auth)') router.replace('/(auth)/login');
       return;
     }
 
-    // Con sesión: mandar al grupo por rol si no coincide
-    if (isModal) return; // no movemos nada si es modal
+    // 2) Con sesión: si es modal, NO redirigimos (dejamos que se muestre encima)
+    if (isModal) return;
 
+    // 3) Forzamos grupo por rol sólo si NO estás en modal
     if (user.rol === 'operario' && group !== '(operario)') {
       router.replace('/(operario)/HomeScreen');
       return;
@@ -37,29 +35,20 @@ function Gate() {
       router.replace('/(admin)/HomeScreen');
       return;
     }
-  }, [loading, navState?.key, segments, user, router]);
+    // Ya estás en el grupo correcto → nada
+  }, [user, loading, navState?.key, segments]);
 
-  // Mientras no esté lista la navegación o estamos cargando tokens → loader
-  if (loading || !navState?.key) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
-
-  // Render estable del árbol actual (auth/admin/operario)
-  return <Slot />;
+  return <Stack screenOptions={{headerShown: false}}/>;
 }
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <Gate />
-        </ToastProvider>
-      </AuthProvider>
-    </ThemeProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <AuthGate/>
+          </ToastProvider>
+        </AuthProvider>
+      </ThemeProvider>
   );
 }
