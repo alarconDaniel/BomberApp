@@ -9,8 +9,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import LevelUpOverlay from '../../components/operario/LevelUpOverlay';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 
 const AVATAR_SIZE = 110;
 
@@ -20,34 +18,6 @@ function initials(nombre?: string, apellido?: string) {
   const i1 = n ? n[0] : '';
   const i2 = a ? a[0] : '';
   return (i1 + i2).toUpperCase() || '👤';
-}
-
-// ===== Helpers para nombre de archivo =====
-function guessExtFromMime(mimeType?: string) {
-  if (!mimeType) return 'bin';
-  switch (mimeType) {
-    case 'application/pdf': return 'pdf';
-    case 'text/csv': return 'csv';
-    case 'application/vnd.ms-excel': return 'xls';
-    case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': return 'xlsx';
-    case 'application/msword': return 'doc';
-    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': return 'docx';
-    case 'application/vnd.ms-powerpoint': return 'ppt';
-    case 'application/vnd.openxmlformats-officedocument.presentationml.presentation': return 'pptx';
-    default: return 'bin';
-  }
-}
-
-function safeFileName(nameOrPath: string, mimeType?: string) {
-  // toma el último segmento por si llega una ruta completa
-  let base = nameOrPath?.split('/').pop() || 'archivo';
-  // si no tiene extensión, añadir una según el mime
-  if (!base.includes('.')) {
-    base = `${base}.${guessExtFromMime(mimeType)}`;
-  }
-  // limpia caracteres raros
-  base = base.replace(/[\n\r]/g, '').trim();
-  return base;
 }
 
 export default function ProfileScreen() {
@@ -63,7 +33,8 @@ export default function ProfileScreen() {
   const spark = useRef(new Animated.Value(0)).current;
   const lastNickRef = useRef<string | null>(null);
 
-  const fmtRecompensa = (r?: string) => (r ? (r.trim().startsWith('+') ? r.trim() : `+ ${r.trim()}`) : '');
+  const fmtRecompensa = (r?: string) =>
+    r ? (r.trim().startsWith('+') ? r.trim() : `+ ${r.trim()}`) : '';
 
   const triggerNickCelebrate = useCallback(() => {
     shake.setValue(0);
@@ -80,89 +51,10 @@ export default function ProfileScreen() {
   }, [shake, spark]);
 
   // Auth utils
-  const { fetchJson, baseUrl, tokens } = useAuth();
+  const { fetchJson, baseUrl } = useAuth();
   const [data, setData] = useState<PerfilResumen | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
-  // Subida
-  const [uploading, setUploading] = useState(false);
-
-  // ===== Subida con "tipo" + nombre forzado =====
-  const onPickAndUpload = async (tipo?: 'mantenimiento' | 'supervision') => {
-    try {
-      if (uploading) return;
-      setUploading(true);
-
-      if (!tipo) {
-        Alert.alert('Destino requerido', 'Elige si es Mantenimiento o Supervisión.');
-        return;
-      }
-
-      const res = await DocumentPicker.getDocumentAsync({
-        multiple: false,
-        type: [
-          'application/pdf',
-          'application/vnd.ms-excel',
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'text/csv',
-          'application/vnd.ms-powerpoint',
-          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        ],
-        copyToCacheDirectory: true,
-      });
-
-      if (res.canceled) return;
-
-      const asset = (res as any).assets?.[0] ?? res; // compat entre SDKs
-      if (!asset?.uri) {
-        Alert.alert('Ups', 'No se pudo leer el archivo seleccionado.');
-        return;
-      }
-
-      const mimeType: string | undefined = asset.mimeType || 'application/octet-stream';
-      const pickedName: string | undefined = asset.name; // a veces llega como UUID
-      const finalName = safeFileName(pickedName || asset.uri, mimeType);
-
-      const url = `${baseUrl}/archivos/subir`;
-
-      // Enviamos los parámetros como fields multipart (el backend los lee con getParam)
-      const parameters: Record<string, string> = {
-        tipo,               // decide carpeta (mantenimiento/supervision)
-        name: finalName,    // fuerza el nombre exacto en Drive
-        overwrite: 'true',  // sobrescribe si ya existe ese nombre
-      };
-
-      const result = await FileSystem.uploadAsync(url, asset.uri, {
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: 'archivo', // el backend espera "archivo"
-        headers: {
-          Authorization: tokens?.access_token ? `Bearer ${tokens.access_token}` : '',
-        },
-        mimeType,
-        parameters,
-      });
-
-      let payload: any = {};
-      try { payload = JSON.parse(result.body ?? '{}'); } catch {}
-
-      if (result.status >= 200 && result.status < 300) {
-        // nombre final confirmado por backend
-        const nombreOk = payload?.archivo?.nombreOriginal || finalName;
-        Alert.alert('Listo 👍', `Subido: ${nombreOk}`);
-      } else {
-        const msg = payload?.message || payload?.error || `HTTP ${result.status}`;
-        Alert.alert('Error al subir', String(msg));
-      }
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo subir el archivo.');
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const cargar = async () => {
     try {
@@ -260,7 +152,7 @@ export default function ProfileScreen() {
     );
   }
 
-  const { stats, logros } = data;
+  const { stats } = data;
   const pct = Math.min(1, Math.max(0, stats.progreso));
 
   return (
@@ -318,7 +210,7 @@ export default function ProfileScreen() {
 
             {/* Nombre completo */}
             <Text style={[g.text.small, { marginTop: 2, color: P.fullname }]}>
-              {`${data?.usuario.nombre ?? ''} ${data?.usuario.apellido ?? ''}`.trim()}
+              {fullname}
             </Text>
           </View>
         </View>
@@ -359,45 +251,6 @@ export default function ProfileScreen() {
           <Text style={[g.text.caption, { marginTop: 8, color: P.progressHint }]}>
             a {stats.faltante} EXP para llegar al nivel {stats.nivel + 1}
           </Text>
-        </View>
-
-        {/* --- Subir documentos por tipo --- */}
-        <View style={{ marginTop: 12, marginHorizontal: 18, flexDirection: 'row', gap: 10 }}>
-          <Pressable
-            onPress={() => onPickAndUpload('mantenimiento')}
-            disabled={uploading}
-            style={{
-              flex: 1,
-              backgroundColor: P.chipBg,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-              borderRadius: 12,
-              alignItems: 'center',
-              opacity: uploading ? 0.6 : 1,
-            }}
-          >
-            <Text style={[g.text.captionStrong, { color: P.chipText }]}>
-              {uploading ? 'Subiendo…' : 'Subir a Mantenimiento'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => onPickAndUpload('supervision')}
-            disabled={uploading}
-            style={{
-              flex: 1,
-              backgroundColor: P.chipBg,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-              borderRadius: 12,
-              alignItems: 'center',
-              opacity: uploading ? 0.6 : 1,
-            }}
-          >
-            <Text style={[g.text.captionStrong, { color: P.chipText }]}>
-              {uploading ? 'Subiendo…' : 'Subir a Supervisión'}
-            </Text>
-          </Pressable>
         </View>
 
         {/* Resumen */}
