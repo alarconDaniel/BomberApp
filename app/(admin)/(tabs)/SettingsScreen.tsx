@@ -1,5 +1,4 @@
-// app/(admin)/(tabs)/SettingsScreen.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Switch, Pressable, Modal, ScrollView, Alert,
 } from 'react-native';
@@ -25,6 +24,21 @@ export default function SettingsScreen() {
 
   const s = useMemo(() => makeStyles(colors), [colors]);
   const schemeLabel = scheme === 'system' ? 'Sistema' : isDark ? 'Oscuro' : 'Claro';
+
+  // 👇 evita doble tap y asegura desmontar tabs antes de que disparen efectos
+  const loggingOutRef = useRef(false);
+  const handleLogout = async () => {
+    if (loggingOutRef.current) return;
+    loggingOutRef.current = true;
+    try {
+      await logout();                   // limpia tokens/usuario (AuthContext)
+      router.replace('/(auth)/login');  // desmonta tabs inmediatamente → sin efectos rezagados
+    } catch (e: any) {
+      Alert.alert('Ups', e?.message || 'No pudimos cerrar sesión. Intenta de nuevo.');
+    } finally {
+      loggingOutRef.current = false;
+    }
+  };
 
   return (
     <FadeWrapper>
@@ -129,12 +143,7 @@ export default function SettingsScreen() {
 
             <Divider colors={colors} />
 
-            <Pressable
-              onPress={async () => {
-                try { await logout(); }
-                catch { Alert.alert('Ups', 'No pudimos cerrar sesión. Intenta de nuevo.'); }
-              }}
-            >
+            <Pressable onPress={handleLogout}>
               <SettingRow
                 colors={colors}
                 text={text}

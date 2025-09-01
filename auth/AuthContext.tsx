@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 
 type Rol = 'admin' | 'operario';
 
-type User = { id: number; email: string; rol: Rol; cedula?: string } | null; // 👈 cedula opcional
+type User = { id: number; email: string; rol: Rol; cedula?: string } | null; 
 
 type Tokens = {
   access_token: string;
@@ -24,7 +24,7 @@ type AuthContextShape = {
 const AuthContext = createContext<AuthContextShape | null>(null);
 
 // ⛓️ HOST fijo + prefijo /api (evita 404)
-const HOST = 'http://192.168.137.251:3550';
+const HOST = 'http://192.168.1.3:3550';
 const API_BASE = `${HOST}/api`;
 
 const ACCESS_KEY = 'auth_access_token';
