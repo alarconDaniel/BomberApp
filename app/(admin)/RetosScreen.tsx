@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, FlatList, Alert, ActivityIndicator, Pressable, StatusBar
+  Alert, ActivityIndicator, Pressable, StatusBar, FlatList
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -13,12 +13,23 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { useAuth } from '../../auth/AuthContext';
 
-// util compartido
-import { fetchRetos, deleteReto, type RetoDTO } from './lib/retos';
-
 const FOOTER_HEIGHT = 64;
 
-/* ===== Helper robusto para permisos ===== */
+/* ===== Tipos & helpers ===== */
+export type RetoDTO = {
+  codReto: number;
+  nombreReto: string;
+  [k: string]: any;
+};
+
+function normalizeReto(r: any): RetoDTO {
+  // Soporta {codReto, nombreReto} ó {cod_reto, nombre_reto}
+  const codReto = Number(r?.codReto ?? r?.cod_reto ?? r?.id ?? r?.cod);
+  const nombreReto = String(r?.nombreReto ?? r?.nombre_reto ?? r?.nombre ?? '');
+  return { codReto, nombreReto, ...r };
+}
+
+/* ===== Permisos ===== */
 function hasAdminRole(u: any): boolean {
   if (!u) return false;
   const flat = [
@@ -36,6 +47,43 @@ function hasAdminRole(u: any): boolean {
   if (rname && ['admin', 'administrador'].includes(String(rname).toLowerCase())) return true;
   const rid = u?.rol?.id ?? u?.role?.id;
   return rid === 1 || String(rid) === '1';
+}
+
+/* ===== API local usando fetchJson del AuthContext ===== */
+// sin prefijo /api; con fallback silencioso si existe en algún ambiente
+async function apiListarRetos(fetchJson: any): Promise<RetoDTO[]> {
+  const candidates = ['/reto/listar', '/api/reto/listar'];
+  let lastErr: any;
+  for (const path of candidates) {
+    try {
+      const res = await fetchJson(path, { method: 'GET' });
+      const arr = Array.isArray(res) ? res : (res?.data ?? []);
+      return arr.map(normalizeReto);
+    } catch (e: any) {
+      const msg = String(e?.message || '');
+      if (/401|403/.test(msg)) throw e;
+      if (!/404|Cannot GET/i.test(msg)) throw e;
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('No se encontró endpoint de listar retos');
+}
+
+async function apiBorrarReto(fetchJson: any, id: number | string): Promise<void> {
+  const candidates = [`/reto/borrar/${id}`, `/api/reto/borrar/${id}`];
+  let lastErr: any;
+  for (const url of candidates) {
+    try {
+      await fetchJson(url, { method: 'DELETE' });
+      return;
+    } catch (e: any) {
+      const msg = String(e?.message || '');
+      if (/401|403/.test(msg)) throw e;
+      if (!/404|Cannot/i.test(msg)) throw e;
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('No se encontró endpoint de borrado de retos');
 }
 
 export default function RetosScreen() {
@@ -57,7 +105,7 @@ export default function RetosScreen() {
   const listarRetos = async () => {
     try {
       setCargando(true);
-      const arr = await fetchRetos(fetchJson);
+      const arr = await apiListarRetos(fetchJson);
       setRetos(arr);
     } catch (e: any) {
       const msg = String(e?.message || '');
@@ -72,7 +120,6 @@ export default function RetosScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Al volver del modal, refrescamos la lista
       listarRetos();
       return () => {};
     }, [])
@@ -89,7 +136,7 @@ export default function RetosScreen() {
     );
   }
 
-  const borrar = (id: string | number) => {
+  const borrar = (id: number | string) => {
     if (!isAdmin) { Alert.alert('Sin permisos', 'Solo un administrador puede borrar retos.'); return; }
     Alert.alert('Confirmar', '¿Deseas borrar este reto?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -97,7 +144,7 @@ export default function RetosScreen() {
         text: 'Borrar', style: 'destructive', onPress: async () => {
           try {
             setCargando(true);
-            await deleteReto(fetchJson, id);
+            await apiBorrarReto(fetchJson, id);
             await listarRetos();
             Alert.alert('Listo', 'Reto eliminado');
           } catch (e: any) {
@@ -214,17 +261,7 @@ export default function RetosScreen() {
           </View>
         </ScrollView>
 
-        {/* FAB */}
-        {isAdmin && (
-          <Pressable
-            onPress={abrirCrearModal}
-            style={[styles.fab, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
-            android_ripple={{ color: '#00000022', borderless: true }}
-          >
-            <Ionicons name="add" size={22} color="#fff" />
-            <Text style={{ color: '#fff', fontWeight: '700', marginLeft: 8 }}>Nuevo reto</Text>
-          </Pressable>
-        )}
+        
       </SafeAreaView>
     </FadeWrapper>
   );
