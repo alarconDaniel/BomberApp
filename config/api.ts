@@ -1,6 +1,6 @@
 // config/api.ts
-const HOST ='http://192.168.1.3:3550';
-export const BASE_URL = `${HOST}/api`;
+const HOST ='http://192.168.137.69:3550';;
+export const BASE_URL = `${HOST}`;
 export const API_BASE = BASE_URL;
 
 if (__DEV__) console.log('[API] BASE_URL =', BASE_URL);
