@@ -1,4 +1,4 @@
-// app/(tabs)/homeRetos.tsx
+// app/(operario)/HomeScreen.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     View, Text, Animated, Dimensions, Pressable, ActivityIndicator,
@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import { FontAwesome5 } from '@expo/vector-icons';
+
 import { useRouter } from 'expo-router';
 
 import HeaderOperario from '../../components/operario/HeaderOperario';
@@ -13,7 +14,11 @@ import FadeWrapper from "../../components/operario/FadeWrapper";
 import { Reto } from '../../models/Reto';
 import { useAuth } from "../../auth/AuthContext";
 import { useTheme } from '../../theme/ThemeProvider';
-import {makeGlobalStyles} from "../../theme/GlobalStyles"; // <-- 🔵
+import { makeGlobalStyles } from "../../theme/GlobalStyles";
+import RNDateTimePicker from "@react-native-community/datetimepicker";
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
+
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -45,9 +50,9 @@ function buildPolylinePointsExtended(totalHeight: number, extraTop: number, extr
     return points.join(' ');
 }
 
-function formatTiempo(ms: number) {
-    if (!ms || isNaN(ms)) return '0 min';
-    const totalMin = Math.floor(ms / 60000);
+function formatTiempo(seg: number) {
+    if (!seg || isNaN(seg)) return '0 min';
+    const totalMin = Math.floor(seg / 60);
     const horas = Math.floor(totalMin / 60);
     const minutos = totalMin % 60;
     if (horas > 0 && minutos > 0) return `${horas}h ${minutos}m`;
@@ -55,8 +60,26 @@ function formatTiempo(ms: number) {
     return `${minutos}m`;
 }
 
+function formatFechaBonita(d: Date, hoy: Date) {
+    const opts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+    const str = d.toLocaleDateString('es-CO', opts);
+    const isHoy = d.toDateString() === hoy.toDateString();
+    return isHoy ? `Hoy, ${str}` : str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function estadoToIcon(estado: Reto['estado']): { name: any, bg: string, fg: string, ring: string } {
+    switch (estado) {
+        case 'completado': return { name: 'check', bg: '#E7F8EE', fg: '#1BA97A', ring: '#A8EBCF' };
+        case 'en_progreso': return { name: 'play', bg: '#FFF4E5', fg: '#E48B00', ring: '#FFD9A6' };
+        case 'abandonado':
+        case 'vencido':    return { name: 'times', bg: '#FCE8E8', fg: '#D63D3D', ring: '#F4B9B9' };
+        case 'asignado':
+        default:           return { name: 'flag', bg: '#E7F0FF', fg: '#2D6AE3', ring: '#BFD2FF' };
+    }
+}
+
 export default function HomeRetosScreen() {
-    const { colors } = useTheme();                 // <-- 🔵
+    const { colors, isDark } = useTheme();
     const router = useRouter();
     const { fetchJson } = useAuth();
 
@@ -66,30 +89,65 @@ export default function HomeRetosScreen() {
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [expandedId, setExpandedId] = useState<number | null>(null);
+
+    // ⬇️ Medición para posicionar el calendario flotante justo debajo del header
+    const [headerBottom, setHeaderBottom] = useState<number>(80);
+
     const popAnim = useRef(new Animated.Value(0)).current;
 
-    useEffect(() => { if (Platform.OS === 'android') { // @ts-ignore
-        UIManager.setLayoutAnimationEnabledExperimental?.(true); }}, []);
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [pickerVisible, setPickerVisible] = useState(false);
+    const togglePicker = () => setPickerVisible(v => !v);
 
-    const listarRetos = async () => {
+    useEffect(() => {
+        if (Platform.OS === 'android') {
+            // @ts-ignore
+            UIManager.setLayoutAnimationEnabledExperimental?.(true);
+        }
+    }, []);
+
+    const ymd = (d: Date) => {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const Y = d.getFullYear();
+        const M = pad(d.getMonth() + 1);
+        const D = pad(d.getDate());
+        return `${Y}-${M}-${D}`;
+    };
+
+    const listarRetos = async (d: Date) => {
         try {
             setCargando(true); setError(null);
-            const resultado = await fetchJson<any[]>('/mis-retos/listar');
-            const mapeados: Reto[] = (resultado ?? []).map((item: any) => new Reto(
-                item.codReto ?? item.cod ?? 0,
-                item.nombreReto ?? item.nombre ?? 'Reto',
-                item.descripcionReto ?? item.descripcion ?? '',
-                item.tiempoEstimadoSegReto ?? item.tiempo ?? 0,
-                item.fechaInicioReto ?? item.fechaInicio ?? '',
-                item.fechaFinReto ?? item.fechaFin ?? '',
-                item.completadoReto ?? item.completado ?? false,
-            ));
+            const fecha = ymd(d);
+            const resultado = await fetchJson<any[]>(`/mis-retos/dia?fecha=${fecha}`);
+
+            const mapeados: Reto[] = (resultado ?? []).map((item: any) => {
+                const r = new Reto(
+                    item.codReto ?? item.cod ?? 0,
+                    item.nombreReto ?? item.nombre ?? 'Reto',
+                    item.descripcionReto ?? item.descripcion ?? '',
+                    item.tiempoEstimadoSegReto ?? item.tiempo ?? 0,
+                    (item.fechaInicioReto ?? item.fechaInicio ?? '').slice(0,10),
+                    (item.fechaFinReto ?? item.fechaFin ?? '').slice(0,10),
+                    (item.estado as Reto['estado']) ?? 'asignado',
+                    item.fechaObjetivo ?? null,
+                    item.esAutomaticoReto === 1 || item.esAutomaticoReto === true
+                );
+                // 👇 NUEVO: conserva la tupla usuarios_retos
+                r.codUsuarioReto = item.codUsuarioReto ?? null;
+                r.ventanaInicio  = item.ventanaInicio ?? null;
+                r.ventanaFin     = item.ventanaFin ?? null;
+                return r;
+            });
             setRetos(mapeados);
         } catch (e: any) {
             setError(e?.message || 'Error cargando retos');
         } finally { setCargando(false); }
     };
-    useEffect(() => { listarRetos(); }, []);
+
+
+    useFocusEffect(useCallback(() => {
+        listarRetos(selectedDate);
+    }, [selectedDate]));
 
     const totalHeight = Math.max(SCREEN_H, (retos.length + 1) * STEP_Y);
     const polylinePoints = useMemo(
@@ -116,6 +174,18 @@ export default function HomeRetosScreen() {
     const active = useMemo(() => (expandedId != null ? nodes.find(n => n.reto.codReto === expandedId) : null), [expandedId, nodes]);
     const openFor = (id: number) => setExpandedId(prev => (prev === id ? null : id));
 
+    const today = new Date();
+    const headerStr = formatFechaBonita(selectedDate, today);
+
+    const onPickDate = (_: any, date?: Date) => {
+        setPickerVisible(false);
+        if (!date) return;
+        // no permitir futuros:
+        if (date > today) return;
+        setSelectedDate(date);
+        setExpandedId(null);
+    };
+
     if (cargando) {
         return (
             <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1, backgroundColor: colors.bg }}>
@@ -129,7 +199,7 @@ export default function HomeRetosScreen() {
         return (
             <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1, backgroundColor: colors.bg }}>
                 <Text style={{ marginBottom: 12, paddingHorizontal: 60, color: colors.text }}>Uy, se cayó esto: {error}</Text>
-                <Pressable onPress={listarRetos} style={{ padding: 12, backgroundColor: colors.cardTint, borderRadius: 8, borderWidth: 1, borderColor: colors.divider }}>
+                <Pressable onPress={() => listarRetos(selectedDate)} style={{ padding: 12, backgroundColor: colors.cardTint, borderRadius: 8, borderWidth: 1, borderColor: colors.divider }}>
                     <Text style={{ color: colors.text }}>Reintentar</Text>
                 </Pressable>
             </View>
@@ -140,6 +210,102 @@ export default function HomeRetosScreen() {
         <FadeWrapper>
             <View style={{ backgroundColor: colors.bg, flex: 1 }}>
                 <HeaderOperario />
+
+                {/* Encabezado de día + botón de calendario */}
+                <View
+                    onLayout={(e) => {
+                        const { y, height } = e.nativeEvent.layout;
+                        setHeaderBottom(y + height);
+                    }}
+                    style={{
+                        paddingHorizontal: 18, paddingTop: 8, paddingBottom: 12,
+                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
+                    }}
+                >
+                    <View>
+                        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>
+                            {headerStr}
+                        </Text>
+                        <Text style={{ color: colors.mutedText, fontSize: 13 }}>
+                            {retos.length} reto{retos.length === 1 ? '' : 's'} para este día
+                        </Text>
+                    </View>
+                    <Pressable
+                        onPress={togglePicker}
+                        style={{
+                            paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10,
+                            backgroundColor: colors.card, borderWidth: 1, borderColor: colors.divider,
+                            flexDirection: 'row', alignItems: 'center', gap: 8
+                        }}
+                    >
+                        <FontAwesome5 name="calendar-alt" size={18} color={colors.primary} />
+                        <Text style={{ color: colors.text, fontWeight: '600' }}>
+                            Fecha
+                        </Text>
+                    </Pressable>
+                </View>
+
+                {/* 📌 Calendario flotante (no empuja el layout) */}
+                {pickerVisible && (
+                    <>
+                        {Platform.OS === 'ios' ? (
+                            <>
+                                {/* Backdrop para cerrar tocando fuera */}
+                                <Pressable
+                                    onPress={() => setPickerVisible(false)}
+                                    style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.12)', zIndex: 999 }]}
+                                />
+                                {/* Card flotante posicionada debajo del header */}
+                                <View
+                                    style={{
+                                        position: 'absolute',
+                                        left: 12,
+                                        right: 12,
+                                        top: headerBottom + 4,
+                                        borderRadius: 12,
+                                        overflow: 'hidden',
+                                        backgroundColor: colors.card,
+                                        borderWidth: 1,
+                                        borderColor: colors.divider,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        paddingVertical: 4,
+                                        zIndex: 1000,
+                                        elevation: 50, // Android ignora (pero no hace daño)
+                                    }}
+                                >
+                                    <RNDateTimePicker
+                                        value={selectedDate}
+                                        mode="date"
+                                        display="inline"
+                                        onChange={onPickDate}
+                                        maximumDate={today}
+                                        themeVariant={isDark ? 'dark' : 'light'}
+                                        // iOS-only (silencia TS si hace falta)
+                                        // @ts-ignore
+                                        textColor={colors.text}
+                                        // @ts-ignore
+                                        accentColor={colors.primary}
+                                        style={{
+                                            backgroundColor: colors.card,
+                                            alignSelf: 'center',
+                                        }}
+                                    />
+                                </View>
+                            </>
+                        ) : (
+                            // ANDROID: usar modal nativo (no desplaza nada)
+                            <RNDateTimePicker
+                                value={selectedDate}
+                                mode="date"
+                                display="default"
+                                onChange={onPickDate}
+                                maximumDate={today}
+                                themeVariant={isDark ? 'dark' : 'light'}
+                            />
+                        )}
+                    </>
+                )}
 
                 <Animated.ScrollView showsVerticalScrollIndicator={false}>
                     <View style={{ height: totalHeight }}>
@@ -152,7 +318,7 @@ export default function HomeRetosScreen() {
                             <Polyline
                                 points={polylinePoints}
                                 fill="none"
-                                stroke={colors.brandBlue}         // ⬅️ theme
+                                stroke={colors.brandBlue}
                                 strokeWidth={24}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -164,11 +330,12 @@ export default function HomeRetosScreen() {
                         {nodes.map(({ reto, x, y }) => {
                             const left = x - NODE_SIZE / 2;
                             const top = y - NODE_SIZE / 2;
-                            const completed = reto.completadoReto;
+
+                            const ico = estadoToIcon(reto.estado);
 
                             return (
                                 <Pressable
-                                    key={reto.codReto}
+                                    key={`${reto.codReto}-${reto.fechaObjetivo ?? ''}`}
                                     onPress={() => openFor(reto.codReto)}
                                     style={[
                                         {
@@ -176,7 +343,7 @@ export default function HomeRetosScreen() {
                                             width: NODE_SIZE,
                                             height: NODE_SIZE,
                                             borderRadius: NODE_SIZE / 2,
-                                            backgroundColor: colors.card,                 // ⬅
+                                            backgroundColor: colors.card,
                                             alignItems: 'center',
                                             justifyContent: 'center',
                                             shadowColor: '#000',
@@ -185,7 +352,7 @@ export default function HomeRetosScreen() {
                                             shadowRadius: 8,
                                             elevation: 4,
                                             borderWidth: 2,
-                                            borderColor: colors.brandBlueBorder,          // ⬅
+                                            borderColor: ico.ring,
                                             left, top,
                                         },
                                     ]}
@@ -195,15 +362,16 @@ export default function HomeRetosScreen() {
                                             width: NODE_SIZE - 14,
                                             height: NODE_SIZE - 14,
                                             borderRadius: (NODE_SIZE - 14) / 2,
-                                            backgroundColor: completed ? colors.successSoft : colors.brandBlueSoft, // ⬅
+                                            backgroundColor: ico.bg,
                                             alignItems: 'center',
                                             justifyContent: 'center',
                                         }}
                                     >
                                         <FontAwesome5
-                                            name={completed ? 'check' : 'flag'}
+                                            name={ico.name as any}
                                             size={24}
-                                            color={completed ? colors.success : colors.primary} // ⬅
+                                            color={ico.fg}
+                                            solid
                                         />
                                     </View>
                                 </Pressable>
@@ -247,7 +415,7 @@ export default function HomeRetosScreen() {
 
                                     return (
                                         <View style={[{
-                                            backgroundColor: colors.popoverBg,         // ⬅
+                                            backgroundColor: colors.popoverBg,
                                             borderRadius: 14,
                                             paddingHorizontal: 14,
                                             paddingVertical: 12,
@@ -261,7 +429,7 @@ export default function HomeRetosScreen() {
                                             <View style={[{
                                                 position: 'absolute',
                                                 width: ARROW, height: ARROW,
-                                                backgroundColor: colors.popoverBg,       // ⬅
+                                                backgroundColor: colors.popoverBg,
                                                 transform: [{ rotate: '45deg' }],
                                                 borderRadius: 3,
                                                 left: arrowLeft,
@@ -271,14 +439,26 @@ export default function HomeRetosScreen() {
                                             <Text style={[g.text.challengeTime, { opacity: 0.8 }]}>
                                                 (Aprox {formatTiempo(active.reto.tiempoEstimadoSegReto)})
                                             </Text>
+                                            {active.reto.esAutomatico ? (
+                                                <Text style={{ marginTop: 4, fontSize: 12, color: colors.mutedText }}>Reto automático</Text>
+                                            ) : null}
 
                                             <Pressable
-                                                onPress={() => router.push(`/(modals)/reto/${active.reto.codReto}`)}
+                                                onPress={() =>
+                                                    router.push({
+                                                        pathname: '/(modals)/reto/[id]',
+                                                        params: {
+                                                            id: String(active.reto.codReto),
+                                                            ur: String(active.reto.codUsuarioReto ?? ''),
+                                                            fecha: ymd(selectedDate), // 👈 importantísimo
+                                                        },
+                                                    })
+                                                }
                                                 style={{
                                                     marginTop: 10,
                                                     paddingVertical: 8,
                                                     paddingHorizontal: 24,
-                                                    backgroundColor: colors.primary,       // ⬅
+                                                    backgroundColor: colors.primary,
                                                     borderRadius: 999,
                                                 }}
                                             >

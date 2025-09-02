@@ -1,4 +1,4 @@
-// components/HeaderOperario.tsx
+// components/operario/HeaderOperario.tsx
 import { Text, View, StyleSheet } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import React, { useEffect, useState, useCallback } from 'react';

@@ -1,3 +1,4 @@
+// models/PerfilResumen.ts
 export type PerfilResumen = {
     usuario: {
         nombre: string;
@@ -5,6 +6,7 @@ export type PerfilResumen = {
         cedula: string;
         nickname: string;
         email: string;
+        cargo: string | null; // 👈 NUEVO
     };
     stats: {
         racha: number;
@@ -19,7 +21,7 @@ export type PerfilResumen = {
     logros: Array<{
         codLogro: number;
         nombre: string;
-        icono: string;      // ruta imagen (puede ser absoluta o relativa al backend)
+        icono: string;
         recompensa: string; // p.ej. "+83 xp"
     }>;
 };

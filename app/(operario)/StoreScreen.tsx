@@ -1,19 +1,19 @@
 // app/(operario)/StoreScreen.tsx
-import React, {useEffect, useMemo, useState} from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, ActivityIndicator, Pressable, StyleSheet, FlatList, ScrollView, Dimensions } from 'react-native';
-import {useRouter} from 'expo-router';
-import {ItemTienda} from "../../models/ItemTienda";
-import FadeWrapper from "../../components/operario/FadeWrapper";
-import StoreItemCard from "../../components/operario/StoreItemCard";
-import DetailsStoreItemModal from "../../components/operario/DetailsStoreItemModal";
-import {useAuth} from "../../auth/AuthContext";
-import {StatsUsuario} from "../../models/StatsUsuario";
+import { useRouter, useFocusEffect } from 'expo-router';
+import { ItemTienda } from '../../models/ItemTienda';
+import FadeWrapper from '../../components/operario/FadeWrapper';
+import StoreItemCard from '../../components/operario/StoreItemCard';
+import DetailsStoreItemModal from '../../components/operario/DetailsStoreItemModal';
+import { useAuth } from '../../auth/AuthContext';
+import { StatsUsuario } from '../../models/StatsUsuario';
 import PurchaseSuccessOverlay from '../../components/operario/PurchaseSuccessOverlay';
 import { useToast } from '../../components/operario/ToastProvider';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
-const {width: SCREEN_W} = Dimensions.get('window');
+const { width: SCREEN_W } = Dimensions.get('window');
 
 type SectionKey = 'POTENCIADOR' | 'COFRE' | 'ROPA';
 type Section = { key: SectionKey; title: string; items: ItemTienda[] };
@@ -26,7 +26,8 @@ function toItemTienda(raw: any): ItemTienda {
         raw.desripcionItem ?? raw.descripcion ?? '',
         Number(raw.precioItem ?? raw.precio ?? 0),
         String(raw.tipoItem ?? raw.tipo ?? '').toUpperCase(),
-        meta
+        meta,
+        !!raw.yaPosee,
     );
 }
 
@@ -35,13 +36,11 @@ export default function StoreScreen() {
     const g = useMemo(() => makeGlobalStyles(colors), [colors]);
 
     const toast = useToast();
-    const [successInfo, setSuccessInfo] = useState<{name: string; qty: number} | null>(null);
+    const [successInfo, setSuccessInfo] = useState<{ name: string; qty: number } | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
-    const [stats, setStats] = useState<StatsUsuario>({codUsuario: 0, racha: 0, monedas: 0, xp: 0, nivel: 0});
-    const {fetchJson} = useAuth();
+    const [stats, setStats] = useState<StatsUsuario>({ codUsuario: 0, racha: 0, monedas: 0, xp: 0, nivel: 0 });
+    const { fetchJson } = useAuth();
     const [comprando, setComprando] = useState(false);
-
-    const listarStats = async () => { try { const data = await fetchJson<StatsUsuario>('/mis-stats/listar'); if (data) setStats(data); } catch {} };
 
     const router = useRouter();
     const [items, setItems] = useState<ItemTienda[]>([]);
@@ -54,41 +53,73 @@ export default function StoreScreen() {
     const openDetails = (it: ItemTienda) => { setSelected(it); setDetailsOpen(true); };
     const closeDetails = () => { setDetailsOpen(false); setTimeout(() => setSelected(null), 200); };
 
+    const listarStats = useCallback(async () => {
+        try {
+            const data = await fetchJson<StatsUsuario>('/mis-stats/listar');
+            if (data) setStats(data);
+        } catch { /* noop */ }
+    }, [fetchJson]);
+
+    const listarItems = useCallback(async () => {
+        try {
+            setCargando(true);
+            setError(null);
+            const resultado = await fetchJson<any>('/item-tienda/listar');
+            const arr = Array.isArray(resultado) ? resultado : resultado?.items ?? [];
+            const mapeados: ItemTienda[] = (arr ?? []).map(toItemTienda);
+            setItems(mapeados);
+        } catch (e: any) {
+            setError(e?.message || 'Error cargando tienda');
+        } finally {
+            setCargando(false);
+        }
+    }, [fetchJson]);
+
+    // 🔁 Igual que ProfileScreen: recarga al enfocar la pantalla
+    useFocusEffect(
+        useCallback(() => {
+            let isActive = true;
+            (async () => {
+                await Promise.all([listarItems(), listarStats()]);
+            })();
+            return () => { isActive = false; };
+        }, [listarItems, listarStats])
+    );
+
     const handleBuy = async (it: ItemTienda, qty: number) => {
         try {
             setComprando(true);
-            await fetchJson('/item-tienda/comprar', { method:'POST', body: JSON.stringify({ codItem: it.codItem, cantidad: qty }) });
-            await listarStats();
+            const isRopa = String(it.tipoItem).toUpperCase() === 'ROPA';
+            const cantidad = isRopa ? 1 : qty;
+
+            await fetchJson('/item-tienda/comprar', { method: 'POST', body: JSON.stringify({ codItem: it.codItem, cantidad }) });
+
+            // Refresca stats e items para que 'yaPosee' se vea en caliente
+            await Promise.all([listarStats(), listarItems()]);
+
             closeDetails();
-            setTimeout(() => { setSuccessInfo({ name: it.nombreItem, qty }); setShowSuccess(true); }, 240);
+            setTimeout(() => {
+                setSuccessInfo({ name: it.nombreItem, qty: cantidad });
+                setShowSuccess(true);
+            }, 240);
         } catch (e: any) {
             alert(e?.message ?? 'No se pudo completar la compra');
-        } finally { setComprando(false); }
+        } finally {
+            setComprando(false);
+        }
     };
-
-    const listarItems = async () => {
-        try {
-            setCargando(true); setError(null);
-            const resultado = await fetchJson<any[]>('/item-tienda/listar');
-            const mapeados: ItemTienda[] = (resultado ?? []).map(toItemTienda);
-            setItems(mapeados);
-        } catch (e: any) { setError(e?.message || 'Error cargando tienda'); }
-        finally { setCargando(false); }
-    };
-
-    useEffect(() => { Promise.all([listarItems(), listarStats()]).then(); }, []);
 
     const sections: Section[] = useMemo(() => {
         const by = (tipo: SectionKey) => items.filter((it) => String(it.tipoItem).toUpperCase() === tipo);
         return [
-            {key: 'POTENCIADOR', title: 'Artículos', items: by('POTENCIADOR')},
-            {key: 'COFRE', title: 'Cofres', items: by('COFRE')},
-            {key: 'ROPA', title: 'Ropa', items: by('ROPA')},
+            { key: 'POTENCIADOR', title: 'Artículos', items: by('POTENCIADOR') },
+            { key: 'COFRE', title: 'Cofres', items: by('COFRE') },
+            { key: 'ROPA', title: 'Ropa', items: by('ROPA') }, // ya viene limitada a 3 desde backend
         ];
     }, [items]);
 
     const s = useMemo(() => StyleSheet.create({
-        center: {flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg},
+        center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
         retryBtn: { padding: 12, backgroundColor: colors.mutedBg, borderRadius: 8 },
         sectionHeader: { paddingHorizontal: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center' },
         sectionBar: { height: 6, borderRadius: 999, backgroundColor: colors.mutedBg, marginLeft: 10, flex: 1 },
@@ -134,7 +165,6 @@ export default function StoreScreen() {
                                 <View key={sec.key}>
                                     <View style={s.sectionHeader}>
                                         <Text style={[g.text.h1, {marginVertical: 2}]}>{sec.title}</Text>
-
                                         <View style={s.sectionBar}/>
                                     </View>
                                     <View style={s.sectionBar2}/>
@@ -152,6 +182,7 @@ export default function StoreScreen() {
                                 </View>
                             );
                         }
+
                         if (sec.key === 'COFRE') {
                             return (
                                 <View key={sec.key} style={{marginTop: 16}}>
@@ -174,6 +205,7 @@ export default function StoreScreen() {
                                 </View>
                             );
                         }
+
                         // ROPA
                         return (
                             <View key={sec.key} style={{marginTop: 16}}>

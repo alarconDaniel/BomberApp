@@ -1,8 +1,8 @@
 // app/(admin)/ReportesScreen.tsx
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert,
-  ActivityIndicator, Pressable, SafeAreaView
+  View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList,
+  Alert, ActivityIndicator, SafeAreaView
 } from 'react-native';
 import * as Linking from 'expo-linking';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -12,63 +12,71 @@ import HeaderOperario from '../../components/HeaderOperario';
 
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
-
-// ⬇️ usa el contexto y el factory existente
 import { useAuth } from '../../auth/AuthContext';
-import { makeArchivosApi, type ArchivoItem } from '../../config/archivos/archivo';
 
-type GroupMap = Record<string, ArchivoItem[]>;
+type DriveFile = {
+  id: string;
+  name: string;           // nombre con el que se subió (Drive lo respeta)
+  mimeType?: string;
+  size?: string;
+  createdTime?: string;
+  webViewLink?: string;
+};
+
 const FOOTER_HEIGHT = 56;
-const INITIAL_SHOWN = 3;
+const INITIAL_SHOWN = 6;
 
 export default function ReportesScreen() {
   const { colors } = useTheme();
   const g = useMemo(() => makeGlobalStyles(colors), [colors]);
 
-  // 🎨 Paleta DARK (coherente con Operarios/Retos)
   const c = {
-    bg: colors.bg,                  // fondo principal oscuro
-    card: colors.card,              // tarjetas
-    section: colors.cardTint,       // bloques de sección
-    text: colors.text,              // texto principal
-    soft: colors.mutedText,         // texto secundario
-    border: colors.tabBorder,       // bordes sutiles
-    pill: colors.mutedBg,           // chips / botones suaves
-    searchBg: colors.card,          // buscador
+    bg: colors.bg,
+    card: colors.card,
+    section: colors.cardTint,
+    text: colors.text,
+    soft: colors.mutedText,
+    border: colors.tabBorder,
+    pill: colors.mutedBg,
+    searchBg: colors.card,
     searchBorder: colors.inputBorder,
-    sectionAccent: colors.primarySoft, // etiqueta de sección
+    sectionAccent: colors.primarySoft,
     danger: colors.danger ?? '#EF4444',
     primary: colors.primary,
   };
 
-  const { user, loading: authLoading, fetchJson, baseUrl } = useAuth();
-  const archivosApi = useMemo(() => makeArchivosApi(fetchJson, baseUrl), [fetchJson, baseUrl]);
+  const { fetchJson } = useAuth();
 
-  const isAdmin = (() => {
-    const r = (user as any)?.rol;
-    if (typeof r === 'number') return r === 1;
-    return String(r ?? '').toLowerCase() === 'admin' || String(r ?? '').toLowerCase() === 'administrador';
-  })();
-
+  // Estado UI
   const [query, setQuery] = useState('');
-  const [archivos, setArchivos] = useState<ArchivoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
+  // Archivos por tipo
+  const [mantFiles, setMantFiles] = useState<DriveFile[]>([]);
+  const [supFiles, setSupFiles] = useState<DriveFile[]>([]);
+
+  // Cargar por tipo desde backend /archivos/listar-por-tipo
+  const loadTipo = useCallback(async (tipo: 'mantenimiento' | 'supervision') => {
+    const r = await fetchJson<{ files: DriveFile[]; nextPageToken?: string; folderId: string }>(
+      `/archivos/listar-por-tipo?tipo=${tipo}`
+    );
+    return r.files || [];
+  }, [fetchJson]);
+
   const cargar = useCallback(async () => {
     try {
       setLoading(true);
-      // Soporta {items,total} o {rows,total}
-      const resp = await archivosApi.listarArchivos({ take: 100, skip: 0 });
-      const items = (resp as any).items ?? (resp as any).rows ?? [];
-      setArchivos(items);
+      const [m, s] = await Promise.all([loadTipo('mantenimiento'), loadTipo('supervision')]);
+      setMantFiles(m);
+      setSupFiles(s);
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'No se pudieron cargar los archivos');
+      Alert.alert('Error', e?.message ?? 'No se pudieron cargar los reportes de Drive');
     } finally {
       setLoading(false);
     }
-  }, [archivosApi]);
+  }, [loadTipo]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -76,22 +84,19 @@ export default function ReportesScreen() {
     try { setRefreshing(true); await cargar(); } finally { setRefreshing(false); }
   }, [cargar]);
 
-  const abrir = useCallback(async (item: ArchivoItem) => {
-    try {
-      const url = await archivosApi.obtenerUrlDescarga(item.path);
-      if (!url) return Alert.alert('Descarga', 'No se pudo obtener la URL de descarga');
-      await Linking.openURL(url);
-    } catch (e: any) {
-      Alert.alert('Descarga', e?.message ?? 'No se pudo abrir el archivo');
+  // Abrir archivo (Drive webViewLink)
+  const abrir = useCallback(async (f: DriveFile) => {
+    if (!f.webViewLink) return Alert.alert('Drive', 'No hay enlace para este archivo.');
+    try { await Linking.openURL(f.webViewLink); } catch (e) {
+      Alert.alert('Drive', 'No se pudo abrir el enlace.');
     }
-  }, [archivosApi]);
+  }, []);
 
-  const borrar = useCallback((item: ArchivoItem) => {
-    if (!isAdmin) return Alert.alert('Sin permisos', 'Solo un administrador puede eliminar archivos.');
-    if (item.codUsuario == null) return Alert.alert('Eliminar', 'No se puede eliminar: falta el propietario del archivo.');
+  // Eliminar archivo — body debe ser string y con Content-Type JSON
+  const eliminar = useCallback(async (f: DriveFile, tipo: 'mantenimiento' | 'supervision') => {
     Alert.alert(
       'Eliminar',
-      `¿Borrar "${item.nombreOriginal}"?`,
+      `¿Borrar "${f.name}" de ${tipo === 'mantenimiento' ? 'Mantenimiento' : 'Supervisión'}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -99,70 +104,57 @@ export default function ReportesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const ok = await archivosApi.eliminarArchivo(item.path, item.codUsuario!);
-              if (ok) setArchivos(prev => prev.filter(a => a.path !== item.path));
-              else Alert.alert('Eliminar', 'No se pudo eliminar');
+              await fetchJson(`/archivos/eliminar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: f.id }), // ← FIX aquí
+              });
+              if (tipo === 'mantenimiento') {
+                setMantFiles(prev => prev.filter(x => x.id !== f.id));
+              } else {
+                setSupFiles(prev => prev.filter(x => x.id !== f.id));
+              }
             } catch (e: any) {
-              const msg = String(e?.message || '');
-              if (msg.includes('403')) Alert.alert('Sin permisos', 'No puedes eliminar archivos.');
-              else Alert.alert('Eliminar', e?.message ?? 'Error eliminando archivo');
+              Alert.alert('Eliminar', e?.message ?? 'No se pudo eliminar el archivo.');
             }
           }
         }
       ],
       { cancelable: true }
     );
-  }, [archivosApi, isAdmin]);
+  }, [fetchJson]);
 
-  // Búsqueda en memoria
+  // Filtro en memoria por query
   const filtrados = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return archivos;
-    return archivos.filter(a =>
-      a.nombreOriginal.toLowerCase().includes(q) ||
-      (a.area ?? '').toLowerCase().includes(q),
-    );
-  }, [archivos, query]);
+    if (!q) return { m: mantFiles, s: supFiles };
+    const filtra = (arr: DriveFile[]) =>
+      arr.filter(f => (f.name || '').toLowerCase().includes(q));
+    return { m: filtra(mantFiles), s: filtra(supFiles) };
+  }, [query, mantFiles, supFiles]);
 
-  // Agrupar por área y ordenar por fecha desc
-  const grupos: GroupMap = useMemo(() => {
-    const res: GroupMap = {};
-    for (const a of filtrados) {
-      const key = a.area?.trim() || 'Otros';
-      (res[key] ||= []).push(a);
-    }
-    for (const k of Object.keys(res)) {
-      res[k].sort((x, y) => {
-        const fx = x.fechaSubida ?? '';
-        const fy = y.fechaSubida ?? '';
-        return fy.localeCompare(fx) || x.nombreOriginal.localeCompare(y.nombreOriginal);
-      });
-    }
-    return res;
-  }, [filtrados]);
+  // Secciones
+  const sections = useMemo(() => ([
+    { key: 'Mantenimiento', items: filtrados.m as DriveFile[], tipo: 'mantenimiento' as const },
+    { key: 'Supervisión',   items: filtrados.s as DriveFile[], tipo: 'supervision' as const },
+  ]), [filtrados]);
 
   const toggleMas = (seccion: string) =>
     setExpanded(prev => ({ ...prev, [seccion]: !prev[seccion] }));
 
-  // --- Botón cuadrado reutilizable (como en Retos) ---
-  function Square({ onPress, danger = false }: { onPress?: () => void; danger?: boolean }) {
-    return (
-      <Pressable
-        onPress={onPress}
-        style={{
-          width: 32, height: 32, borderRadius: 10,
-          backgroundColor: danger ? c.danger : c.pill,
-          alignItems: 'center', justifyContent: 'center'
-        }}
-      >
-        <Ionicons name={danger ? 'trash' : 'create'} size={16} color={danger ? '#fff' : c.text} />
-      </Pressable>
-    );
+  // Icono por tipo
+  function pickIcon(mime?: string, name?: string) {
+    const ext = (name?.split('.').pop() || '').toLowerCase();
+    const lower = (mime || '').toLowerCase();
+    if (['pdf'].includes(ext) || lower.includes('pdf')) return { label: 'PDF', bg: '#e74c3c' };
+    if (['xls','xlsx','csv'].includes(ext) || lower.includes('sheet') || lower.includes('excel')) return { label: 'XLS', bg: '#27ae60' };
+    if (['doc','docx'].includes(ext) || lower.includes('word') || lower.includes('msword') || lower.includes('wordprocessingml')) return { label: 'DOC', bg: '#2980b9' };
+    if (['ppt','pptx'].includes(ext) || lower.includes('powerpoint') || lower.includes('presentationml')) return { label: 'PPT', bg: '#e67e22' };
+    return { label: 'FILE', bg: '#7f8c8d' };
   }
 
-  const renderRow = (item: ArchivoItem) => {
-    // 👇 Mantengo tu orden ORIGINAL para que los íconos salgan bien
-    const { label, bg } = pickIcon(item.contentType, item.nombreOriginal);
+  const Row = ({ f, tipo }: { f: DriveFile; tipo: 'mantenimiento' | 'supervision' }) => {
+    const { label, bg } = pickIcon(f.mimeType, f.name);
     return (
       <View style={[styles.row, { backgroundColor: c.card, borderColor: c.border }]}>
         <View style={[styles.icon, { backgroundColor: bg }]}>
@@ -170,29 +162,33 @@ export default function ReportesScreen() {
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>
-            {item.nombreOriginal}
-          </Text>
+          {/* Nombre EXACTO con el que se subió */}
+          <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{f.name}</Text>
           <Text style={[styles.rowSub, { color: c.soft }]} numberOfLines={1}>
-            {item.area ?? `Usuario ${item.codUsuario ?? ''}`}
+            {new Date(f.createdTime || Date.now()).toLocaleString()}
           </Text>
         </View>
 
         <TouchableOpacity
           style={[styles.pill, { backgroundColor: c.pill }]}
-          onPress={() => abrir(item)}
+          onPress={() => abrir(f)}
           activeOpacity={0.9}
         >
-          <Ionicons name="download" size={16} color={c.text} />
-          <Text style={[styles.pillTxt, { color: c.text }]}>Descargar</Text>
+          <Ionicons name="open-outline" size={16} color={c.text} />
         </TouchableOpacity>
 
-        {isAdmin && <Square onPress={() => borrar(item)} danger />}
+        <TouchableOpacity
+          style={[styles.pill, { backgroundColor: c.danger }]}
+          onPress={() => eliminar(f, tipo)}
+          activeOpacity={0.9}
+        >
+          <Ionicons name="trash" size={16} color="#fff" />
+        </TouchableOpacity>
       </View>
     );
   };
 
-  const renderSection = (title: string, items: ArchivoItem[]) => {
+  const renderSection = (title: string, items: DriveFile[], tipo: 'mantenimiento' | 'supervision') => {
     const isOpen = expanded[title] ?? false;
     const slice = isOpen ? items : items.slice(0, INITIAL_SHOWN);
     return (
@@ -201,9 +197,13 @@ export default function ReportesScreen() {
           {title}
         </Text>
 
-        {slice.map((it) => (
-          <View key={`${title}-${it.path}`} style={styles.rowWrap}>
-            {renderRow(it)}
+        {items.length === 0 && (
+          <Text style={{ color: c.soft, marginTop: 6 }}>Sin archivos</Text>
+        )}
+
+        {slice.map((f) => (
+          <View key={`${title}-${f.id}`} style={styles.rowWrap}>
+            <Row f={f} tipo={tipo} />
           </View>
         ))}
 
@@ -219,14 +219,12 @@ export default function ReportesScreen() {
     );
   };
 
-  const sectionEntries = Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
-
-  if (authLoading) {
+  if (loading) {
     return (
       <FadeWrapper>
         <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
           <ActivityIndicator />
-          <Text style={{ marginTop: 8, color: colors.text }}>Verificando sesión…</Text>
+          <Text style={{ marginTop: 8, color: colors.text }}>Cargando reportes…</Text>
         </SafeAreaView>
       </FadeWrapper>
     );
@@ -243,7 +241,7 @@ export default function ReportesScreen() {
           <Ionicons name="search" size={16} color={c.soft} style={{ marginHorizontal: 6 }} />
           <TextInput
             style={[styles.searchInput, { color: c.text }]}
-            placeholder="Buscar un reporte"
+            placeholder="Buscar por nombre"
             placeholderTextColor={c.soft}
             value={query}
             onChangeText={setQuery}
@@ -256,58 +254,27 @@ export default function ReportesScreen() {
 
         <View style={{ height: 10 }} />
 
-        {/* Secciones */}
-        {loading ? (
-          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-            <ActivityIndicator />
-            <Text style={{ marginTop: 8, color: c.soft }}>Cargando…</Text>
-          </View>
-        ) : sectionEntries.length === 0 ? (
-          <View style={{ paddingVertical: 24 }}>
-            <Text style={{ textAlign: 'center', color: c.soft }}>Sin archivos</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={sectionEntries}
-            keyExtractor={([name]) => name}
-            renderItem={({ item: [name, items] }) => renderSection(name, items)}
-            contentContainerStyle={{ paddingBottom: FOOTER_HEIGHT }}
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
+        <FlatList
+          data={[
+            { key: 'Mantenimiento' as const, items: filtrados.m, tipo: 'mantenimiento' as const },
+            { key: 'Supervisión' as const,   items: filtrados.s, tipo: 'supervision' as const },
+          ]}
+          keyExtractor={(s) => s.key}
+          renderItem={({ item }) => renderSection(item.key, item.items, item.tipo)}
+          contentContainerStyle={{ paddingBottom: FOOTER_HEIGHT }}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          showsVerticalScrollIndicator={false}
+        />
       </View>
     </FadeWrapper>
   );
-}
-
-/** Icono simple por tipo (extensión > mime) — TU FIRMA ORIGINAL (mime, name) */
-function pickIcon(mime: string, name: string) {
-  const ext = (name.split('.').pop() || '').toLowerCase();
-  const lower = (mime || '').toLowerCase();
-
-  if (['pdf'].includes(ext)) return { label: 'PDF', bg: '#e74c3c' };
-  if (['xls', 'xlsx', 'csv'].includes(ext)) return { label: 'XLS', bg: '#27ae60' };
-  if (['doc', 'docx'].includes(ext)) return { label: 'DOC', bg: '#2980b9' };
-  if (['ppt', 'pptx'].includes(ext)) return { label: 'PPT', bg: '#e67e22' };
-  if (['jpg','jpeg','png','gif','webp'].includes(ext)) return { label: 'IMG', bg: '#8e44ad' };
-  if (['zip','rar','7z'].includes(ext)) return { label: 'ZIP', bg: '#2c3e50' };
-  if (['txt','md','log'].includes(ext)) return { label: 'TXT', bg: '#16a085' };
-
-  if (lower.includes('pdf')) return { label: 'PDF', bg: '#e74c3c' };
-  if (lower.includes('sheet') || lower.includes('excel')) return { label: 'XLS', bg: '#27ae60' };
-  if (lower.includes('word') || lower.includes('msword') || lower.includes('wordprocessingml')) return { label: 'DOC', bg: '#2980b9' };
-  if (lower.includes('powerpoint') || lower.includes('presentationml')) return { label: 'PPT', bg: '#e67e22' };
-
-  return { label: 'FILE', bg: '#7f8c8d' };
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 14, paddingTop: 8 },
   pageTitle: { fontSize: 22, fontWeight: '900', textAlign: 'center', letterSpacing: 1, marginBottom: 8 },
 
-  // Buscador dark
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
