@@ -1,5 +1,5 @@
 // config/api.ts
-const HOST ='http://192.168.1.3:3550';
+const HOST ='http://192.168.161.49:3530';
 export const BASE_URL = `${HOST}/api`;
 export const API_BASE = BASE_URL;
 

@@ -22,7 +22,7 @@ type AuthContextShape = {
 };
 
 const AuthContext = createContext<AuthContextShape | null>(null);
-const BASE_URL = 'http://192.168.20.20:3550';
+const BASE_URL = 'http://192.168.161.49:3530';
 
 const ACCESS_KEY = 'auth_access_token';
 const REFRESH_KEY = 'auth_refresh_token';
