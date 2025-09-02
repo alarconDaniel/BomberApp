@@ -1,4 +1,3 @@
-// app/(modals)/reto/crear-reto.tsx
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
@@ -7,26 +6,41 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
 import FadeWrapper from '../../../components/FadeWrapper';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../../theme/GlobalStyles';
 import { useAuth } from '../../../auth/AuthContext';
 
-// 👇 Path correcto hacia tu util compartido de retos
-import { createReto, type RetoDTO } from '../../(admin)/lib/retos';
+// util compartido
+import {
+  createReto, updateReto,
+  type RetoDTO, type Cargo, type TipoKey
+} from '../../(admin)/lib/retos';
 
 const MAX_DESC = 255 as const;
+const cargos: Cargo[] = ['Operario', 'Mantenimiento', 'Supervisor'];
 
-const cargos = ['Operario', 'Mantenimiento', 'Supervisor'] as const;
-type Cargo = (typeof cargos)[number];
-
-const tiposReto = ['Opción múltiple', 'Emparejar', 'Rellenar'] as const;
-type TipoReto = (typeof tiposReto)[number];
+// claves → etiquetas visibles
+const TIPOS: Record<TipoKey, string> = {
+  multiple: 'Opción múltiple',
+  match: 'Emparejar',
+  fill: 'Rellenar',
+};
 
 type ParUI = { id: string; izquierda: string; derecha: string };
 
+// helpers fecha
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+const isYYYYMMDD = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+// opcional: para mostrar bonito en el botón (pero guardamos YYYY-MM-DD)
+const pretty = (s: string) => {
+  if (!isYYYYMMDD(s)) return s;
+  const d = new Date(s + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+};
 
 export default function CrearRetoModal() {
   const { colors } = useTheme();
@@ -36,17 +50,28 @@ export default function CrearRetoModal() {
   const router = useRouter();
   const { fetchJson } = useAuth();
 
+  // params
   const { mode = 'create', item } = useLocalSearchParams<{ mode?: string; item?: string }>();
   const isEdit = String(mode) === 'edit';
   const itemParsed: RetoDTO | null = useMemo(() => {
     try { return item ? JSON.parse(item) : null; } catch { return null; }
   }, [item]);
 
-  // Form base
+  // ===== Form base
   const [nombre, setNombre] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [cargo, setCargo] = useState<Cargo>('Operario');
-  const [tipo, setTipo] = useState<TipoReto | null>(null);
+  const [tipo, setTipo] = useState<TipoKey | null>(null);
+
+  // fechas
+  const hoy = useMemo(() => new Date(), []);
+  const porDefectoFin = useMemo(() => new Date(hoy.getTime() + 7 * 24 * 60 * 60 * 1000), [hoy]);
+  const [inicio, setInicio] = useState<string>(isoDate(hoy));
+  const [fin, setFin] = useState<string>(isoDate(porDefectoFin));
+
+  // estado del calendario modal
+  const [datePickerVisible, setDatePickerVisible] = useState<boolean>(false);
+  const [dateTarget, setDateTarget] = useState<'inicio' | 'fin' | null>(null);
 
   // Opción múltiple
   const [pregunta, setPregunta] = useState('');
@@ -63,6 +88,8 @@ export default function CrearRetoModal() {
     { id: 'p1', izquierda: '', derecha: '' },
     { id: 'p2', izquierda: '', derecha: '' },
   ]);
+  const addPar = () => setPares(prev => [...prev, { id: `p${Date.now()}`, izquierda: '', derecha: '' }]);
+  const removePar = (id: string) => setPares(prev => (prev.length > 2 ? prev.filter(p => p.id !== id) : prev));
 
   // Rellenar
   const [fillWord, setFillWord] = useState('');
@@ -70,23 +97,48 @@ export default function CrearRetoModal() {
 
   const [cargando, setCargando] = useState(false);
 
+  // Prefill edición
   useEffect(() => {
-    if (isEdit && itemParsed) {
-      setNombre(itemParsed.nombreReto || '');
-      setDescripcion(itemParsed.descripcionReto || '');
+    if (!isEdit || !itemParsed) return;
+    setNombre(itemParsed.nombreReto || '');
+    setDescripcion(itemParsed.descripcionReto || '');
+    setInicio(itemParsed.fechaInicioReto || isoDate(hoy));
+    setFin(itemParsed.fechaFinReto || isoDate(porDefectoFin));
+
+    if (itemParsed.cargo) setCargo(itemParsed.cargo);
+    if (itemParsed.tipo) setTipo(itemParsed.tipo);
+  }, [isEdit, itemParsed, hoy, porDefectoFin]);
+
+  function validarFechas(): boolean {
+    if (!isYYYYMMDD(inicio) || !isYYYYMMDD(fin)) {
+      Alert.alert('Fecha inválida', 'Usa el formato YYYY-MM-DD.');
+      return false;
     }
-  }, [isEdit, itemParsed]);
+    if (new Date(inicio) > new Date(fin)) {
+      Alert.alert('Rango inválido', 'La fecha de inicio no puede ser mayor a la de fin.');
+      return false;
+    }
+    return true;
+  }
 
+  // ===== Crear
   const crear = async () => {
-    if (!nombre.trim()) { Alert.alert('Falta información', 'El nombre del reto es obligatorio'); return; }
+    if (!nombre.trim()) return Alert.alert('Falta información', 'El nombre del reto es obligatorio');
+    if (!validarFechas()) return;
 
-    const hoy = new Date(); const fin = new Date(hoy.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const payload = {
+    const payload: Partial<RetoDTO> & Record<string, any> = {
       nombreReto: nombre.trim(),
-      descripcionReto: descripcion.trim() || null,
+      descripcionReto: descripcion.trim(), // string, nunca null
       tiempoEstimadoSegReto: 0,
-      fechaInicioReto: isoDate(hoy),
-      fechaFinReto: isoDate(fin),
+      fechaInicioReto: inicio,
+      fechaFinReto: fin,
+      cargo,
+      tipo: tipo ?? undefined,
+      config:
+        tipo === 'multiple' ? { pregunta, opciones, multiple } :
+        tipo === 'match'    ? { pares } :
+        tipo === 'fill'     ? { respuesta: fillWord, pista: fillHint } :
+        undefined,
     };
 
     try {
@@ -104,9 +156,91 @@ export default function CrearRetoModal() {
     }
   };
 
-  const guardarCambios = () => {
-    Alert.alert('Pendiente', 'La edición se implementará en el siguiente paso.');
+  // ===== Guardar cambios
+  const guardarCambios = async () => {
+    if (!isEdit || !itemParsed) return;
+    if (!validarFechas()) return;
+
+    const payload: Partial<RetoDTO> & Record<string, any> = {
+      codReto: itemParsed.codReto,
+      nombreReto: nombre.trim(),
+      descripcionReto: (descripcion ?? '').trim(),
+      fechaInicioReto: inicio,
+      fechaFinReto: fin,
+      tiempoEstimadoSegReto: itemParsed.tiempoEstimadoSegReto ?? 0,
+      cargo,
+      tipo: tipo ?? undefined,
+      config:
+        tipo === 'multiple' ? { pregunta, opciones, multiple } :
+        tipo === 'match'    ? { pares } :
+        tipo === 'fill'     ? { respuesta: fillWord, pista: fillHint } :
+        undefined,
+    };
+
+    try {
+      setCargando(true);
+      await updateReto(fetchJson, itemParsed.codReto, payload);
+      Alert.alert('OK', 'Reto actualizado');
+      router.back();
+    } catch (e: any) {
+      Alert.alert('Error', String(e?.message || 'No se pudo actualizar el reto'));
+    } finally {
+      setCargando(false);
+    }
   };
+
+  // ===== Preview
+  const probarReto = () => {
+    if (!tipo) { Alert.alert('Selecciona un tipo de reto'); return; }
+
+    if (tipo === 'match') {
+      const valid = pares
+        .map(p => ({ izquierda: (p.izquierda ?? '').trim(), derecha: (p.derecha ?? '').trim() }))
+        .filter(p => p.izquierda && p.derecha);
+      if (valid.length < 2) { Alert.alert('Mínimo 2 pares', 'Completa al menos dos pares válidos.'); return; }
+      router.push({ pathname: '/(admin)/(tabs)/retos/RetoEmparejarScreen', params: { pares: JSON.stringify(valid) } });
+      return;
+    }
+
+    if (tipo === 'multiple') {
+      const clean = opciones.map(o => ({ ...o, texto: (o.texto || '').trim() }));
+      if (!pregunta.trim() || clean.some(o => !o.texto)) { Alert.alert('Completa la pregunta y las 4 opciones'); return; }
+      if (!clean.some(o => o.correcta)) { Alert.alert('Marca al menos una opción correcta'); return; }
+      router.push({
+        pathname: '/(admin)/(tabs)/retos/RetoMultipleScreen',
+        params: { pregunta: pregunta.trim(), opciones: JSON.stringify(clean), multiple: String(multiple) },
+      });
+      return;
+    }
+
+    if (tipo === 'fill') {
+      if (fillWord.trim().length < 2) { Alert.alert('Palabra muy corta'); return; }
+      router.push({
+        pathname: '/(admin)/(tabs)/retos/RetoRellenarScreen',
+        params: { respuesta: fillWord.trim(), pista: (fillHint.trim() || undefined) as any },
+      });
+    }
+  };
+
+  // Handlers del calendario
+  const openPicker = (target: 'inicio' | 'fin') => {
+    setDateTarget(target);
+    setDatePickerVisible(true);
+  };
+  const closePicker = () => {
+    setDatePickerVisible(false);
+    setDateTarget(null);
+  };
+  const onConfirmDate = (date: Date) => {
+    const value = isoDate(date);
+    if (dateTarget === 'inicio') setInicio(value);
+    if (dateTarget === 'fin') setFin(value);
+    closePicker();
+  };
+
+  // fecha mínima/máxima para UX
+  const minDate = new Date('2020-01-01T00:00:00');
+  const maxDate = new Date('2100-12-31T00:00:00');
 
   return (
     <FadeWrapper>
@@ -140,8 +274,42 @@ export default function CrearRetoModal() {
                 multiline
                 style={s.textArea}
               />
-              <Text style={[g.text.caption, { position: 'absolute', right: 8, bottom: 6 }]}>{MAX_DESC - descripcion.length}</Text>
+              <Text style={[g.text.caption, { position: 'absolute', right: 8, bottom: 6 }]}>
+                {Math.max(0, MAX_DESC - descripcion.length)}
+              </Text>
             </View>
+
+            {/* Fechas */}
+            <Text style={[g.text.smallStrong, { marginTop: 12 }]}>Fechas</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+              <Pressable style={[s.dateBtn, { borderColor: colors.inputBorder, backgroundColor: colors.card }]} onPress={() => openPicker('inicio')}>
+                <Ionicons name="calendar" size={16} color={colors.mutedText} />
+                <View style={{ marginLeft: 8 }}>
+                  <Text style={g.text.caption}>Inicio</Text>
+                  <Text style={g.text.bodyStrong}>{pretty(inicio)}</Text>
+                </View>
+              </Pressable>
+
+              <Pressable style={[s.dateBtn, { borderColor: colors.inputBorder, backgroundColor: colors.card }]} onPress={() => openPicker('fin')}>
+                <Ionicons name="calendar" size={16} color={colors.mutedText} />
+                <View style={{ marginLeft: 8 }}>
+                  <Text style={g.text.caption}>Fin</Text>
+                  <Text style={g.text.bodyStrong}>{pretty(fin)}</Text>
+                </View>
+              </Pressable>
+            </View>
+
+            <DateTimePickerModal
+              isVisible={datePickerVisible}
+              mode="date"
+              onConfirm={onConfirmDate}
+              onCancel={closePicker}
+              minimumDate={minDate}
+              maximumDate={maxDate}
+              // fecha inicial del modal según el target
+              date={new Date((dateTarget === 'fin' ? fin : inicio) + 'T00:00:00')}
+              display="inline" // iOS: calendario estilo inline; Android usa el nativo bonito
+            />
 
             <Text style={[g.text.smallStrong, { marginTop: 12 }]}>Seleccione el cargo</Text>
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
@@ -152,14 +320,23 @@ export default function CrearRetoModal() {
 
             <Text style={[g.text.smallStrong, { marginTop: 12 }]}>Escoja tipo de reto</Text>
             <View style={s.chipsRow}>
-              {tiposReto.map((t) => (
-                <Chip key={t} label={t} active={tipo === t} onPress={() => setTipo(t as any)} c={colors} g={g} />
+              {(Object.keys(TIPOS) as TipoKey[]).map((key) => (
+                <Chip
+                  key={key}
+                  label={TIPOS[key]}
+                  active={tipo === key}
+                  onPress={() => setTipo(key)}
+                  c={colors}
+                  g={g}
+                />
               ))}
             </View>
 
-            {tipo === 'Opción múltiple' && (
+            {/* ===== Config por tipo ===== */}
+            {tipo === 'multiple' && (
               <View style={s.panel}>
-                <Text style={s.panelTitle}>Configurar “Opción múltiple”</Text>
+                <Text style={s.panelTitle}>Configurar “{TIPOS.multiple}”</Text>
+
                 <Text style={[g.text.smallStrong, { marginBottom: 6 }]}>Pregunta</Text>
                 <TextInput
                   value={pregunta}
@@ -197,9 +374,9 @@ export default function CrearRetoModal() {
               </View>
             )}
 
-            {tipo === 'Emparejar' && (
+            {tipo === 'match' && (
               <View style={s.panel}>
-                <Text style={s.panelTitle}>Configurar “Emparejar”</Text>
+                <Text style={s.panelTitle}>Configurar “{TIPOS.match}”</Text>
                 {pares.map((p) => (
                   <View key={p.id} style={s.pairRow}>
                     <TextInput
@@ -217,11 +394,11 @@ export default function CrearRetoModal() {
                       placeholderTextColor={colors.mutedText}
                       style={[s.input, { flex: 1 }]}
                     />
-                    <Square onPress={() => setPares(prev => (prev.length > 2 ? prev.filter(x => x.id !== p.id) : prev))} danger c={colors} title="Quitar par" />
+                    <Square onPress={() => removePar(p.id)} danger c={colors} title="Quitar par" />
                   </View>
                 ))}
                 <TouchableOpacity
-                  onPress={() => setPares(prev => [...prev, { id: `p${Date.now()}`, izquierda: '', derecha: '' }])}
+                  onPress={addPar}
                   activeOpacity={0.9}
                   style={[s.addBtn, { borderColor: colors.outline, backgroundColor: colors.mutedBg }]}
                 >
@@ -230,9 +407,9 @@ export default function CrearRetoModal() {
               </View>
             )}
 
-            {tipo === 'Rellenar' && (
+            {tipo === 'fill' && (
               <View style={s.panel}>
-                <Text style={s.panelTitle}>Configurar “Rellenar”</Text>
+                <Text style={s.panelTitle}>Configurar “{TIPOS.fill}”</Text>
                 <Text style={[g.text.smallStrong, { marginBottom: 6 }]}>Respuesta</Text>
                 <TextInput
                   value={fillWord}
@@ -265,17 +442,18 @@ export default function CrearRetoModal() {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={[s.primaryBtn, { backgroundColor: colors.primary, opacity: 0.7 }]}
+                  style={[s.primaryBtn, { backgroundColor: colors.primary }]}
                   onPress={guardarCambios}
+                  disabled={cargando}
                   activeOpacity={0.9}
                 >
-                  <Text style={g.text.onPrimary}>Guardar cambios</Text>
+                  {cargando ? <ActivityIndicator color="#fff" /> : <Text style={g.text.onPrimary}>Guardar cambios</Text>}
                 </TouchableOpacity>
               )}
 
               <TouchableOpacity
                 style={[s.primaryBtn, { backgroundColor: colors.primarySoft }]}
-                onPress={() => Alert.alert('Preview', 'Aquí puedes disparar la vista previa como antes.')}
+                onPress={probarReto}
               >
                 <Text style={[g.text.bodyStrong]}>Probar reto</Text>
               </TouchableOpacity>
@@ -309,12 +487,8 @@ function Chip({ label, active, onPress, c, g }: { label: string; active?: boolea
       onPress={onPress}
       activeOpacity={0.9}
       style={[
-        {
-          paddingHorizontal: 12, height: 34, borderRadius: 16, borderWidth: 1,
-          justifyContent: 'center',
-        },
-        active ? { backgroundColor: c.primary, borderColor: c.primary }
-               : { backgroundColor: c.mutedBg, borderColor: c.outline },
+        { paddingHorizontal: 12, height: 34, borderRadius: 16, borderWidth: 1, justifyContent: 'center' },
+        active ? { backgroundColor: c.primary, borderColor: c.primary } : { backgroundColor: c.mutedBg, borderColor: c.outline },
       ]}
     >
       <Text style={[g.text.smallStrong, active ? g.text.onPrimary : {}]}>{label}</Text>
@@ -371,14 +545,21 @@ function getStyles(c: import('../../../theme/ThemeProvider').Palette) {
       borderWidth: 1, borderColor: c.tabBorder,
     },
     panelTitle: { fontWeight: '800', color: c.text, marginBottom: 8 },
-    check: {
-      width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: c.inputBorder,
-    },
+    check: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: c.inputBorder },
     pairRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
     addBtn: {
       marginTop: 8, alignSelf: 'flex-start',
       paddingHorizontal: 12, height: 36, borderRadius: 10, justifyContent: 'center', borderWidth: 1,
     },
     primaryBtn: { height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    dateBtn: {
+      flex: 1,
+      height: 54,
+      borderRadius: 10,
+      borderWidth: 1,
+      paddingHorizontal: 10,
+      alignItems: 'center',
+      flexDirection: 'row',
+    },
   });
 }

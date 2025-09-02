@@ -1,34 +1,50 @@
 // app/(admin)/(tabs)/lib/retos.ts
 import { API } from '../../../config/api';
 
+/** ===== Tipos compartidos ===== */
+export type Cargo = 'Operario' | 'Mantenimiento' | 'Supervisor';
+export type TipoKey = 'multiple' | 'match' | 'fill';
+
 /** ===== DTO normalizado ===== */
 export type RetoDTO = {
   codReto: number;
   nombreReto: string;
-  descripcionReto?: string | null;
-  tiempoEstimadoSegReto?: number | null;
-  fechaInicioReto?: string | null;
-  fechaFinReto?: string | null;
+  descripcionReto: string; // NOT NULL en tu DB ⇒ string siempre
+  tiempoEstimadoSegReto: number;
+  fechaInicioReto: string; // 'YYYY-MM-DD'
+  fechaFinReto: string;    // 'YYYY-MM-DD'
 
-  // (Opcional) Si luego agregas persistencia de cargo/tipo:
-  cargo?: 'Operario' | 'Mantenimiento' | 'Supervisor';
-  tipo?: 'Opción múltiple' | 'Emparejar' | 'Rellenar';
+  // opcionales si tu backend todavía no los persiste
+  cargo?: Cargo;
+  tipo?: TipoKey;
 };
 
 type AnyObj = Record<string, any>;
 
-export const normalizeReto = (x: AnyObj): RetoDTO => ({
-  codReto: x?.codReto ?? x?.cod_reto ?? x?.id ?? 0,
-  nombreReto: x?.nombreReto ?? x?.nombre_reto ?? x?.titulo ?? '',
-  descripcionReto: x?.descripcionReto ?? x?.descripcion_reto ?? x?.descripcion ?? '',
-  tiempoEstimadoSegReto: x?.tiempoEstimadoSegReto ?? x?.tiempo_estimado_seg_reto ?? x?.tiempo ?? null,
-  fechaInicioReto: x?.fechaInicioReto ?? x?.fecha_inicio_reto ?? x?.fechaInicio ?? null,
-  fechaFinReto: x?.fechaFinReto ?? x?.fecha_fin_reto ?? x?.fechaFin ?? null,
+/** Mapea distintos valores posibles del backend a nuestras claves ‘TipoKey’ */
+function normalizeTipo(v: any): TipoKey | undefined {
+  const s = String(v ?? '').toLowerCase().trim();
+  if (!s) return undefined;
+  if (s === 'multiple' || s === 'opcion multiple' || s === 'opción múltiple') return 'multiple';
+  if (s === 'match' || s === 'emparejar' || s === 'emparejado') return 'match';
+  if (s === 'fill' || s === 'rellenar' || s === 'completar') return 'fill';
+  return undefined;
+}
 
-  cargo: x?.cargo ?? x?.destinoCargo ?? x?.destino_cargo ?? undefined,
-  tipo: x?.tipo ?? x?.tipoReto ?? x?.tipo_reto ?? undefined,
+/** Normaliza snake/camel y variantes comunes */
+export const normalizeReto = (x: AnyObj): RetoDTO => ({
+  codReto: Number(x?.codReto ?? x?.cod_reto ?? x?.id ?? 0),
+  nombreReto: String(x?.nombreReto ?? x?.nombre_reto ?? x?.titulo ?? ''),
+  descripcionReto: String(x?.descripcionReto ?? x?.descripcion_reto ?? x?.descripcion ?? ''),
+  tiempoEstimadoSegReto: Number(x?.tiempoEstimadoSegReto ?? x?.tiempo_estimado_seg_reto ?? x?.tiempo ?? 0),
+  fechaInicioReto: String(x?.fechaInicioReto ?? x?.fecha_inicio_reto ?? x?.fechaInicio ?? ''),
+  fechaFinReto: String(x?.fechaFinReto ?? x?.fecha_fin_reto ?? x?.fechaFin ?? ''),
+
+  cargo: (x?.cargo ?? x?.destinoCargo ?? x?.destino_cargo) as Cargo | undefined,
+  tipo: normalizeTipo(x?.tipo ?? x?.tipoReto ?? x?.tipo_reto),
 });
 
+/** Resuelve arrays devueltos como {data}/{items}/{retos}/[] */
 function pickArray(payload: any): any[] {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
@@ -37,7 +53,7 @@ function pickArray(payload: any): any[] {
   return [];
 }
 
-/** Limpia claves undefined (no las manda en el body) */
+/** Quita las claves con undefined del body */
 function stripUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
   const out: Record<string, any> = {};
   Object.keys(obj).forEach(k => {
@@ -55,10 +71,12 @@ export async function fetchRetos(
     method: 'GET',
     headers: { Accept: 'application/json' },
   });
-  return pickArray(json).map(normalizeReto).filter((r: RetoDTO) => !!r.codReto);
+  return pickArray(json)
+    .map(normalizeReto)
+    .filter((r: RetoDTO) => !!r.codReto);
 }
 
-/** Títulos para Home */
+/** Solo los títulos – útil para Home */
 export async function fetchRetoTitles(
   fetchJson: <T = any>(url: string, opts?: any) => Promise<T>
 ): Promise<string[]> {
@@ -69,20 +87,23 @@ export async function fetchRetoTitles(
 /** ====== Crear ====== */
 export async function createReto(
   fetchJson: <T = any>(url: string, opts?: any) => Promise<T>,
-  payload: Partial<RetoDTO>
+  payload: Partial<RetoDTO> & Record<string, any>
 ) {
-  // Aseguramos strings (no null) en campos NOT NULL
   const body = {
     nombreReto: (payload.nombreReto ?? '').trim(),
-    descripcionReto: (payload.descripcionReto ?? '').toString(), // '' si venía null/undefined
-    tiempoEstimadoSegReto: payload.tiempoEstimadoSegReto ?? 0,
-    fechaInicioReto: payload.fechaInicioReto ?? null,
-    fechaFinReto: payload.fechaFinReto ?? null,
+    descripcionReto: String(payload.descripcionReto ?? ''), // NUNCA null
+    tiempoEstimadoSegReto: Number(payload.tiempoEstimadoSegReto ?? 0),
+    fechaInicioReto: String(payload.fechaInicioReto ?? ''), // ‘YYYY-MM-DD’
+    fechaFinReto: String(payload.fechaFinReto ?? ''),       // ‘YYYY-MM-DD’
 
-    // si tu backend los ignora no pasa nada, sólo se guardarán cuando lo soporte:
+    // opcionales
     cargo: payload.cargo,
-    tipo: payload.tipo,
+    tipo: payload.tipo, // 'multiple' | 'match' | 'fill'
+
+    // cualquier metadata adicional (config de preguntas, etc.)
+    config: payload.config,
   };
+
   return fetchJson(API.reto.crear, {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -90,27 +111,25 @@ export async function createReto(
   });
 }
 
-/** ====== Actualizar ====== */
+/** ====== Actualizar (PUT /reto/modificar con codReto en el body) ====== */
 export async function updateReto(
   fetchJson: <T = any>(url: string, opts?: any) => Promise<T>,
   id: number | string,
-  payload: Partial<RetoDTO>
+  payload: Partial<RetoDTO> & Record<string, any>
 ) {
-  // Nunca mandes null a columnas NOT NULL: usa '' o no mandes la clave
   const clean = stripUndefined({
     codReto: Number(id),
     nombreReto: payload.nombreReto?.trim(),
     descripcionReto:
       payload.descripcionReto === undefined
         ? undefined
-        : String(payload.descripcionReto), // '' si el usuario borró el texto
-
+        : String(payload.descripcionReto), // '' si usuario lo deja vacío
     tiempoEstimadoSegReto: payload.tiempoEstimadoSegReto,
-    fechaInicioReto: payload.fechaInicioReto,
-    fechaFinReto: payload.fechaFinReto,
-
+    fechaInicioReto: payload.fechaInicioReto, // ‘YYYY-MM-DD’
+    fechaFinReto: payload.fechaFinReto,       // ‘YYYY-MM-DD’
     cargo: payload.cargo,
     tipo: payload.tipo,
+    config: payload.config,
   });
 
   return fetchJson(API.reto.modificar, {
