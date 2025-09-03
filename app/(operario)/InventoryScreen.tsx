@@ -9,6 +9,7 @@ import {
     Text,
     View,
     useWindowDimensions,
+    Alert,
 } from 'react-native';
 import type {RouteProp} from '@react-navigation/native';
 
@@ -18,9 +19,7 @@ import FadeWrapper from '../../components/operario/FadeWrapper';
 import DetailsInventoryItemModal from "../../components/operario/DetailsInventoryItemModal";
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
-
-
-
+import ChestOpenModal from '../../components/operario/ChestOpenModal';
 
 export default function InventoryScreen() {
     const {fetchJson} = useAuth();
@@ -36,6 +35,13 @@ export default function InventoryScreen() {
 
     const [selected, setSelected] = useState<ItemInventario | null>(null);
     const [detailsOpen, setDetailsOpen] = useState(false);
+
+    const [opening, setOpening] = useState(false);
+    const [openModal, setOpenModal] = useState<{
+        visible: boolean;
+        size: 'pequeno' | 'medio' | 'grande';
+        rewards: { codItem: number; nombre: string; tipo: string; cantidad: number }[];
+    }>({ visible: false, size: 'pequeno', rewards: [] });
 
     const openDetails = (it: ItemInventario) => {
         setSelected(it);
@@ -101,6 +107,43 @@ export default function InventoryScreen() {
         await listarInventario();
         setRefreshing(false);
     }, [listarInventario]);
+
+    // 🧩 COFRES: handler de apertura
+    const handleOpenChest = useCallback(async (it: ItemInventario) => {
+        try {
+            if (!it?.item?.tipo || String(it.item.tipo).toUpperCase() !== 'COFRE') {
+                Alert.alert('No es un cofre', 'Este ítem no se puede abrir.');
+                return;
+            }
+            if (Number(it.cantidad) <= 0) {
+                Alert.alert('Sin cofres', 'No te queda cantidad de este cofre.');
+                return;
+            }
+            setOpening(true);
+            // POST al backend
+            const resp = await fetchJson<any>('/item-inventario/abrir-cofre', {
+                method: 'POST',
+                body: JSON.stringify({ codItemInventario: it.cod }),
+            });
+
+            // Cierra detalle y muestra modal de apertura
+            setDetailsOpen(false);
+            setTimeout(() => {
+                setOpenModal({
+                    visible: true,
+                    size: resp?.chest?.size ?? 'pequeno',
+                    rewards: Array.isArray(resp?.rewards) ? resp.rewards : [],
+                });
+            }, 180);
+
+            // Refresca inventario (para ver cantidad actualizada y nuevos ítems)
+            await listarInventario();
+        } catch (e: any) {
+            Alert.alert('No se pudo abrir', e?.message ?? 'Error al abrir cofre');
+        } finally {
+            setOpening(false);
+        }
+    }, [fetchJson, listarInventario]);
 
     const styles = StyleSheet.create({
         screen: {
@@ -220,6 +263,19 @@ export default function InventoryScreen() {
                 onClose={closeDetails}
                 accentColor={colors.primary}
                 showDate={true}
+                // 🧩 COFRES: pasamos props especiales vía any (ver componente abajo)
+                // @ts-ignore
+                onOpenChest={selected && String(selected.item?.tipo).toUpperCase() === 'COFRE'
+                    ? () => handleOpenChest(selected)
+                    : undefined}
+                opening={opening}
+            />
+
+            <ChestOpenModal
+                visible={openModal.visible}
+                size={openModal.size}
+                rewards={openModal.rewards}
+                onClose={() => setOpenModal(s => ({ ...s, visible: false }))}
             />
         </FadeWrapper>
     );
