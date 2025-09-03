@@ -1,5 +1,5 @@
 // config/api.ts
-const HOST ='http://192.168.137.69:3550';;
+const HOST ='http://192.168.137.180:3550';
 export const BASE_URL = `${HOST}`;
 export const API_BASE = BASE_URL;
 
@@ -60,4 +60,14 @@ export const API = {
     eliminar: `${BASE_URL}/public/archivos/eliminar`, // usa DELETE o POST según tu backend
     confirmarTamano: `${BASE_URL}/public/archivos/confirmar-tamano`,
   },
+
+  googleToken: {
+    // protegido (JWT en headers vía fetchJson)
+    connect: `${BASE_URL}/google-token/connect`,
+
+    // público (normalmente NO se usa desde la app, lo maneja el navegador)
+    callback: (code: string, state?: number | string) =>
+      `${BASE_URL}/google-token/callback${q({ code, state })}`,
+  },
+
 };

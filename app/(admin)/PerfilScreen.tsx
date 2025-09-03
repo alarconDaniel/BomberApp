@@ -1,15 +1,18 @@
 // app/(admin)/(tabs)/PerfilScreen.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 
 import FadeWrapper from '../../components/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
-import { fetchFullNameFromUsuariosList } from './lib/perfil'; // 👈 IMPORT NUEVO
+import { fetchFullNameFromUsuariosList } from './lib/perfil';
+import { API } from '../../config/api'; // Ajusta la ruta si tu estructura difiere
 
 const AVATAR = 96;
 
@@ -32,7 +35,6 @@ function toTitle(s?: string) {
     .map(w => w[0].toUpperCase() + w.slice(1).toLowerCase())
     .join(' ');
 }
-
 // Primer valor “no vacío”
 function pickFirst<T = any>(...vals: T[]) {
   for (const v of vals) {
@@ -42,7 +44,6 @@ function pickFirst<T = any>(...vals: T[]) {
   }
   return undefined;
 }
-
 // Busca la cédula en distintas claves comunes (y anidadas)
 function extractCedula(u: any): string {
   if (!u) return '—';
@@ -51,18 +52,15 @@ function extractCedula(u: any): string {
     u.cedula, u.cédula, u.cedulaUsuario, u.cedula_usuario,
     u.dni, u.documento, u.documentNumber, u.numeroDocumento, u.nroDocumento,
     u.identificacion, u.identification, u.cc,
-
-    // común en payloads anidados
+    // payloads anidados
     u.usuario?.cedula, u.usuario?.cédula, u.usuario?.cedulaUsuario, u.usuario?.cedula_usuario,
     u.usuario?.dni, u.usuario?.documento, u.usuario?.numeroDocumento, u.usuario?.identificacion, u.usuario?.cc,
-
     // perfiles anidados
     u.perfil?.cedula, u.perfil?.dni,
     u.datos?.cedula, u.datos?.dni
   );
   return found ?? '—';
 }
-
 // Normaliza rol (1=admin) o nombre anidado
 function extractRol(u: any): string {
   if (!u) return '—';
@@ -84,7 +82,6 @@ export default function PerfilScreen() {
   const { colors } = useTheme();
   const g = useMemo(() => makeGlobalStyles(colors), [colors]);
 
-  // 👇 Casteo local para leer propiedades opcionales sin que TS se queje
   const u = user as any;
 
   // === Nombre y Apellido desde /usuario/listar (con fallback) ===
@@ -123,7 +120,7 @@ export default function PerfilScreen() {
           if (isMounted && c && c !== '—') setCedulaApi(c);
         }
       } catch {
-        // silencio: si falla, se queda con '—'
+        // silencio
       }
     })();
     return () => { isMounted = false; };
@@ -140,6 +137,39 @@ export default function PerfilScreen() {
   const avatarStyle = {
     transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) }],
   };
+
+  // ===== Conectar Google Drive =====
+  const [connectingDrive, setConnectingDrive] = useState(false);
+
+  const onConnectDrive = useCallback(async () => {
+    try {
+      setConnectingDrive(true);
+
+      // 1) Pedimos la URL al backend (protegido por JWT)
+      const r: any = await fetchJson(API.googleToken.connect);
+      const url = r?.url;
+      if (!url || typeof url !== 'string') throw new Error('No se recibió la URL de autorización.');
+
+      // 2) Abrimos sesión de auth que vuelve a la app (deep link)
+      // Define tu esquema en app.json -> "expo": { "scheme": "myapp" }
+      const redirectUri = Linking.createURL('oauth/drive'); // ej: myapp://oauth/drive
+
+      const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
+
+      if (result.type === 'success') {
+        const ok = /[?&]ok=1\b/.test(result.url ?? '');
+        Alert.alert('Google Drive', ok ? 'Conectado correctamente.' : 'Conexión finalizada.');
+      } else if (result.type === 'dismiss') {
+        Alert.alert('Google Drive', 'Autorización cancelada.');
+      }
+      // Si tu backend aún no redirige al deep link, puedes usar:
+      // await Linking.openURL(url);
+    } catch (e: any) {
+      Alert.alert('Google Drive', e?.message ?? 'No fue posible iniciar la conexión.');
+    } finally {
+      setConnectingDrive(false);
+    }
+  }, [fetchJson]);
 
   return (
     <FadeWrapper>
@@ -212,7 +242,7 @@ export default function PerfilScreen() {
             <InfoChip icon="finger-print-outline" label="Cédula" value={cedula} colors={colors} g={g} />
           </View>
 
-          {/* Acción rápida */}
+          {/* Acciones rápidas: SOLO editar aquí */}
           <View style={styles.actionsRow}>
             <ActionButton
               icon="create-outline"
@@ -221,6 +251,26 @@ export default function PerfilScreen() {
               colors={colors}
               g={g}
             />
+          </View>
+
+          {/* Debajo: botón full-width para Google Drive */}
+          <View style={{ width: '100%', marginTop: 10 }}>
+            <Pressable
+              onPress={onConnectDrive}
+              style={{
+                height: 44,
+                borderRadius: 12,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: colors.primary,
+                flexDirection: 'row',
+              }}
+            >
+              <Ionicons name={connectingDrive ? 'cloud-outline' : 'cloud-upload-outline'} size={18} color="#fff" />
+              <Text style={[g.text.onPrimary, { marginLeft: 8 }]}>
+                {connectingDrive ? 'Conectando…' : 'Conectar Google Drive'}
+              </Text>
+            </Pressable>
           </View>
         </View>
 
