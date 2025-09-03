@@ -5,15 +5,13 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "scheme": "bomberapp",
-    "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": { "supportsTablet": true },
     "android": { "edgeToEdgeEnabled": true },
+
     "web": {},
     "plugins": ["expo-secure-store", "expo-router"]
+
   }
-}
