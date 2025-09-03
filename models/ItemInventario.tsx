@@ -7,6 +7,7 @@ export type ItemInventario = {
         codItem: number;
         nombre: string;
         descripcion: string;
+        tipo: string;
     };
     cod: number;
     cantidad: number;
