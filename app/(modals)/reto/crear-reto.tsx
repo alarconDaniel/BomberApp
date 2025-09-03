@@ -48,7 +48,30 @@ export default function CrearRetoModal() {
   const g = useMemo(() => makeGlobalStyles(colors), [colors]);
   const s = useMemo(() => getStyles(colors), [colors]);
   const router = useRouter();
-  const { fetchJson } = useAuth();
+
+  // 👇 ahora también traemos user
+  const { fetchJson, user } = useAuth();
+
+  // === detectar admin (robusto a distintos formatos del rol) ===
+  const isAdmin = useMemo(() => {
+    const u: any = user || {};
+    // nombre del rol
+    const rname = String(
+      u?.rol?.nombre ?? u?.rol?.name ?? u?.role?.nombre ?? u?.role?.name ?? u?.perfil ?? ''
+    ).toLowerCase();
+    if (rname.includes('admin') || rname.includes('administrador')) return true;
+
+    // id / código del rol
+    const rid = Number(
+      u?.rol?.id ?? u?.rol?.codRol ?? u?.rol?.cod_rol ??
+      u?.role?.id ?? u?.role?.codRol ?? u?.role?.cod_rol ??
+      u?.codRol ?? u?.cod_rol ?? u?.rolId ?? u?.roleId ?? u?.idRol ?? u?.id_rol
+    );
+    if (rid === 1) return true;
+
+    if (u?.isAdmin === true) return true;
+    return false;
+  }, [user]);
 
   // params
   const { mode = 'create', item } = useLocalSearchParams<{ mode?: string; item?: string }>();
@@ -306,9 +329,8 @@ export default function CrearRetoModal() {
               onCancel={closePicker}
               minimumDate={minDate}
               maximumDate={maxDate}
-              // fecha inicial del modal según el target
               date={new Date((dateTarget === 'fin' ? fin : inicio) + 'T00:00:00')}
-              display="inline" // iOS: calendario estilo inline; Android usa el nativo bonito
+              display="inline"
             />
 
             <Text style={[g.text.smallStrong, { marginTop: 12 }]}>Seleccione el cargo</Text>
@@ -457,6 +479,13 @@ export default function CrearRetoModal() {
               >
                 <Text style={[g.text.bodyStrong]}>Probar reto</Text>
               </TouchableOpacity>
+
+              {/* (Opcional) puedes usar isAdmin para mostrar un aviso */}
+              {!isAdmin && (
+                <Text style={[g.text.caption, { color: colors.danger, marginTop: 6 }]}>
+                  * Necesitas permisos de administrador para crear/editar retos.
+                </Text>
+              )}
             </View>
           </View>
         </ScrollView>

@@ -38,6 +38,7 @@ function hasAdminRole(u: any): boolean {
   ].filter(v => v !== undefined && v !== null);
 
   for (const v of flat) {
+    if (v === true || v === 1) return true;
     const s = String(v).trim().toLowerCase();
     if (s === '1' || s === 'admin' || s === 'administrador') return true;
     const n = Number(s);
@@ -45,32 +46,52 @@ function hasAdminRole(u: any): boolean {
   }
   const rname = u?.rol?.name ?? u?.rol?.nombre ?? u?.role?.name ?? u?.role?.nombre;
   if (rname && ['admin', 'administrador'].includes(String(rname).toLowerCase())) return true;
-  const rid = u?.rol?.id ?? u?.role?.id;
+  const rid = u?.rol?.id ?? u?.role?.id ?? u?.codRol ?? u?.cod_rol;
   return rid === 1 || String(rid) === '1';
 }
 
 /* ===== API local usando fetchJson del AuthContext ===== */
-// sin prefijo /api; con fallback silencioso si existe en algún ambiente
-async function apiListarRetos(fetchJson: any): Promise<RetoDTO[]> {
-  const candidates = ['/reto/listar', '/api/reto/listar'];
+// Lista: si es admin → usa listar-admin; de lo contrario → listar
+async function apiListarRetos(fetchJson: any, isAdmin: boolean): Promise<RetoDTO[]> {
+  const adminFirst = [
+    '/reto/listar-admin',
+    '/api/reto/listar-admin',
+    '/reto/listar',
+    '/api/reto/listar',
+  ];
+  const userFirst = [
+    '/reto/listar',
+    '/api/reto/listar',
+    '/reto/listar-admin',      // fallback por si solo expusiste admin
+    '/api/reto/listar-admin',
+  ];
+  const candidates = isAdmin ? adminFirst : userFirst;
+
   let lastErr: any;
   for (const path of candidates) {
     try {
       const res = await fetchJson(path, { method: 'GET' });
-      const arr = Array.isArray(res) ? res : (res?.data ?? []);
-      return arr.map(normalizeReto);
+      const arr = Array.isArray(res) ? res : (res?.data ?? res?.items ?? res?.retos ?? []);
+      return (arr as any[]).map(normalizeReto);
     } catch (e: any) {
       const msg = String(e?.message || '');
+      // Si el server responde 401/403, no sigas probando rutas "equivalentes"
       if (/401|403/.test(msg)) throw e;
-      if (!/404|Cannot GET/i.test(msg)) throw e;
-      lastErr = e;
+      // Sigue probando solo si parece ruta no encontrada
+      if (!/404|Cannot GET|Not Found/i.test(msg)) lastErr = e;
     }
   }
   throw lastErr || new Error('No se encontró endpoint de listar retos');
 }
 
+// Borrar: intenta primero los admin
 async function apiBorrarReto(fetchJson: any, id: number | string): Promise<void> {
-  const candidates = [`/reto/borrar/${id}`, `/api/reto/borrar/${id}`];
+  const candidates = [
+    `/reto/borrar-admin/${id}`,
+    `/api/reto/borrar-admin/${id}`,
+    `/reto/borrar/${id}`,
+    `/api/reto/borrar/${id}`,
+  ];
   let lastErr: any;
   for (const url of candidates) {
     try {
@@ -79,8 +100,7 @@ async function apiBorrarReto(fetchJson: any, id: number | string): Promise<void>
     } catch (e: any) {
       const msg = String(e?.message || '');
       if (/401|403/.test(msg)) throw e;
-      if (!/404|Cannot/i.test(msg)) throw e;
-      lastErr = e;
+      if (!/404|Cannot/i.test(msg)) lastErr = e;
     }
   }
   throw lastErr || new Error('No se encontró endpoint de borrado de retos');
@@ -102,27 +122,28 @@ export default function RetosScreen() {
   const [cargando, setCargando] = useState(false);
   const [retos, setRetos] = useState<RetoDTO[]>([]);
 
-  const listarRetos = async () => {
+  const listarRetos = useCallback(async () => {
     try {
       setCargando(true);
-      const arr = await apiListarRetos(fetchJson);
+      const arr = await apiListarRetos(fetchJson, isAdmin);
       setRetos(arr);
     } catch (e: any) {
       const msg = String(e?.message || '');
       if (msg.includes('401')) Alert.alert('Sesión expirada', 'Vuelve a iniciar sesión.');
+      else if (msg.includes('403')) Alert.alert('Sin permisos', 'El servidor denegó la consulta (403).');
       else Alert.alert('Error', msg || 'No se pudo cargar la lista de retos');
     } finally {
       setCargando(false);
     }
-  };
+  }, [fetchJson, isAdmin]);
 
-  useEffect(() => { listarRetos(); }, [isAdmin]);
+  useEffect(() => { listarRetos(); }, [listarRetos]);
 
   useFocusEffect(
     useCallback(() => {
       listarRetos();
       return () => {};
-    }, [])
+    }, [listarRetos])
   );
 
   if (authLoading) {
@@ -260,8 +281,6 @@ export default function RetosScreen() {
             )}
           </View>
         </ScrollView>
-
-        
       </SafeAreaView>
     </FadeWrapper>
   );
