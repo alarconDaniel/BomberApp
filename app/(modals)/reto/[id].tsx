@@ -47,19 +47,31 @@ type InstanciaUR = {
     ventanaFin?: string | null;
 };
 
-/** Checklists “por grupos” */
+/** Definiciones para checklists agrupados */
+type ColumnDef = {
+    key: string;           // p.ej. 'valor' | 'estado' | 'observacion' | 'buenas' | 'malas'
+    label?: string;        // p.ej. 'Seleccione', 'CANT'
+    selectorType?: 'auto' | 'brm' | 'sino' | 'volts' | 'ohms' | 'brmna' | 'ac' | 'qty';
+    type?: string;         // compat
+};
+
 type ItemDef = {
     n: number;
     grupo: string;
     texto: string;
-    selector: 'brm' | 'sino' | 'volts' | 'ohms';
+    selector?: 'brm' | 'sino' | 'volts' | 'ohms' | 'brmna' | 'qty';
     required?: boolean;
+    estado?: boolean;
+    codigo?: string;
 };
+
 type ItemValor = {
     n: number;
-    selector: ItemDef['selector'];
-    valor?: string | number | null;   // "B" | "R" | "M" | "SI" | "NO" | número
+    valor?: string | number | null;
+    estado?: 'A' | 'C' | null;
     observacion?: string;
+    __selectorAuto?: ItemDef['selector'];
+    [key: string]: any; // permite 'buenas', 'malas', etc.
 };
 
 /** Form genérico */
@@ -67,16 +79,16 @@ type PrimitiveField = {
     type: 'text' | 'textarea' | 'date' | 'number' | 'select' | 'file';
     label?: string;
     required?: boolean;
-    options?: string[];    // para 'select'
-    accept?: string[];     // para 'file' (informativo)
+    options?: string[];
+    accept?: string[];
 };
 type ArrayField = {
     type: 'array';
     label?: string;
-    item: Record<string, PrimitiveField>; // fila es un objeto de campos primitivos
-    required?: boolean;                    // si la lista como tal es obligatoria (min 1)
+    item: Record<string, PrimitiveField>;
+    required?: boolean;
 };
-type AnyField = PrimitiveField | ArrayField | Record<string, any>; // grupos (objetos sin "type")
+type AnyField = PrimitiveField | ArrayField | Record<string, any>;
 
 /** ─────────────────────────────────────────────────
  *  Utilidades
@@ -101,30 +113,49 @@ const isGroupedChecklist = (meta: any): boolean => {
     if (!Array.isArray(items)) return false;
     return items.every((x: any) =>
         x && typeof x === 'object' &&
-        Number.isFinite(+x.n) && !!x.grupo && !!x.texto && !!x.selector
+        Number.isFinite(+x.n) && !!x.grupo && !!x.texto
     );
 };
 
-/** Inicializa valores para form genérico */
+/** Lee columnas (con defaults) */
+const getColumns = (meta: any): ColumnDef[] => {
+    const cols: ColumnDef[] = Array.isArray(meta?.schema?.columns)
+        ? meta.schema.columns
+        : [
+            {key: 'n', label: 'Item'},
+            {key: 'valor', label: 'Seleccione', selectorType: 'auto'},
+            {key: 'observacion', label: 'Observación'}
+        ];
+    const hasN = cols.some(c => c.key === 'n');
+    const hasObs = cols.some(c => c.key === 'observacion');
+    const out: ColumnDef[] = [];
+    if (!hasN) out.push({key: 'n', label: 'Item'});
+    for (const c of cols) out.push(c);
+    if (!hasObs) out.push({key: 'observacion', label: 'Observación'});
+    return out;
+};
+
+const setAutoSeedForKey = (k: string, t: PrimitiveField['type'] | 'array') => {
+    const key = k.toLowerCase();
+    if (t === 'date' || key.includes('fecha')) return todayYMD();
+    if (key.includes('hora')) return nowHHmm();
+    return '';
+};
+
 const initGenericValues = (schemaObj: Record<string, AnyField>) => {
     const out: any = {};
     for (const [k, def] of Object.entries(schemaObj || {})) {
         if (def && typeof def === 'object' && 'type' in def) {
             const t = (def as any).type as PrimitiveField['type'] | 'array';
             if (t === 'array') out[k] = [];
-            else out[k] = '';
-            // Autollenados básicos por nombre
-            if (t === 'date' || k.toLowerCase() === 'fecha') out[k] = todayYMD();
-            if (k.toLowerCase().includes('hora') && t === 'text') out[k] = nowHHmm();
-        } else {
-            // Grupo/objeto
+            else out[k] = setAutoSeedForKey(k, t as any);
+        } else if (def && typeof def === 'object') {
             out[k] = initGenericValues(def as any);
         }
     }
     return out;
 };
 
-/** Valida form genérico según requireds; retorna faltantes “bonitos” */
 const validateGeneric = (
     schemaObj: Record<string, AnyField>,
     values: any,
@@ -139,12 +170,10 @@ const validateGeneric = (
         if (def && typeof def === 'object' && 'type' in def) {
             const t = (def as any).type as PrimitiveField['type'] | 'array';
             const req = !!(def as any).required;
-
             if (t === 'array') {
                 if (req && (!Array.isArray(val) || val.length === 0)) {
                     falt.push(trail.join(' > ') + ' (lista vacía)');
                 } else {
-                    // validar filas
                     const itemDef = (def as ArrayField).item || {};
                     (val || []).forEach((row: any, idx: number) => {
                         const subFalt = validateGeneric(itemDef as any, row, [...trail, `#${idx + 1}`]);
@@ -152,11 +181,11 @@ const validateGeneric = (
                     });
                 }
             } else {
+                const isFinalSeal = k.toLowerCase().includes('final');
                 const v = (val ?? '').toString().trim();
-                if (req && !v) falt.push(trail.join(' > '));
+                if (req && !v && !isFinalSeal) falt.push(trail.join(' > '));
             }
-        } else {
-            // Grupo/objeto
+        } else if (def && typeof def === 'object') {
             const subFalt = validateGeneric(def as any, val, trail);
             falt.push(...subFalt);
         }
@@ -165,19 +194,68 @@ const validateGeneric = (
 };
 
 /** ─────────────────────────────────────────────────
- *  UI atómico para selectores de checklist
+ *  UI atómico para selectores
  *  ───────────────────────────────────────────────── */
 function BRMSeg({
-                    value, onChange, disabled, colors
+                    value, onChange, disabled, colors, error
                 }: {
     value?: 'B' | 'R' | 'M' | null,
     onChange: (v: 'B' | 'R' | 'M') => void,
     disabled?: boolean,
-    colors: any
+    colors: any,
+    error?: boolean
 }) {
     const opts: ('B' | 'R' | 'M')[] = ['B', 'R', 'M'];
     return (
-        <View style={{flexDirection: 'row', gap: 6}}>
+        <View style={{
+            flexDirection: 'row', gap: 6, justifyContent: 'center', alignItems: 'center',
+            borderWidth: error ? 1 : 0, borderColor: error ? '#dc3545' : 'transparent', borderRadius: 10, padding: error ? 4 : 0
+        }}>
+            {opts.map(k => {
+                const active = value === k;
+                return (
+                    <Pressable
+                        key={k}
+                        disabled={disabled}
+                        onPress={() => onChange(k)}
+                        style={{
+                            paddingVertical: 6, paddingHorizontal: 12,
+                            borderRadius: 10,
+                            backgroundColor: active ? colors.primary : colors.card,
+                            borderWidth: 1, borderColor: active ? colors.primary : colors.divider
+                        }}
+                    >
+                        <Text style={{ color: active ? '#fff' : colors.text, fontWeight: '700' }}>{k}</Text>
+                    </Pressable>
+                );
+            })}
+        </View>
+    );
+}
+
+function BRMNASeg({
+                      value, onChange, disabled, colors, error
+                  }: {
+    value?: 'B' | 'R' | 'M' | 'NA' | null,
+    onChange: (v: 'B' | 'R' | 'M' | 'NA') => void,
+    disabled?: boolean,
+    colors: any,
+    error?: boolean
+}) {
+    const opts: ('B' | 'R' | 'M' | 'NA')[] = ['B', 'R', 'M', 'NA'];
+    return (
+        <View
+            style={{
+                flexDirection: 'row',
+                gap: 6,
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+                alignItems: 'center',
+                alignSelf: 'center',
+                minWidth: 140,
+                borderWidth: error ? 1 : 0, borderColor: error ? '#dc3545' : 'transparent', borderRadius: 10, padding: error ? 4 : 0
+            }}
+        >
             {opts.map(k => {
                 const active = value === k;
                 return (
@@ -201,15 +279,20 @@ function BRMSeg({
 }
 
 function SiNoToggle({
-                        value, onChange, disabled, colors
+                        value, onChange, disabled, colors, error
                     }: {
     value?: 'SI' | 'NO' | null,
     onChange: (v: 'SI' | 'NO') => void,
     disabled?: boolean,
-    colors: any
+    colors: any,
+    error?: boolean
 }) {
     return (
-        <View style={{flexDirection: 'row', gap: 6}}>
+        <View style={{
+            flexDirection: 'row', gap: 6,
+            justifyContent: 'center', alignItems: 'center', alignSelf: 'center',
+            borderWidth: error ? 1 : 0, borderColor: error ? '#dc3545' : 'transparent', borderRadius: 10, padding: error ? 4 : 0
+        }}>
             {(['SI', 'NO'] as const).map(k => {
                 const active = value === k;
                 return (
@@ -222,6 +305,44 @@ function SiNoToggle({
                             borderRadius: 10,
                             backgroundColor: active ? colors.primary : colors.card,
                             borderWidth: 1, borderColor: active ? colors.primary : colors.divider
+                        }}
+                    >
+                        <Text style={{color: active ? '#fff' : colors.text, fontWeight: '700'}}>{k}</Text>
+                    </Pressable>
+                );
+            })}
+        </View>
+    );
+}
+
+/** NUEVO: Estado A/C vertical (A arriba, C abajo) */
+function ACToggle({
+                      value, onChange, disabled, colors, error
+                  }: {
+    value?: 'A' | 'C' | null,
+    onChange: (v: 'A' | 'C') => void,
+    disabled?: boolean,
+    colors: any,
+    error?: boolean
+}) {
+    return (
+        <View style={{
+            flexDirection: 'column', gap: 6,
+            borderWidth: error ? 1 : 0, borderColor: error ? '#dc3545' : 'transparent', borderRadius: 10, padding: error ? 4 : 0
+        }}>
+            {(['A', 'C'] as const).map(k => {
+                const active = value === k;
+                return (
+                    <Pressable
+                        key={k}
+                        disabled={disabled}
+                        onPress={() => onChange(k)}
+                        style={{
+                            paddingVertical: 6, paddingHorizontal: 12,
+                            borderRadius: 10,
+                            backgroundColor: active ? colors.primary : colors.card,
+                            borderWidth: 1, borderColor: active ? colors.primary : colors.divider,
+                            alignItems: 'center'
                         }}
                     >
                         <Text style={{color: active ? '#fff' : colors.text, fontWeight: '700'}}>{k}</Text>
@@ -254,9 +375,17 @@ export default function DetalleRetoScreen() {
             borderWidth: 1,
             borderColor: colors.divider
         },
-        sectionTitle: {marginTop: 18, fontSize: 18, fontWeight: '700', color: colors.text},
-        pill: {marginTop: 10, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999}
+        sectionHeader: { paddingHorizontal: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center' },
+        sectionBar: { height: 6, borderRadius: 999, backgroundColor: colors.mutedBg, marginLeft: 10, flex: 1 },
+        sectionTitle: {marginVertical: 14, fontSize: 18, fontWeight: '700', color: colors.text},
+        pill: {marginTop: 10, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999},
+        obsInput: {
+            borderWidth: 1, borderColor: colors.divider, borderRadius: 8,
+            paddingVertical: 6, paddingHorizontal: 8, color: colors.text
+        }
     }), [colors, isDark]);
+
+    const danger = '#dc3545';
 
     const {id, ur: urParam, fecha: fechaParam} = useLocalSearchParams<{ id: string; ur?: string; fecha?: string }>();
     const router = useRouter();
@@ -278,6 +407,11 @@ export default function DetalleRetoScreen() {
     // checklist state
     const [headerVals, setHeaderVals] = useState<Record<string, string>>({});
     const [itemsVals, setItemsVals] = useState<ItemValor[]>([]);
+    const [columns, setColumns] = useState<ColumnDef[]>([]); // global fallback
+
+    // errores visibles al intentar enviar
+    const [showChecklistErrors, setShowChecklistErrors] = useState(false);
+    const [showFormErrors, setShowFormErrors] = useState(false);
 
     // generic form state
     const [formVals, setFormVals] = useState<any>({});
@@ -292,7 +426,8 @@ export default function DetalleRetoScreen() {
             const tipoReto: RetoFull['tipoReto'] = (api.tipoReto ?? 'quiz') as any;
 
             const meta = api.metadataReto || {};
-            const isChecklist = isGroupedChecklist(meta);
+            const checklist = isGroupedChecklist(meta);
+            const cols = getColumns(meta);
 
             setData({
                 reto,
@@ -301,26 +436,33 @@ export default function DetalleRetoScreen() {
                 form: api.form ?? meta?.schema,
                 metadataReto: meta
             });
+            setColumns(cols);
 
-            if (isChecklist) {
+            if (checklist) {
                 const header = meta?.schema?.header ?? {};
                 const items: ItemDef[] = (meta?.schema?.items ?? [])
                     .slice()
                     .sort((a: ItemDef, b: ItemDef) => a.n - b.n);
 
                 const hv: Record<string, string> = {};
-                Object.keys(header).forEach(k => {
-                    hv[k] = '';
+                Object.entries(header).forEach(([k, def]: any) => {
+                    if (def && typeof def === 'object' && 'type' in def) {
+                        const t = (def as any).type;
+                        hv[k] = setAutoSeedForKey(k, t);
+                    } else {
+                        hv[k] = '';
+                    }
                 });
-
-                if ('fecha' in header) hv['fecha'] = todayYMD();
-                if ('hora-inicio' in header) hv['hora-inicio'] = nowHHmm();
-                if ('hora-final' in header) hv['hora-final'] = ''; // se pondrá al enviar
+                for (const k of Object.keys(hv)) {
+                    if (k.toLowerCase().includes('final')) hv[k] = '';
+                }
 
                 setHeaderVals(hv);
-                setItemsVals(items.map((it: ItemDef) => ({
-                    n: it.n, selector: it.selector, valor: null, observacion: ''
-                })));
+                const initVals: ItemValor[] = items.map((it: ItemDef) => ({
+                    n: it.n, valor: null, estado: null, observacion: '', __selectorAuto: it.selector
+                }));
+                setItemsVals(initVals);
+
             } else {
                 const schemaObj = (meta?.schema || {}) as Record<string, AnyField>;
                 const init = initGenericValues(schemaObj);
@@ -355,12 +497,8 @@ export default function DetalleRetoScreen() {
         }
     };
 
-    useEffect(() => {
-        cargarReto();
-    }, [id]);
-    useEffect(() => {
-        cargarUR();
-    }, [id, urParam, fechaParam]);
+    useEffect(() => { cargarReto(); }, [id]);
+    useEffect(() => { cargarUR(); }, [id, urParam, fechaParam]);
 
     /** Derivados */
     const hoy = dayjs().format('YYYY-MM-DD');
@@ -408,78 +546,133 @@ export default function DetalleRetoScreen() {
         }
     };
 
-    /** VALIDACIÓN del checklist + estado del botón */
-    const validarChecklist = (): { ok: boolean; faltantes: string[] } => {
+    /** Helpers de validación para checklist con errores detallados */
+    const metaColsByGroup = (data?.metadataReto?.schema?.columnsByGroup) || {};
+    const getColsForGroup = (groupName: string): ColumnDef[] => {
+        const cg = metaColsByGroup?.[groupName];
+        if (Array.isArray(cg) && cg.length) return cg;
+        return columns;
+    };
+    const isNumericSelector = (sel?: ColumnDef['selectorType']) =>
+        sel === 'volts' || sel === 'ohms' || sel === 'qty';
+
+    const validarChecklistDetallado = () => {
         const schema = data?.metadataReto?.schema ?? {};
         const header = schema.header ?? {};
-        const items: ItemDef[] = schema.items ?? [];
-
+        const items: ItemDef[] = (schema.items ?? []);
         const falt: string[] = [];
+        const errorKeys = new Set<string>();
 
-        // header
+        // Header
         Object.entries(header).forEach(([k, def]: any) => {
-            const req = !!def.required;
+            const req = !!def?.required;
             const v = (headerVals[k] ?? '').toString().trim();
-            if (k === 'hora-final') return; // se sella al enviar
-            if (req && !v) falt.push(`Header: ${def.label ?? k}`);
+            const isFinalSeal = k.toLowerCase().includes('final');
+            if (req && !v && !isFinalSeal) {
+                falt.push(`Header: ${def?.label ?? humanTitle(k)}`);
+                errorKeys.add(`header:${k}`);
+            }
         });
 
-        // items
-        const mapByN = new Map<number, ItemValor>();
-        itemsVals.forEach(it => mapByN.set(it.n, it));
+        // Items
+        const byN = new Map<number, ItemValor>();
+        itemsVals.forEach(it => byN.set(it.n, it));
 
-        for (const it of items) {
-            const v = mapByN.get(it.n);
-            const label = `${it.n}. ${it.grupo} – ${it.texto}`;
-            if (it.required) {
+        for (const def of items) {
+            const v = byN.get(def.n);
+            const colsForGroup: ColumnDef[] = getColsForGroup(def.grupo);
+            const hasValorCol = colsForGroup.some(c => c.key === 'valor');
+            const hasEstadoCol = colsForGroup.some(c => c.key === 'estado');
+            const customQtyCols = colsForGroup.filter(c =>
+                c.key !== 'n' && c.key !== 'valor' && c.key !== 'estado' && c.key !== 'observacion' && c.selectorType === 'qty'
+            );
+
+            if (def.required) {
+                const label = `${def.n}. ${def.grupo} – ${def.texto}`;
                 if (!v) {
                     falt.push(label);
+                    errorKeys.add(`item:${def.n}:row`);
                     continue;
                 }
-                const s = (v.valor ?? '').toString().toUpperCase();
-                if (it.selector === 'volts' || it.selector === 'ohms') {
-                    const num = Number(v.valor);
-                    if (!isFinite(num)) falt.push(`${label} (${it.selector === 'volts' ? 'Volts' : 'Ohmios'})`);
-                } else if (it.selector === 'brm') {
-                    if (!['B', 'R', 'M'].includes(s)) falt.push(label);
-                } else if (it.selector === 'sino') {
-                    if (!['SI', 'NO'].includes(s)) falt.push(label);
+                if (hasValorCol) {
+                    const col = colsForGroup.find(c => c.key === 'valor');
+                    const expected: ColumnDef['selectorType'] =
+                        (col?.selectorType || 'auto') === 'auto' ? (def.selector || 'brm') : col?.selectorType!;
+                    const valStr = (v.valor ?? '').toString().toUpperCase();
+                    if (isNumericSelector(expected)) {
+                        const num = Number(v.valor);
+                        if (!isFinite(num)) {
+                            falt.push(`${label} (${col?.label || 'Valor'})`);
+                            errorKeys.add(`item:${def.n}:valor`);
+                        }
+                    } else if (expected === 'brm' && !['B','R','M'].includes(valStr)) {
+                        falt.push(label);
+                        errorKeys.add(`item:${def.n}:valor`);
+                    } else if (expected === 'brmna' && !['B','R','M','NA'].includes(valStr)) {
+                        falt.push(label);
+                        errorKeys.add(`item:${def.n}:valor`);
+                    } else if (expected === 'sino' && !['SI','NO'].includes(valStr)) {
+                        falt.push(label);
+                        errorKeys.add(`item:${def.n}:valor`);
+                    }
                 }
+
+                if (hasEstadoCol || def.estado === true) {
+                    if (!v.estado || !['A','C'].includes(v.estado)) {
+                        falt.push(`${label} (Estado A/C)`);
+                        errorKeys.add(`item:${def.n}:estado`);
+                    }
+                }
+
+                // Si alguna columna qty custom es requerida en el futuro (no en este reto)
+                customQtyCols.forEach(c => {
+                    const raw = v?.[c.key];
+                    if ((raw ?? '') !== '' && isNaN(Number(raw))) {
+                        falt.push(`${label} (${c.label || c.key})`);
+                        errorKeys.add(`item:${def.n}:${c.key}`);
+                    }
+                });
             }
         }
 
-        return {ok: falt.length === 0, faltantes: falt};
+        return { ok: falt.length === 0, faltantes: falt, errorKeys };
     };
 
-    const {ok: checklistOK} = useMemo(() => validarChecklist(), [headerVals, itemsVals, data?.metadataReto]);
+    const checklistOK = useMemo(() => {
+        const { ok } = validarChecklistDetallado();
+        return ok;
+    }, [headerVals, itemsVals, data?.metadataReto, columns]);
+
     const [formOK, setFormOK] = useState<boolean>(true);
 
     useEffect(() => {
-        const isChecklist = isGroupedChecklist(data?.metadataReto);
-        if (!data || isChecklist) return;
+        const checklist = isGroupedChecklist(data?.metadataReto);
+        if (!data || checklist) return;
         const schemaObj = (data?.metadataReto?.schema || {}) as Record<string, AnyField>;
         const falt = validateGeneric(schemaObj, formVals);
         setFormOK(falt.length === 0);
     }, [data?.metadataReto, formVals]);
 
-    /** Envío (sella hora-final para checklist) */
+    /** Envío */
     const enviarFormulario = async () => {
         if (!data || !codUsuarioReto) return;
+        const checklist = isGroupedChecklist(data?.metadataReto);
 
-        const isChecklist = isGroupedChecklist(data?.metadataReto);
-
-        if (isChecklist) {
-            const {ok, faltantes} = validarChecklist();
+        if (checklist) {
+            const {ok, faltantes} = validarChecklistDetallado();
             if (!ok) {
+                setShowChecklistErrors(true);
                 Alert.alert('Faltan campos', `Por favor completa:\n\n• ${faltantes.join('\n• ')}`);
                 return;
             }
+            const headerSealed: Record<string, string> = {...headerVals};
+            Object.keys(headerSealed).forEach(k => {
+                if (k.toLowerCase().includes('final')) headerSealed[k] = nowHHmm();
+            });
+
             const snapshot = {
                 kind: 'groupedChecklist',
-                header: {
-                    ...headerVals,
-                    ...(('hora-final' in (data?.metadataReto?.schema?.header ?? {})) ? {'hora-final': nowHHmm()} : {})
-                },
+                header: headerSealed,
                 items: itemsVals
             };
             try {
@@ -495,10 +688,10 @@ export default function DetalleRetoScreen() {
             return;
         }
 
-        // Form genérico
         const schemaObj = (data?.metadataReto?.schema || {}) as Record<string, AnyField>;
         const falt = validateGeneric(schemaObj, formVals);
         if (falt.length > 0) {
+            setShowFormErrors(true);
             Alert.alert('Faltan campos', `Por favor completa:\n\n• ${falt.join('\n• ')}`);
             return;
         }
@@ -515,7 +708,7 @@ export default function DetalleRetoScreen() {
         }
     };
 
-    /** Quiz renderers (compat) */
+    /** Quiz (compat) */
     const setResp = (codPregunta: number, v: any) =>
         setRespuestas((s: any) => ({...s, [codPregunta]: v}));
 
@@ -580,7 +773,8 @@ export default function DetalleRetoScreen() {
         if (!codUsuarioReto) return;
         try {
             const r = await fetchJson<any>(`/mis-retos/${codUsuarioReto}/finalizar`, asJson({codUsuarioReto}));
-            Alert.alert('Reto completado', `+${r.xpGanada} XP, +${r.coins} monedas`);
+            const extra = r.nuevaRacha ? `\n🔥 Racha: ${r.nuevaRacha} día${r.nuevaRacha === 1 ? '' : 's'}` : '';
+            Alert.alert('Reto completado', `+${r.xpGanada} XP, +${r.coins} monedas${extra}`);
             markModalClosed();
             router.back();
         } catch (e: any) {
@@ -588,41 +782,61 @@ export default function DetalleRetoScreen() {
         }
     };
 
-    /** Render header del checklist */
+    /** Encabezado checklist */
     const renderChecklistHeader = () => {
         const schema = data?.metadataReto?.schema ?? {};
         const header = schema.header ?? {};
         const entries = Object.entries(header) as [string, any][];
 
+        // errores de header
+        const headerErrors = new Set<string>();
+        if (showChecklistErrors) {
+            entries.forEach(([k, def]) => {
+                const isFinalSeal = k.toLowerCase().includes('final');
+                const req = !!def?.required;
+                const v = (headerVals[k] ?? '').toString().trim();
+                if (req && !v && !isFinalSeal) headerErrors.add(k);
+            });
+        }
+
         return (
             <View style={{marginTop: 8}}>
                 <Text style={[g.text.h2]}>Encabezado</Text>
                 {entries.map(([k, def]) => {
-                    const isFecha = k === 'fecha';
-                    const isHoraIni = k === 'hora-inicio';
-                    const isHoraFin = k === 'hora-final';
-                    const disabled = isFecha || isHoraIni || isHoraFin;
+                    const kLower = k.toLowerCase();
+                    const isFechaAuto = kLower.includes('fecha');
+                    const isHoraAuto = kLower.includes('hora');
+                    const isFinalSeal = kLower.includes('final');
+                    const disabled = isFechaAuto || isHoraAuto || isFinalSeal;
+                    const isErr = headerErrors.has(k);
 
                     return (
                         <View key={k} style={{marginTop: 10}}>
                             <Text style={g.text.bodyStrong}>
-                                {def.label ?? k}{def.required ? ' *' : ''}
+                                {def.label ?? humanTitle(k)}{def.required ? ' *' : ''}
                             </Text>
                             <TextInput
                                 editable={!disabled}
-                                placeholder={isHoraFin ? '(se asignará al enviar)' : (def.label ?? k)}
+                                placeholder={isFinalSeal ? '(se asignará al enviar)' : (def.label ?? humanTitle(k))}
                                 placeholderTextColor={colors.mutedText}
                                 value={headerVals[k] ?? ''}
                                 onChangeText={(t) => setHeaderVals(s => ({...s, [k]: t}))}
                                 style={{
-                                    borderWidth: 1, borderColor: colors.divider, borderRadius: 10,
+                                    borderWidth: 1,
+                                    borderColor: isErr ? danger : colors.divider,
+                                    borderRadius: 10,
                                     padding: 10, color: colors.text, marginTop: 8,
                                     backgroundColor: disabled ? colors.mutedBg : 'transparent'
                                 }}
                             />
-                            {isHoraFin && (
+                            {isFinalSeal && (
                                 <Text style={[g.text.caption, {marginTop: 4, color: colors.mutedText}]}>
-                                    La hora final se asignará al enviar.
+                                    Este campo se sellará automáticamente al enviar.
+                                </Text>
+                            )}
+                            {isErr && (
+                                <Text style={[g.text.caption, {marginTop: 4, color: danger}]}>
+                                    Campo obligatorio.
                                 </Text>
                             )}
                         </View>
@@ -632,12 +846,11 @@ export default function DetalleRetoScreen() {
         );
     };
 
-    /** Render por GRUPOS de checklist */
+    /** Ítems checklist por grupos con columnsByGroup */
     const renderChecklistItems = () => {
-        const schema = data?.metadataReto?.schema ?? {};
+        const schema = (data?.metadataReto?.schema ?? {});
         const defsAll: ItemDef[] = (schema.items ?? []).slice().sort((a: ItemDef, b: ItemDef) => a.n - b.n);
 
-        // Agrupar por grupo
         const grupos = defsAll.reduce<Record<string, ItemDef[]>>((acc, it) => {
             acc[it.grupo] = acc[it.grupo] || [];
             acc[it.grupo].push(it);
@@ -646,133 +859,254 @@ export default function DetalleRetoScreen() {
 
         const setItem = (n: number, patch: Partial<ItemValor>) => {
             setItemsVals(prev => {
-                const found = prev.find(it => it.n === n);
-                if (!found) return [...prev, {
-                    n,
-                    selector: patch.selector as any ?? 'brm',
-                    valor: patch.valor ?? null,
-                    observacion: patch.observacion ?? ''
-                }];
-                return prev.map(it => it.n === n ? ({...it, ...patch}) : it);
+                const idx = prev.findIndex(it => it.n === n);
+                if (idx === -1) return [...prev, {n, ...patch} as ItemValor];
+                const next = [...prev];
+                next[idx] = {...next[idx], ...patch};
+                return next;
             });
         };
 
-        const SectionHeaderRow = () => (
-            <View style={{flexDirection: 'row', gap: 6, marginTop: 10}}>
-                <View style={{width: 46}}><Text style={[g.text.caption, {fontWeight: '700'}]}>Item</Text></View>
-                <View style={{flex: 2.2}}><Text style={[g.text.caption, {fontWeight: '700'}]}>Seleccione</Text></View>
-                <View style={{flex: 1.8}}><Text style={[g.text.caption, {fontWeight: '700'}]}>Observación</Text></View>
-            </View>
-        );
-
-        const unitLabel = (sel: ItemDef['selector']) =>
+        const unitLabel = (sel?: ColumnDef['selectorType']) =>
             sel === 'volts' ? 'Volts' : sel === 'ohms' ? 'Ohmios' : '';
+
+        const SectionHeaderRow = ({cols}:{cols: ColumnDef[]}) => {
+            const hasValor = cols.some(c => c.key === 'valor');
+            const hasEstado = cols.some(c => c.key === 'estado');
+            const extraQty = cols.filter(c =>
+                c.selectorType === 'qty' && c.key !== 'valor' && c.key !== 'observacion'
+            );
+            return (
+                <View style={{flexDirection: 'row', gap: 6, marginTop: 10, alignItems: 'center'}}>
+                    <View style={{width: 46}}>
+                        <Text style={[g.text.caption, {fontWeight: '700'}]}>#</Text>
+                    </View>
+                    {hasValor && (
+                        <View style={{flex: 2}}>
+                            <Text style={[g.text.caption, {fontWeight: '700'}]}>
+                                {cols.find(c => c.key === 'valor')?.label ?? 'Seleccione'}
+                            </Text>
+                        </View>
+                    )}
+                    {extraQty.map((c) => (
+                        <View key={c.key} style={{width: 90, alignItems: 'center'}}>
+                            <Text style={[g.text.caption, {fontWeight: '700'}]}>{c.label ?? c.key}</Text>
+                        </View>
+                    ))}
+                    {hasEstado && (
+                        <View style={{width: 56}}>
+                            <Text style={[g.text.caption, {fontWeight: '700'}]}>
+                                {cols.find(c => c.key === 'estado')?.label ?? 'Estado'}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            );
+        };
+
+        // errores por item
+        const errorSet = new Set<string>();
+        if (showChecklistErrors) {
+            const det = validarChecklistDetallado();
+            det.errorKeys.forEach(k => errorSet.add(k));
+        }
 
         return (
             <View style={{marginTop: 18}}>
-                {Object.entries(grupos).map(([nombreGrupo, defs]) => (
-                    <View key={nombreGrupo} style={{marginBottom: 12}}>
-                        <Text style={styles.sectionTitle}>{nombreGrupo}</Text>
-                        <SectionHeaderRow/>
-                        <View style={styles.hSep}/>
+                {Object.entries(grupos).map(([nombreGrupo, defs]) => {
+                    const cols = getColsForGroup(nombreGrupo);
+                    const hasValor = cols.some(c => c.key === 'valor');
+                    const hasEstado = cols.some(c => c.key === 'estado');
+                    const showObs = cols.some(c => c.key === 'observacion');
+                    const extraQty = cols.filter(c =>
+                        c.selectorType === 'qty' && c.key !== 'valor' && c.key !== 'observacion'
+                    );
 
-                        {defs.map((def, idx) => {
-                            const fallback: ItemValor = {
-                                n: def.n,
-                                selector: def.selector,
-                                valor: null,
-                                observacion: ''
-                            };
-                            const val = itemsVals.find(x => x.n === def.n) ?? fallback;
-                            const zebra = (idx % 2 === 0) ? {backgroundColor: colors.mutedBg} : null;
-                            return (
-                                <View key={def.n} style={[{borderRadius: 10, padding: 8, marginBottom: 6}, zebra]}>
-                                    <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
-                                        {/* Item # */}
-                                        <View style={{width: 46}}>
-                                            <View style={styles.cellBadge}>
-                                                <Text style={[g.text.caption, {fontWeight: '700'}]}>{def.n}</Text>
-                                            </View>
+                    const valorSelectorFor = (def: ItemDef): ColumnDef['selectorType'] => {
+                        const col = cols.find(c => c.key === 'valor');
+                        const st = col?.selectorType || 'auto';
+                        if (st === 'auto') return (def.selector as any) || 'brm';
+                        return st;
+                    };
+
+                    return (
+                        <View key={nombreGrupo} style={{marginBottom: 12}}>
+                            <View style={styles.sectionHeader}>
+                                <Text style={styles.sectionTitle}>{nombreGrupo}</Text>
+                                <View style={styles.sectionBar}/>
+                            </View>
+
+                            <SectionHeaderRow cols={cols}/>
+                            <View style={styles.hSep}/>
+
+                            {defs.map((def, idxRow) => {
+                                const fallback: ItemValor = {
+                                    n: def.n, valor: null, estado: null, observacion: '', __selectorAuto: def.selector
+                                };
+                                const val = itemsVals.find(x => x.n === def.n) ?? fallback;
+                                const zebra = (idxRow % 2 === 0) ? {backgroundColor: colors.mutedBg} : null;
+                                const selType = valorSelectorFor(def);
+
+                                const errValor = errorSet.has(`item:${def.n}:valor`);
+                                const errEstado = errorSet.has(`item:${def.n}:estado`);
+
+                                return (
+                                    <View key={def.n} style={[{borderRadius: 10, padding: 10, marginBottom: 10}, zebra]}>
+                                        {/* Texto del ítem */}
+                                        <View style={{marginVertical: 6}}>
+                                            <Text style={g.text.body}>{def.texto}{def.required ? ' *' : ''}</Text>
                                         </View>
 
-                                        {/* Selector */}
-                                        <View style={{flex: 2.2}}>
-                                            {def.selector === 'brm' && (
-                                                <BRMSeg
-                                                    value={(val.valor as any) ?? null}
-                                                    onChange={(v) => setItem(def.n, {valor: v})}
-                                                    colors={colors}
-                                                />
+                                        {/* Fila: # | Valor | extras qty | Estado */}
+                                        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                                            {/* # */}
+                                            <View style={{width: 46}}>
+                                                <View style={styles.cellBadge}>
+                                                    <Text style={[g.text.caption, {fontWeight: '700'}]}>{def.n}</Text>
+                                                </View>
+                                            </View>
+
+                                            {/* Valor (si existe) */}
+                                            {hasValor && (
+                                                <View style={{flex: 2}}>
+                                                    {selType === 'brm' && (
+                                                        <BRMSeg
+                                                            value={(val.valor as any) ?? null}
+                                                            onChange={(v) => setItem(def.n, {valor: v})}
+                                                            colors={colors}
+                                                            error={errValor}
+                                                        />
+                                                    )}
+                                                    {selType === 'brmna' && (
+                                                        <BRMNASeg
+                                                            value={(val.valor as any) ?? null}
+                                                            onChange={(v) => setItem(def.n, {valor: v})}
+                                                            colors={colors}
+                                                            error={errValor}
+                                                        />
+                                                    )}
+                                                    {selType === 'sino' && (
+                                                        <SiNoToggle
+                                                            value={(val.valor as any) ?? null}
+                                                            onChange={(v) => setItem(def.n, {valor: v})}
+                                                            colors={colors}
+                                                            error={errValor}
+                                                        />
+                                                    )}
+                                                    {isNumericSelector(selType) && (
+                                                        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'center'}}>
+                                                            {!!unitLabel(selType) && <Text style={g.text.body}>{unitLabel(selType)}</Text>}
+                                                            <TextInput
+                                                                keyboardType="numeric"
+                                                                value={val.valor != null ? String(val.valor) : ''}
+                                                                onChangeText={(t) => setItem(def.n, {valor: t.replace(',', '.').replace(/[^\d.]/g, '')})}
+                                                                placeholder={selType === 'qty' ? '0' : '____'}
+                                                                placeholderTextColor={colors.mutedText}
+                                                                style={{
+                                                                    minWidth: 90,
+                                                                    borderWidth: 1,
+                                                                    borderColor: errValor ? danger : colors.divider,
+                                                                    borderRadius: 8,
+                                                                    paddingVertical: 6,
+                                                                    paddingHorizontal: 10,
+                                                                    color: colors.text,
+                                                                    textAlign: 'center'
+                                                                }}
+                                                            />
+                                                        </View>
+                                                    )}
+                                                </View>
                                             )}
-                                            {def.selector === 'sino' && (
-                                                <SiNoToggle
-                                                    value={(val.valor as any) ?? null}
-                                                    onChange={(v) => setItem(def.n, {valor: v})}
-                                                    colors={colors}
-                                                />
-                                            )}
-                                            {(def.selector === 'volts' || def.selector === 'ohms') && (
-                                                <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-                                                    <Text style={g.text.body}>{unitLabel(def.selector)}</Text>
-                                                    <TextInput
-                                                        keyboardType="numeric"
-                                                        value={val.valor != null ? String(val.valor) : ''}
-                                                        onChangeText={(t) => setItem(def.n, {valor: t.replace(',', '.').replace(/[^\d.]/g, '')})}
-                                                        placeholder="____"
-                                                        placeholderTextColor={colors.mutedText}
-                                                        style={{
-                                                            minWidth: 90,
-                                                            borderWidth: 1,
-                                                            borderColor: colors.divider,
-                                                            borderRadius: 8,
-                                                            paddingVertical: 6,
-                                                            paddingHorizontal: 10,
-                                                            color: colors.text
-                                                        }}
+
+                                            {/* Extra qty columns */}
+                                            {extraQty.map((c) => {
+                                                const key = c.key;
+                                                const raw = (val as any)?.[key];
+                                                const isErr = errorSet.has(`item:${def.n}:${key}`);
+                                                return (
+                                                    <View key={key} style={{width: 90}}>
+                                                        <TextInput
+                                                            keyboardType="numeric"
+                                                            value={raw != null ? String(raw) : ''}
+                                                            onChangeText={(t) => setItem(def.n, {[key]: t.replace(',', '.').replace(/[^\d.]/g, '')})}
+                                                            placeholder="0"
+                                                            placeholderTextColor={colors.mutedText}
+                                                            style={{
+                                                                borderWidth: 1,
+                                                                borderColor: isErr ? danger : colors.divider,
+                                                                borderRadius: 8,
+                                                                paddingVertical: 6,
+                                                                paddingHorizontal: 10,
+                                                                color: colors.text,
+                                                                textAlign: 'center'
+                                                            }}
+                                                        />
+                                                    </View>
+                                                );
+                                            })}
+
+                                            {/* Estado (vertical) si aplica */}
+                                            {hasEstado && (
+                                                <View style={{width: 56, alignItems: 'center'}}>
+                                                    <ACToggle
+                                                        value={val.estado ?? null}
+                                                        onChange={(v) => setItem(def.n, {estado: v})}
+                                                        colors={colors}
+                                                        error={errEstado}
                                                     />
                                                 </View>
                                             )}
                                         </View>
 
-                                        {/* Observación */}
-                                        <View style={{flex: 1.8}}>
-                                            <TextInput
-                                                placeholder="Observación…"
-                                                placeholderTextColor={colors.mutedText}
-                                                value={val.observacion ?? ''}
-                                                onChangeText={(t) => setItem(def.n, {observacion: t})}
-                                                style={{
-                                                    borderWidth: 1, borderColor: colors.divider, borderRadius: 8,
-                                                    paddingVertical: 6, paddingHorizontal: 8, color: colors.text
-                                                }}
-                                            />
-                                        </View>
+                                        {/* Observación si la define el grupo */}
+                                        {showObs && (
+                                            <View style={{marginTop: 8}}>
+                                                <Text style={g.text.bodyStrong}>
+                                                    {cols.find(c => c.key === 'observacion')?.label ?? 'Observación'}
+                                                </Text>
+                                                <TextInput
+                                                    placeholder="Observación…"
+                                                    placeholderTextColor={colors.mutedText}
+                                                    value={val.observacion ?? ''}
+                                                    onChangeText={(t) => setItem(def.n, {observacion: t})}
+                                                    style={styles.obsInput}
+                                                />
+                                            </View>
+                                        )}
                                     </View>
-
-                                    {/* Texto del ítem */}
-                                    <View style={{marginTop: 6, paddingLeft: 46}}>
-                                        <Text style={g.text.body}>{def.texto}{def.required ? ' *' : ''}</Text>
-                                    </View>
-                                </View>
-                            );
-                        })}
-                    </View>
-                ))}
+                                );
+                            })}
+                        </View>
+                    );
+                })}
             </View>
         );
     };
 
-    /** Render genérico de formularios (objeto, arrays y campos primitivos) */
+    /** Form genérico */
     const renderFormField = (
         k: string,
         def: AnyField,
         value: any,
         onChange: (patch: any) => void
     ) => {
-        if (def && typeof def === 'object' && 'type' in def) {
+        if (!def || typeof def !== 'object') return null;
+
+        const isMissing = (d: any, v: any) => {
+            if (!showFormErrors) return false;
+            const t = d?.type;
+            const req = !!d?.required;
+            if (!req) return false;
+            if (t === 'array') return !Array.isArray(v) || v.length === 0;
+            const s = (v ?? '').toString().trim();
+            return !s;
+        };
+
+        if ('type' in def) {
             const t = (def as any).type as PrimitiveField['type'] | 'array';
             const label = (def as any).label || humanTitle(k);
             const required = !!(def as any).required;
+            const err = isMissing(def, value);
 
             if (t === 'array') {
                 const arrVal: any[] = Array.isArray(value) ? value : [];
@@ -837,7 +1171,7 @@ export default function DetalleRetoScreen() {
                 );
             }
 
-            // Campos primitivos
+            // primitivos
             return (
                 <View key={k} style={{marginTop: 10}}>
                     <Text style={g.text.bodyStrong}>{label}{required ? ' *' : ''}</Text>
@@ -849,7 +1183,7 @@ export default function DetalleRetoScreen() {
                             value={value ?? ''}
                             onChangeText={(t) => onChange(t)}
                             style={{
-                                borderWidth: 1, borderColor: colors.divider, borderRadius: 10,
+                                borderWidth: 1, borderColor: err ? danger : colors.divider, borderRadius: 10,
                                 padding: 10, color: colors.text, marginTop: 8, minHeight: 100, textAlignVertical: 'top'
                             }}
                         />
@@ -861,7 +1195,7 @@ export default function DetalleRetoScreen() {
                             value={value != null ? String(value) : ''}
                             onChangeText={(t) => onChange(t.replace(',', '.').replace(/[^\d.]/g, ''))}
                             style={{
-                                borderWidth: 1, borderColor: colors.divider, borderRadius: 10,
+                                borderWidth: 1, borderColor: err ? danger : colors.divider, borderRadius: 10,
                                 padding: 10, color: colors.text, marginTop: 8
                             }}
                         />
@@ -872,7 +1206,7 @@ export default function DetalleRetoScreen() {
                             value={value ?? ''}
                             onChangeText={(t) => onChange(t)}
                             style={{
-                                borderWidth: 1, borderColor: colors.divider, borderRadius: 10,
+                                borderWidth: 1, borderColor: err ? danger : colors.divider, borderRadius: 10,
                                 padding: 10, color: colors.text, marginTop: 8
                             }}
                         />
@@ -883,7 +1217,7 @@ export default function DetalleRetoScreen() {
                             value={value ?? ''}
                             onChangeText={(t) => onChange(t)}
                             style={{
-                                borderWidth: 1, borderColor: colors.divider, borderRadius: 10,
+                                borderWidth: 1, borderColor: err ? danger : colors.divider, borderRadius: 10,
                                 padding: 10, color: colors.text, marginTop: 8
                             }}
                         />
@@ -894,16 +1228,18 @@ export default function DetalleRetoScreen() {
                             value={value ?? ''}
                             onChangeText={(t) => onChange(t)}
                             style={{
-                                borderWidth: 1, borderColor: colors.divider, borderRadius: 10,
+                                borderWidth: 1, borderColor: err ? danger : colors.divider, borderRadius: 10,
                                 padding: 10, color: colors.text, marginTop: 8
                             }}
                         />
                     )}
+                    {err && <Text style={[g.text.caption, {color: danger, marginTop: 4}]}>Campo obligatorio.</Text>}
                 </View>
             );
         }
 
-        // Grupo/objeto (sub-sección)
+        if (Array.isArray(def)) return null;
+
         const groupObj = def as Record<string, AnyField>;
         return (
             <View key={k} style={{marginTop: 18}}>
@@ -941,7 +1277,7 @@ export default function DetalleRetoScreen() {
     };
 
     /** Layout principal */
-    const isChecklist = isGroupedChecklist(data?.metadataReto);
+    const checklist = isGroupedChecklist(data?.metadataReto);
 
     return (
         <SafeAreaView style={styles.safe}>
@@ -975,25 +1311,18 @@ export default function DetalleRetoScreen() {
             ) : !resolviendo ? (
                 <ScrollView style={{paddingHorizontal: 16}}>
                     <Text style={[g.text.h1, {marginTop: 20}]}>{data.reto.nombreReto}</Text>
-                    <Text style={[g.text.body, g.text.secondary, {
-                        marginTop: 8,
-                        fontSize: 16
-                    }]}>{data.reto.descripcionReto}</Text>
+                    <Text style={[g.text.body, g.text.secondary, {marginTop: 8, fontSize: 16}]}>
+                        {data.reto.descripcionReto}
+                    </Text>
 
                     <View style={{marginTop: 12}}>
                         <Text style={g.text.body}>
-                            <Text
-                                style={g.text.bodyStrong}>Tipo: </Text>{(data.tipoReto ?? 'form').toUpperCase()} ·{' '}
-                            <Text style={g.text.bodyStrong}>Tiempo
-                                estimado:</Text> {Math.round((data.reto.tiempoEstimadoSegReto ?? 0) / 60)} min
+                            <Text style={g.text.bodyStrong}>Tipo: </Text>{(data.tipoReto ?? 'form').toUpperCase()} ·{' '}
+                            <Text style={g.text.bodyStrong}>Tiempo estimado:</Text> {Math.round((data.reto.tiempoEstimadoSegReto ?? 0) / 60)} min
                         </Text>
                     </View>
 
-                    <View style={[styles.pill, {
-                        backgroundColor: colors.card,
-                        borderWidth: 1,
-                        borderColor: colors.divider
-                    }]}>
+                    <View style={[styles.pill, {backgroundColor: colors.card, borderWidth: 1, borderColor: colors.divider}]}>
                         <Text style={g.text.caption}>
                             Ventana: {ur?.fechaObjetivo ? s10(ur.fechaObjetivo) : `${s10(ur?.ventanaInicio)}  →  ${s10(ur?.ventanaFin)}`}
                         </Text>
@@ -1007,8 +1336,7 @@ export default function DetalleRetoScreen() {
                             borderColor: estadoVisible === 'Disponible' ? '#a5d6a7' : estadoVisible === 'Aún no disponible' ? '#ffd8a8' : estadoVisible === 'Vencido' ? '#f5c6cb' : colors.divider
                         }
                     ]}>
-                        <Text
-                            style={{color: estadoVisible === 'Disponible' ? '#1b5e20' : estadoVisible === 'Aún no disponible' ? '#8a4b08' : estadoVisible === 'Vencido' ? '#842029' : colors.text}}>
+                        <Text style={{color: estadoVisible === 'Disponible' ? '#1b5e20' : estadoVisible === 'Aún no disponible' ? '#8a4b08' : estadoVisible === 'Vencido' ? '#842029' : colors.text}}>
                             Estado del reto (hoy): {estadoVisible}
                         </Text>
                     </View>
@@ -1022,12 +1350,9 @@ export default function DetalleRetoScreen() {
                     {puedeResolver && (
                         <Pressable
                             style={{
-                                marginTop: 18,
-                                paddingVertical: 14,
-                                paddingHorizontal: 28,
+                                marginTop: 18, paddingVertical: 14, paddingHorizontal: 28,
                                 backgroundColor: isDark ? colors.primary : '#001780',
-                                borderRadius: 999,
-                                alignSelf: 'center'
+                                borderRadius: 999, alignSelf: 'center'
                             }}
                             onPress={empezar}
                         >
@@ -1037,21 +1362,20 @@ export default function DetalleRetoScreen() {
                 </ScrollView>
             ) : (
                 <View style={{flex: 1, paddingHorizontal: 16, paddingBottom: 24}}>
-
-                    <View style={{marginHorizontal: -16, backgroundColor: colors.cardTint, alignItems: 'center',}}>
-                        <Text style={[g.text.h2, {paddingVertical: 20, paddingHorizontal: 16, textAlign: "center"},]}>
+                    <View style={{marginHorizontal: -16, backgroundColor: colors.cardTint, alignItems: 'center'}}>
+                        <Text style={[g.text.h2, {paddingVertical: 20, paddingHorizontal: 16, textAlign: "center"}]}>
                             Resolución de {data?.reto?.nombreReto}
                         </Text>
                     </View>
 
-                    {/* Checklist agrupado (Torre Grúa / Elevador) */}
-                    {isChecklist ? (
+                    {checklist ? (
                         <ScrollView>
                             {renderChecklistHeader()}
                             {renderChecklistItems()}
+
+                            {/* Botón SIEMPRE presionable: muestra errores si falta info */}
                             <Pressable
                                 onPress={enviarFormulario}
-                                disabled={!checklistOK}
                                 style={{
                                     marginTop: 18, paddingVertical: 14, paddingHorizontal: 28,
                                     backgroundColor: checklistOK ? colors.primary : colors.divider,
@@ -1064,12 +1388,13 @@ export default function DetalleRetoScreen() {
                             </Pressable>
                         </ScrollView>
                     ) : (data.tipoReto === 'form' || data.tipoReto === 'checklist') ? (
-                        // 🔧 FIX: envolver el form genérico en ScrollView para permitir scroll y agregar filas
                         <ScrollView>
                             {renderGenericForm()}
                             <Pressable
-                                onPress={enviarFormulario}
-                                disabled={!formOK}
+                                onPress={() => {
+                                    if (!formOK) setShowFormErrors(true);
+                                    enviarFormulario();
+                                }}
                                 style={{
                                     marginTop: 18, marginBottom: 40,
                                     paddingVertical: 14, paddingHorizontal: 28,
