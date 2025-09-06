@@ -19,7 +19,6 @@ import RNDateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
 
-
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 const NODE_SIZE = 84;
@@ -143,7 +142,6 @@ export default function HomeRetosScreen() {
             setError(e?.message || 'Error cargando retos');
         } finally { setCargando(false); }
     };
-
 
     useFocusEffect(useCallback(() => {
         listarRetos(selectedDate);
@@ -392,9 +390,15 @@ export default function HomeRetosScreen() {
                                     (() => {
                                         const isLast = active.idx === retos.length - 1;
                                         const preferDown = active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER + POPOVER_EST_H <= totalHeight - 16;
-                                        const openDown = preferDown && !isLast;
+
+                                        // 👇👑 REGLA NUEVA: si es el PRIMER nodo (idx 0), abrimos SIEMPRE hacia abajo
+                                        const forceDownForTopNode = active.idx === 0;
+                                        const openDown = forceDownForTopNode ? true : (preferDown && !isLast);
+
                                         const popLeft = clamp(active.x - POPOVER_W / 2, 10, SCREEN_W - POPOVER_W - 10);
-                                        const popTop = openDown ? active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER : active.y - GAP_NODE_POPOVER - POPOVER_EST_H;
+                                        const popTop = openDown
+                                            ? active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER
+                                            : active.y - GAP_NODE_POPOVER - POPOVER_EST_H;
                                         return { left: popLeft, top: popTop };
                                     })(),
                                     {
@@ -409,7 +413,11 @@ export default function HomeRetosScreen() {
                                 {(() => {
                                     const isLast = active.idx === retos.length - 1;
                                     const preferDown = active.y + NODE_SIZE / 2 + GAP_NODE_POPOVER + POPOVER_EST_H <= totalHeight - 16;
-                                    const openDown = preferDown && !isLast;
+
+                                    // 👇👑 REGLA NUEVA también aquí para la flecha
+                                    const forceDownForTopNode = active.idx === 0;
+                                    const openDown = forceDownForTopNode ? true : (preferDown && !isLast);
+
                                     const popLeft = clamp(active.x - POPOVER_W / 2, 10, SCREEN_W - POPOVER_W - 10);
                                     const arrowLeft = clamp(active.x - popLeft - ARROW / 2, 8, POPOVER_W - ARROW - 8);
 
