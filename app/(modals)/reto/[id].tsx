@@ -1,5 +1,5 @@
 // app/(modals)/reto/[id].tsx
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
     View, Text, Pressable, ActivityIndicator, SafeAreaView,
     StyleSheet, ScrollView, TextInput, Alert
@@ -270,10 +270,102 @@ export default function DetalleRetoScreen() {
     const [codUsuarioReto, setCodUsuarioReto] = useState<number | null>(null);
     const [ur, setUr] = useState<InstanciaUR | null>(null);
 
-    // quiz state
+
+
+// quiz state
     const [idx, setIdx] = useState(0);
     const [respuestas, setRespuestas] = useState<any>({});
     const preguntaActual = data?.quiz?.preguntas?.[idx];
+
+    // ─── Quiz metrics (para pantalla de resumen) ───────────────────
+    const [quizStartedAt, setQuizStartedAt] = useState<number | null>(null);
+    const [sumTiempoSeg, setSumTiempoSeg] = useState(0); // suma de tiempo por pregunta (tiempoSeg)
+    const [okCount, setOkCount] = useState(0);
+    const [badCount, setBadCount] = useState(0);
+
+// Resumen final (UI)
+    const [summary, setSummary] = useState<{
+        visible: boolean; tiempoTotal: number; ok: number; bad: number; xp: number; coins: number;
+    }>({ visible: false, tiempoTotal: 0, ok: 0, bad: 0, xp: 0, coins: 0 });
+
+
+    /** ─── Quiz: temporizador y comodines ────────────────────────── */
+    const [tiempo, setTiempo] = useState<number>(0);
+    const [ocultas, setOcultas] = useState<number[]>([]); // ids de opciones ocultas por 50-50
+    const [comodines, setComodines] = useState<{ '50-50': boolean; extra_time: boolean }>({
+        '50-50': true,
+        extra_time: true,
+    });
+
+
+    /** ─── Quiz helpers (rellenar) ─────────────────────────────────── */
+    /** Normaliza texto: trim, lower, quita tildes, colapsa espacios */
+    const normalizeAnswer = (s: string) =>
+        s
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, ' ');
+
+    /**
+     * Para 'rellenar': acepta respuestas desde:
+     *  - q.opciones[].texto con correcta=1   (modelo previo)
+     *  - q.respuesta_correcta / q.respuestaCorrecta (modelo BD)
+     *  - Soporta múltiples variantes separadas por | o , en respuesta_correcta
+     */
+    const esRellenarCorrecto = (q: Pregunta & any, respuestaUsuario: string): boolean => {
+        if (!q || q.tipo !== 'rellenar') return false;
+
+        const candidatos: string[] = [];
+
+        // 1) Vía opciones correctas (si existen)
+        if (Array.isArray(q.opciones)) {
+            for (const o of q.opciones) {
+                if (Number(o?.correcta) === 1 && typeof o?.texto === 'string') {
+                    candidatos.push(o.texto);
+                }
+            }
+        }
+
+        // 2) Vía respuesta_correcta / respuestaCorrecta (según BD / API)
+        const rawRC: unknown = q.respuesta_correcta ?? q.respuestaCorrecta ?? q.correcta;
+        if (typeof rawRC === 'string' && rawRC.trim()) {
+            // Permite "manos|mano" o "limpia, aseada" como variantes
+            rawRC.split(/[|,]/).forEach(v => {
+                const t = v.trim();
+                if (t) candidatos.push(t);
+            });
+        }
+
+        if (candidatos.length === 0) return false;
+
+        const ru = normalizeAnswer(respuestaUsuario || '');
+        if (!ru) return false;
+
+        return candidatos.some(txt => normalizeAnswer(txt) === ru);
+    };
+
+
+
+// tiempo por pregunta: metadata del reto > tiempoMax de la pregunta > 30
+    const tiempoPorPregunta = useMemo<number>(() => {
+        const meta = (data?.metadataReto ?? (data as any)?.reto?.metadataReto ?? {}) as any;
+        const tMeta = Number(meta?.tiempoPorPreguntaSeg);
+        return Number.isFinite(tMeta) && tMeta > 0
+            ? tMeta
+            : (preguntaActual?.tiempoMax ?? 30);
+    }, [data?.metadataReto, (data as any)?.reto?.metadataReto, preguntaActual?.tiempoMax]);
+
+// progreso visual
+    const totalPreg = data?.quiz?.preguntas?.length ?? 0;
+    const progresoPct = totalPreg > 0 ? Math.round((idx / totalPreg) * 100) : 0;
+
+// Evitar doble finalización por tiempo agotado
+    const finishingRef = useRef(false);
+
+
+
 
     // checklist state
     const [headerVals, setHeaderVals] = useState<Record<string, string>>({});
@@ -281,6 +373,18 @@ export default function DetalleRetoScreen() {
 
     // generic form state
     const [formVals, setFormVals] = useState<any>({});
+
+    /** ─── Feedback de respuesta ─────────────────────────────────── */
+    const [fbVisible, setFbVisible] = useState(false);
+    const [fbOk, setFbOk] = useState<boolean | null>(null);
+    const [fbMsg, setFbMsg] = useState<string>('');
+    const [fbTimer, setFbTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (fbTimer) clearTimeout(fbTimer);
+        };
+    }, [fbTimer]);
 
     /** Carga de reto */
     const cargarReto = async () => {
@@ -362,6 +466,37 @@ export default function DetalleRetoScreen() {
         cargarUR();
     }, [id, urParam, fechaParam]);
 
+    /** ─── Timer de la pregunta actual ───────────────────────────── */
+    useEffect(() => {
+        if (!resolviendo || !preguntaActual) return;
+        if (summary.visible) return; // 🟢 agrega esta línea
+
+        setTiempo(tiempoPorPregunta);
+        setOcultas([]); // al cambiar de pregunta mostramos todas
+
+        const idInt = setInterval(() => {
+            setTiempo((t) => {
+                if (t <= 1) {
+                    clearInterval(idInt);
+
+                    if (!finishingRef.current) {
+                        finishingRef.current = true;
+                        Alert.alert('Tiempo agotado', 'La prueba ha finalizado por tiempo.');
+                        finalizar({ ok: okCount, bad: badCount, tiempo: sumTiempoSeg })
+                            .catch(() => {})
+                            .finally(() => { finishingRef.current = false; });
+                    }
+
+                    return 0;
+                }
+                return t - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(idInt);
+    }, [resolviendo, idx, preguntaActual?.codPregunta, tiempoPorPregunta]);
+
+
     /** Derivados */
     const hoy = dayjs().format('YYYY-MM-DD');
     const diaModal = s10(fechaParam || hoy);
@@ -401,7 +536,17 @@ export default function DetalleRetoScreen() {
         }
         try {
             const r = await fetchJson<any>(`/mis-retos/abrir`, asJson({codReto: Number(id)}));
-            setCodUsuarioReto(r.codUsuarioReto);
+// DESPUÉS (fallbacks por si la API devuelve otro nombre o ya existe la UR del día)
+            const idFromOpen = r?.codUsuarioReto ?? r?.id ?? ur?.codUsuarioReto ?? null;
+            if (!idFromOpen) {
+                throw new Error('No se obtuvo codUsuarioReto al abrir la sesión');
+            }
+            setCodUsuarioReto(idFromOpen);
+            setQuizStartedAt(Date.now());
+            setSumTiempoSeg(0);
+            setOkCount(0);
+            setBadCount(0);
+
             setResolviendo(true);
         } catch (e: any) {
             Alert.alert('Ups', e?.message || 'No fue posible abrir el reto');
@@ -519,42 +664,172 @@ export default function DetalleRetoScreen() {
     const setResp = (codPregunta: number, v: any) =>
         setRespuestas((s: any) => ({...s, [codPregunta]: v}));
 
-    const renderABCD = (q: Pregunta) => (
-        <View style={{marginTop: 12}}>
-            {q.opciones?.map(op => {
-                const sel: number[] = respuestas[q.codPregunta]?.abcd ?? [];
-                const checked = sel.includes(op.codOpcion);
-                return (
-                    <Pressable key={op.codOpcion} onPress={() => {
-                        const cur = new Set(sel);
-                        if (cur.has(op.codOpcion)) cur.delete(op.codOpcion); else cur.add(op.codOpcion);
-                        setResp(q.codPregunta, {abcd: Array.from(cur)});
-                    }} style={{
-                        padding: 12,
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        borderColor: checked ? colors.primary : colors.divider,
-                        marginBottom: 8
-                    }}>
-                        <Text style={{color: colors.text}}>{op.texto}</Text>
-                    </Pressable>
-                );
-            })}
-        </View>
-    );
 
-    const renderRellenar = (q: Pregunta) => (
+
+
+    const renderABCD = (q: Pregunta) => {
+        const sel: number | null = respuestas[q.codPregunta]?.abcd ?? null;
+        const setSel = (cod: number) => {
+            setResp(q.codPregunta, { abcd: sel === cod ? null : cod });
+        };
+
+
+
+        const opcionesVisibles = (q.opciones ?? []).filter(o => !ocultas.includes(o.codOpcion));
+        if (q.tipo === 'abcd' && opcionesVisibles.length === 0) {
+            return <Text style={[g.text.caption, { marginTop: 8 }]}>Sin opciones disponibles.</Text>;
+        }
+
+        return (
+            <View style={{ marginTop: 12 }}>
+                {opcionesVisibles.map(op => {
+                    const checked = sel === op.codOpcion;
+                    return (
+                        <Pressable
+                            key={op.codOpcion}
+                            onPress={() => setSel(op.codOpcion)}
+                            style={{
+                                padding: 12,
+                                borderRadius: 10,
+                                borderWidth: 1,
+                                borderColor: checked ? colors.primary : colors.divider,
+                                backgroundColor: checked ? (isDark ? '#0b1022' : '#fff7ed') : 'transparent',
+                                marginBottom: 8
+                            }}>
+                            <Text style={{ color: colors.text }}>{op.texto}</Text>
+                        </Pressable>
+                    );
+                })}
+            </View>
+        );
+    };
+
+    const renderRellenar: (q: Pregunta) => React.ReactNode = (q) => (
         <TextInput
             placeholder="Tu respuesta"
             placeholderTextColor={colors.mutedText}
             value={respuestas[q.codPregunta]?.rellenar ?? ''}
-            onChangeText={(t) => setResp(q.codPregunta, {rellenar: t})}
+            onChangeText={(t) => setResp(q.codPregunta, { rellenar: t })}
+            onSubmitEditing={() => onQuizPrimaryPress()}  // enter = responder y avanzar
+            returnKeyType="send"
+            autoCapitalize="none"
+            autoCorrect={false}
             style={{
-                borderWidth: 1, borderColor: colors.divider, borderRadius: 10,
-                padding: 10, color: colors.text, marginTop: 8
+                borderWidth: 1,
+                borderColor: colors.divider,
+                borderRadius: 10,
+                padding: 10,
+                color: colors.text,
+                marginTop: 8,
             }}
         />
     );
+
+
+    /** ─── Pantalla/Overlay de resultado ───────────────────────────── */
+    const AnswerScreen = (): React.ReactNode => {
+        if (!fbVisible || fbOk === null) return null;
+        const ok = !!fbOk;
+        return (
+            <View style={{
+                position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+                backgroundColor: ok ? 'rgba(16,185,129,0.90)' : 'rgba(239,68,68,0.90)',
+                alignItems: 'center', justifyContent: 'center', padding: 24
+            }}>
+                <View style={{
+                    backgroundColor: '#ffffff',
+                    borderRadius: 20,
+                    paddingVertical: 28,
+                    paddingHorizontal: 22,
+                    alignItems: 'center',
+                    width: '86%',
+                    maxWidth: 460,
+                    borderWidth: 2,
+                    borderColor: ok ? '#10b981' : '#ef4444'
+                }}>
+                    <Text style={{ fontSize: 32, fontWeight: '800', color: ok ? '#065f46' : '#7f1d1d' }}>
+                        {ok ? '¡Correcto!' : 'Incorrecto'}
+                    </Text>
+                    {!!fbMsg && (
+                        <Text style={{ marginTop: 10, fontSize: 16, textAlign: 'center', color: '#111827' }}>
+                            {fbMsg}
+                        </Text>
+                    )}
+                    <Text style={{ marginTop: 14, color: '#374151' }}>
+                        Avanzando…
+                    </Text>
+                </View>
+            </View>
+        );
+    };
+
+
+    /** ─── Pantalla de Resumen final (FULL SCREEN dentro del mismo [id]) ── */
+    const SummaryScreen = (): React.ReactNode => {
+        if (!summary.visible) return null;
+
+        const textColor = isDark ? '#E5E7EB' : '#111827'; // gris claro en dark / gris muy oscuro en light
+
+        return (
+            <View style={{ flex: 1, backgroundColor: isDark ? colors.bg : '#fff' }}>
+                <View style={{ flex: 1, padding: 24, justifyContent: 'center' }}>
+                    <View style={{ alignSelf: 'center', width: '92%', maxWidth: 520 }}>
+                        <Text style={{ fontSize: 28, fontWeight: '800', color: '#c62828', marginBottom: 18 }}>
+                            Resumen
+                        </Text>
+
+                        <View style={{ gap: 8 }}>
+                            <Text style={[g.text.body, { color: textColor }]}>
+                                <Text style={[g.text.bodyStrong, { fontStyle: 'italic', color: textColor }]}>
+                                    Tiempo
+                                </Text> : {summary.tiempoTotal} seg
+                            </Text>
+                            <Text style={[g.text.body, { color: textColor }]}>
+                                <Text style={[g.text.bodyStrong, { fontStyle: 'italic', color: textColor }]}>
+                                    Respuestas correctas
+                                </Text> : {summary.ok}
+                            </Text>
+                            <Text style={[g.text.body, { color: textColor }]}>
+                                <Text style={[g.text.bodyStrong, { fontStyle: 'italic', color: textColor }]}>
+                                    Respuestas incorrectas
+                                </Text> : {summary.bad}
+                            </Text>
+                            <Text style={[g.text.body, { color: textColor }]}>
+                                <Text style={[g.text.bodyStrong, { fontStyle: 'italic', color: textColor }]}>
+                                    Monedas ganadas
+                                </Text> : ${summary.coins}
+                            </Text>
+                            <Text style={[g.text.body, { color: textColor }]}>
+                                <Text style={[g.text.bodyStrong, { fontStyle: 'italic', color: textColor }]}>
+                                    XP
+                                </Text> : {summary.xp}
+                            </Text>
+                        </View>
+
+                        <Pressable
+                            onPress={() => {
+                                setSummary(s => ({ ...s, visible: false }));
+                                markModalClosed();
+                                router.back();
+                            }}
+                            style={{
+                                marginTop: 24, alignSelf: 'center',
+                                backgroundColor: '#22c55e', // ✅ verde
+                                paddingVertical: 14, paddingHorizontal: 28,
+                                borderRadius: 999,
+                                shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, elevation: 4
+                            }}
+                        >
+                            <Text style={[g.text.smallStrong, { color: '#ffffff' }]}>Continuar</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </View>
+        );
+    };
+
+
+
 
     const renderEmparejar = (_q: Pregunta) => (
         <Text style={[g.text.caption, {marginTop: 8}]}>
@@ -562,31 +837,339 @@ export default function DetalleRetoScreen() {
         </Text>
     );
 
-    const responderYAvanzar = async () => {
-        if (!data || !preguntaActual || !codUsuarioReto) return;
-        const valor = respuestas[preguntaActual.codPregunta] ?? null;
+    /** ─── Cabecera del quiz: progreso + timer + contador ──────── */
+    const QuizHeader = () => (
+        <View style={{ marginTop: 10 }}>
+            {/* Progreso */}
+            <View style={{ height: 8, backgroundColor: colors.divider, borderRadius: 999, overflow: 'hidden' }}>
+                <View style={{ width: `${progresoPct}%`, height: 8, backgroundColor: colors.primary }} />
+            </View>
+
+            {/* Timer + contador */}
+            <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={g.text.bodyStrong}>⏱ {tiempo}s</Text>
+                <Text style={g.text.bodyStrong}>{idx + 1}/{totalPreg}</Text>
+            </View>
+        </View>
+    );
+
+    /** ─── Barra inferior: comodines ───────────────────────────── */
+    const ComodinesBar = () => {
+        if (!resolviendo || !preguntaActual) return null;
+
+        // deshabilitar 50-50 si no es abcd
+        const fiftyEnabled = comodines['50-50'] && preguntaActual?.tipo === 'abcd';
+
+        return (
+            <View
+                style={{
+                    position: 'absolute',
+                    left: 0, right: 0, bottom: 0,
+                    paddingHorizontal: 16,
+                    paddingTop: 10,
+                    paddingBottom: 16, // deja aire con el borde inferior
+                    backgroundColor: colors.bg,
+                    borderTopWidth: 1,
+                    borderTopColor: colors.divider,
+                }}
+            >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+                    {/* 50-50 */}
+                    <Pressable
+                        disabled={!fiftyEnabled}
+                        onPress={() => {
+                            if (!preguntaActual?.opciones?.length) return;
+                            const visibles = preguntaActual.opciones.map(o => o.codOpcion);
+                            const dejar = 2;
+                            const aOcultar = [...visibles]
+                                .sort(() => Math.random() - 0.5)
+                                .slice(0, Math.max(0, visibles.length - dejar));
+                            setOcultas(aOcultar);
+                            setComodines(s => ({ ...s, ['50-50']: false }));
+                        }}
+                        style={{
+                            flex: 1,
+                            paddingVertical: 12,
+                            borderRadius: 12,
+                            alignItems: 'center',
+                            backgroundColor: fiftyEnabled ? colors.primary : colors.divider
+                        }}
+                    >
+                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>50-50</Text>
+                    </Pressable>
+
+                    {/* +15s */}
+                    <Pressable
+                        disabled={!comodines.extra_time}
+                        onPress={() => {
+                            setTiempo(t => t + 15);
+                            setComodines(s => ({ ...s, extra_time: false }));
+                        }}
+                        style={{
+                            flex: 1,
+                            paddingVertical: 12,
+                            borderRadius: 12,
+                            alignItems: 'center',
+                            backgroundColor: comodines.extra_time ? colors.primary : colors.divider
+                        }}
+                    >
+                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>+15s</Text>
+                    </Pressable>
+                </View>
+            </View>
+        );
+    };
+
+
+    /** ─── Overlay de feedback (Correcto / Incorrecto) ──────────── */
+    const FeedbackToast = (): React.ReactNode => {
+        if (!fbVisible) return null;
+        return (
+            <View style={{
+                position: 'absolute',
+                left: 16, right: 16, bottom: 24,
+                paddingVertical: 12, paddingHorizontal: 16,
+                borderRadius: 12,
+                backgroundColor: fbOk ? '#d1fae5' : '#fee2e2',
+                borderWidth: 1,
+                borderColor: fbOk ? '#10b981' : '#ef4444',
+                alignItems: 'center'
+            }}>
+                <Text style={{ color: fbOk ? '#065f46' : '#7f1d1d', fontWeight: '700' }}>
+                    {fbOk ? '✔ Correcto' : '✖ Incorrecto'}
+                </Text>
+                {!!fbMsg && (
+                    <Text style={{ marginTop: 4, color: fbOk ? '#065f46' : '#7f1d1d' }}>
+                        {fbMsg}
+                    </Text>
+                )}
+            </View>
+        );
+    };
+
+
+
+
+    const responderYAvanzar = async (
+        { skip = false, autoPorTiempo = false }: { skip?: boolean; autoPorTiempo?: boolean } = {}
+    ) => {
+        if (!data || !preguntaActual) return;
+        const curUR = codUsuarioReto ?? ur?.codUsuarioReto;
+        if (!curUR) { Alert.alert('Ups', 'Falta codUsuarioReto'); return; }
+
+        // Construir valor_json compatible con backend/BD
+        let valor: any = null;
+
+        if (skip || autoPorTiempo) {
+            valor = preguntaActual.tipo === 'abcd'
+                ? { abcd: [] }
+                : preguntaActual.tipo === 'rellenar'
+                    ? { rellenar: '' }
+                    : {};
+        } else {
+            const v = respuestas[preguntaActual.codPregunta];
+
+            if (preguntaActual.tipo === 'abcd') {
+                const cod = Number(v?.abcd ?? NaN);
+                if (!Number.isFinite(cod)) {
+                    Alert.alert('Selecciona una opción');
+                    return;
+                }
+                valor = { abcd: [cod] };
+            } else if (preguntaActual.tipo === 'rellenar') {
+                const txt = (v?.rellenar ?? '').toString().trim();
+                if (!txt) {
+                    Alert.alert('Escribe tu respuesta');
+                    return;
+                }
+                valor = { rellenar: txt };
+            } else {
+                valor = v ?? {};
+            }
+        }
+
+        // Tiempo consumido: clamp a número entero no negativo
+        const tiempoRestante = Math.max(0, Number(tiempo ?? 0));
+        const limite = Number(preguntaActual.tiempoMax ?? tiempoPorPregunta ?? 30);
+        const tiempoSeg = Math.max(0, Math.floor(limite - tiempoRestante));
+
         try {
-            await fetchJson(`/mis-retos/${codUsuarioReto}/quiz/responder`,
-                asJson({codUsuarioReto, codPregunta: preguntaActual.codPregunta, valor, tiempoSeg: null})
+            const r = await fetchJson(
+                `/mis-retos/${curUR}/quiz/responder`,
+                asJson({
+                    codUsuarioReto: curUR,
+                    //codUsuarioReto,
+                    codPregunta: preguntaActual.codPregunta,
+                    valor,
+                    tiempoSeg,
+                    comodinesUsados: Object.entries(comodines)
+                        .filter(([, disponible]) => !disponible)
+                        .map(([k]) => k),
+                })
             );
-            if (idx + 1 < (data.quiz?.preguntas?.length ?? 0)) setIdx(idx + 1);
-            else Alert.alert('Listo', 'Has respondido todas las preguntas. Pulsa Finalizar para cerrar.');
+
+            // ── Feedback inmediato (si el back lo envía) ─────────────────
+            let fueCorrecta: boolean | null = null;
+            if (r && typeof r === 'object') {
+                const k: any = r;
+                if (typeof k.esCorrecta === 'boolean') fueCorrecta = k.esCorrecta;
+                else if (typeof k.correcta === 'boolean') fueCorrecta = k.correcta;
+
+                if (typeof k.explicacion === 'string' && k.explicacion.trim()) {
+                    setFbMsg(k.explicacion);
+                } else {
+                    setFbMsg('');
+                }
+            }
+
+            // Si no vino del back y la pregunta es ABCD, inferimos localmente
+            if (fueCorrecta === null && preguntaActual.tipo === 'abcd' && !skip && !autoPorTiempo) {
+                const sel = respuestas[preguntaActual.codPregunta]?.abcd;
+                const op = (preguntaActual.opciones ?? []).find(o => o.codOpcion === sel);
+                if (op && typeof op.correcta === 'number') {
+                    fueCorrecta = op.correcta === 1;
+                }
+            }
+
+            // Si no vino del back y la pregunta es RELLENAR, inferimos localmente
+            if (fueCorrecta === null && preguntaActual.tipo === 'rellenar' && !skip && !autoPorTiempo) {
+                const txt = String(respuestas[preguntaActual.codPregunta]?.rellenar ?? '');
+                fueCorrecta = esRellenarCorrecto(preguntaActual as any, txt);
+            }
+
+            // ── Acumular métricas LOCALES primero ─────────────────────────
+            const fueOK = (fueCorrecta === true); // null/false => incorrecta
+            const nextTiempo = sumTiempoSeg + tiempoSeg;
+            const nextOk = okCount + (fueOK ? 1 : 0);
+            const nextBad = badCount + (fueOK ? 0 : 1);
+
+            // actualiza estado (pintará después)
+            setSumTiempoSeg(p => p + tiempoSeg);
+            if (fueOK) setOkCount(p => p + 1);
+            else setBadCount(p => p + 1);
+
+            // ── Avance/finalización ───────────────────────────────────────
+            const total = data.quiz?.preguntas?.length ?? 0;
+            const esUltima = (idx + 1) >= total;
+
+            const avanzar = async () => {
+                if (!esUltima) {
+                    setIdx(prev => prev + 1);
+                    setOcultas([]); // resetea 50-50
+                } else {
+                    await finalizar({ ok: nextOk, bad: nextBad, tiempo: nextTiempo });
+                }
+            };
+
+            if (fueCorrecta !== null) {
+                if (fbTimer) clearTimeout(fbTimer);
+                setFbOk(fueCorrecta);
+                setFbVisible(true);
+                const t = setTimeout(async () => {
+                    setFbVisible(false);
+                    await avanzar();
+                }, 1000);
+                setFbTimer(t);
+            } else {
+                await avanzar();
+            }
+
         } catch (e: any) {
             Alert.alert('Ups', e?.message || 'No pudimos guardar tu respuesta');
         }
     };
 
-    const finalizar = async () => {
-        if (!codUsuarioReto) return;
+
+
+    const finalizar = async (totals?: { ok?: number; bad?: number; tiempo?: number }) => {
+        const curUR = codUsuarioReto ?? ur?.codUsuarioReto;
+
+        // 🔢 Cálculo de recompensas según metadata del reto
+        const computeRewards = (ok: number, bad: number) => {
+            const meta: any = (data?.metadataReto ?? (data as any)?.reto?.metadataReto ?? {}) as any;
+
+            const xpOk    = Number(meta?.xpCorrecta ?? 0);
+            const xpBad   = Number(meta?.xpIncorrecta ?? 0);
+            const cOk     = Number(meta?.monedasCorrecta ?? 0);
+            const cBad    = Number(meta?.monedasIncorrecta ?? 0);
+
+            // 🏁 "Ganar": al menos 1 correcta. Cambia aquí si quieres otro umbral.
+            const gano = ok > 0;
+
+            // Paga por pregunta (correcta/incorrecta) y aplica la regla de "gano"
+            const baseXP    = ok * xpOk + bad * xpBad;
+            const baseCoins = ok * cOk  + bad * cBad;
+
+            return { xp: gano ? baseXP : 0, coins: gano ? baseCoins : 0 };
+        };
+
+        // 🟡 Fallback local (sin UR / sin backend): mostramos resumen del QUIZ
+        if (!curUR) {
+            if (data?.tipoReto === 'quiz') {
+                const totalSeg = totals?.tiempo ?? sumTiempoSeg;
+                const ok  = totals?.ok  ?? okCount;
+                const bad = totals?.bad ?? badCount;
+
+                const { xp, coins } = computeRewards(ok, bad);
+
+                setSummary({
+                    visible: true,
+                    tiempoTotal: totalSeg,
+                    ok,
+                    bad,
+                    xp,
+                    coins,
+                });
+            }
+            return;
+        }
+
+        // 🟢 Camino normal: cerramos en backend (sin depender de r.xpGanada/r.coins)
         try {
-            const r = await fetchJson<any>(`/mis-retos/${codUsuarioReto}/finalizar`, asJson({codUsuarioReto}));
-            Alert.alert('Reto completado', `+${r.xpGanada} XP, +${r.coins} monedas`);
+            await fetchJson<any>(
+                `/mis-retos/${curUR}/finalizar`,
+                asJson({ codUsuarioReto: curUR })
+            );
+
+            if (data?.tipoReto === 'quiz') {
+                const totalSeg = totals?.tiempo ?? sumTiempoSeg;
+                const ok  = totals?.ok  ?? okCount;
+                const bad = totals?.bad ?? badCount;
+
+                const { xp, coins } = computeRewards(ok, bad);
+
+                setSummary({
+                    visible: true,
+                    tiempoTotal: totalSeg,
+                    ok,
+                    bad,
+                    xp,
+                    coins,
+                });
+                return; // la navegación se hace en "Continuar"
+            }
+
+            // No-quiz: deja el comportamiento clásico
+            Alert.alert('Reto completado', 'Tu formulario fue enviado.');
             markModalClosed();
             router.back();
         } catch (e: any) {
             Alert.alert('Ups', e?.message || 'No pudimos finalizar');
         }
     };
+
+
+
+
+
+    // Botón principal en quiz: ahora solo responde/avanza;
+// finalizar se llama desde responderYAvanzar cuando corresponde.
+    const onQuizPrimaryPress = async () => {
+        await responderYAvanzar();
+    };
+
+
+
 
     /** Render header del checklist */
     const renderChecklistHeader = () => {
@@ -943,6 +1526,15 @@ export default function DetalleRetoScreen() {
     /** Layout principal */
     const isChecklist = isGroupedChecklist(data?.metadataReto);
 
+// 🟢 Si el resumen está visible, mostramos SOLO la "pantalla" de resumen (full screen)
+    if (summary.visible) {
+        return (
+            <SafeAreaView style={styles.safe}>
+                <SummaryScreen />
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.safe}>
             <View style={styles.headerRow}>
@@ -1084,6 +1676,8 @@ export default function DetalleRetoScreen() {
                         </ScrollView>
                     ) : data.tipoReto === 'quiz' && preguntaActual ? (
                         <ScrollView>
+
+                            <QuizHeader />
                             <Text style={[g.text.h3, {marginTop: 10}]}>Pregunta {preguntaActual.numero}</Text>
                             <Text style={[g.text.body, {marginTop: 6}]}>{preguntaActual.enunciado}</Text>
 
@@ -1096,33 +1690,40 @@ export default function DetalleRetoScreen() {
                                 </Text>
                             )}
 
-                            <Pressable onPress={responderYAvanzar}
-                                       style={{
-                                           marginTop: 18,
-                                           paddingVertical: 14,
-                                           paddingHorizontal: 28,
-                                           backgroundColor: colors.primary,
-                                           borderRadius: 999,
-                                           alignSelf: 'center'
-                                       }}>
-                                <Text style={[g.text.smallStrong, g.text.onPrimary]}>
-                                    {idx + 1 < (data.quiz?.preguntas?.length ?? 0) ? 'Guardar y siguiente' : 'Guardar última'}
+                            <Pressable
+                                onPress={onQuizPrimaryPress}
+                                style={{
+                                    marginTop: 18,
+                                    paddingVertical: 14,
+                                    paddingHorizontal: 28,
+                                    backgroundColor: (idx + 1 < (data.quiz?.preguntas?.length ?? 0)) ? '#facc15' : '#f97316', // amarillo / naranja
+                                    borderRadius: 999,
+                                    alignSelf: 'center'
+                                }}
+                            >
+                                <Text
+                                    style={[
+                                        g.text.smallStrong,
+                                        {
+                                            color: (idx + 1 < (data.quiz?.preguntas?.length ?? 0)) ? '#1f2937' : '#ffffff', // texto oscuro en amarillo, blanco en naranja
+                                            fontWeight: '800'
+                                        }
+                                    ]}
+                                >
+                                    {(idx + 1 < (data.quiz?.preguntas?.length ?? 0)) ? 'Siguiente' : 'Finalizar'}
                                 </Text>
                             </Pressable>
 
-                            <Pressable onPress={finalizar}
-                                       style={{
-                                           marginTop: 14,
-                                           paddingVertical: 14,
-                                           paddingHorizontal: 28,
-                                           backgroundColor: '#198754',
-                                           borderRadius: 999,
-                                           alignSelf: 'center'
-                                       }}>
-                                <Text style={{color: '#fff', fontWeight: '700'}}>Finalizar</Text>
-                            </Pressable>
+
                         </ScrollView>
                     ) : null}
+
+                    <AnswerScreen />
+
+                    {/* 🔔 Aquí insertas el overlay de feedback */}
+                    <FeedbackToast />
+                    {/* Barra fija de comodines */}
+                    <ComodinesBar />
                 </View>
             )}
         </SafeAreaView>
