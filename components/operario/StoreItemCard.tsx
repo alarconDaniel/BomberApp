@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Dimensions, Image } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { ItemTienda } from '../../models/ItemTienda';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
+import { resolveItemIconFromBd } from '../../config/icons/itemIcons';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -20,40 +21,38 @@ export default function StoreItemCard({ item, onPress, accentColor = '#3B5BDB', 
     const { colors } = useTheme();
     const g = makeGlobalStyles(colors);
 
-    const metaIcon = (item.metadataItem as any)?.icon || iconFallbackByTipo[String(item.tipoItem).toUpperCase()] || 'shopping-bag';
-    const badge = (item.metadataItem as any)?.badge;
+    const bdIcon = item.iconoPath;
+    const imgSrc = resolveItemIconFromBd(bdIcon);
     const price = Number(item.precioItem || 0);
     const isRopa = String(item.tipoItem).toUpperCase() === 'ROPA';
     const ropaDisabled = isRopa && !!item.yaPosee;
 
+    // estilos
+    const styles = s(colors);
+
+    // ---- ROPA ----
     if (isRopa) {
         return (
             <Pressable
                 onPress={ropaDisabled ? undefined : onPress}
                 disabled={ropaDisabled}
-                style={[s(colors).card, s(colors).shadow, { borderColor: accentColor, opacity: ropaDisabled ? 0.6 : 1 }]}
+                style={[styles.card, styles.shadow, { borderColor: accentColor, opacity: ropaDisabled ? 0.6 : 1 }]}
             >
-                <View style={[s(colors).ribbon, { backgroundColor: accentColor }]}>
+                <View style={[styles.ribbon, { backgroundColor: accentColor }]}>
                     <Text style={[g.text.captionStrong, { color: 'white', textAlign: 'center' }]}>{item.nombreItem}</Text>
                 </View>
 
-                <View style={[s(colors).iconWrap, { marginVertical: 20 }]}>
-                    <FontAwesome5 name={metaIcon as any} size={68} color={accentColor} />
+                <View style={[styles.iconWrap, { marginVertical: 10 }]}>
+                    <Image source={imgSrc} style={{ width: 98, height: 98 }} resizeMode="contain" />
                 </View>
 
-                {badge ? (
-                    <View style={[s(colors).badge, { borderColor: accentColor }]}>
-                        <Text style={[g.text.captionStrong, { color: accentColor }]}>{badge}</Text>
-                    </View>
-                ) : null}
-
                 {ropaDisabled && (
-                    <View style={[s(colors).badge, { borderColor: colors.danger, marginTop: 6 }]}>
+                    <View style={[styles.badge, { borderColor: colors.danger, marginTop: 6 }]}>
                         <Text style={[g.text.captionStrong, { color: colors.danger }]}>Ya la tienes</Text>
                     </View>
                 )}
 
-                <View style={[s(colors).footer, { flex: 1 }]}>
+                <View style={[styles.footer, { flex: 1 }]}>
                     <Text style={[g.text.smallStrong, { color: colors.text }]}>{price > 0 ? `$${price}` : 'Gratis'}</Text>
                     <FontAwesome5 name="chevron-right" size={14} color={colors.mutedText} />
                 </View>
@@ -61,49 +60,48 @@ export default function StoreItemCard({ item, onPress, accentColor = '#3B5BDB', 
         );
     }
 
-    if (item.tipoItem.toUpperCase() === 'COFRE') {
+    // ---- COFRE ----
+    if (String(item.tipoItem).toUpperCase() === 'COFRE') {
         return (
             <Pressable onPress={onPress} style={{ flex: 1, width: 100 }}>
-                <View style={[s(colors).ribbon, { backgroundColor: accentColor }]}>
+                <View style={[styles.ribbon, { backgroundColor: accentColor }]}>
                     <Text style={[g.text.captionStrong, { color: 'white', textAlign: 'center' }]}>{item.nombreItem}</Text>
                 </View>
-                {(item.precioItem == 1000 || item.precioItem == 100 || item.precioItem == 10) && (
-                    <View style={{ alignSelf: 'center', paddingVertical: 10, justifyContent: 'flex-end', flex: 1 }}>
-                        <FontAwesome5
-                            name={metaIcon as any}
-                            size={item.precioItem == 1000 ? 60 : item.precioItem == 100 ? 50 : 40}
-                            color={accentColor}
-                        />
-                    </View>
-                )}
-                {badge ? (
-                    <View style={[s(colors).badge, { borderColor: accentColor }]}>
-                        <Text style={[g.text.captionStrong, { color: accentColor }]}>{badge}</Text>
-                    </View>
-                ) : null}
+
+                <View style={{ alignSelf: 'center', paddingVertical: 10, justifyContent: 'flex-end', flex: 1 }}>
+                    <Image
+                        source={imgSrc}
+                        style={{
+                            width: item.precioItem == 1000 ? 100 : item.precioItem == 100 ? 88 : 80,
+                            height: item.precioItem == 1000 ? 100 : item.precioItem == 100 ? 88 : 80,
+                        }}
+                        resizeMode="contain"
+                    />
+                </View>
+
                 <View>
-                    <Text style={[g.text.smallStrong, { alignSelf: 'center', color: colors.text }]}>{price > 0 ? `$${price}` : 'Gratis'}</Text>
+                    <Text style={[g.text.smallStrong, { alignSelf: 'center', color: colors.text }]}>
+                        {price > 0 ? `$${price}` : 'Gratis'}
+                    </Text>
                 </View>
             </Pressable>
         );
     }
 
+    // ---- POTENCIADOR ----
     return (
         <Pressable onPress={onPress}>
-            <View style={[s(colors).sectionBar2, { backgroundColor: colors.storeRedBar, outlineColor: colors.outline }]} />
-            <View style={[s(colors).cardPotenciador, s(colors).shadow, { borderColor: accentColor }]}>
-                <View style={[s(colors).ribbon, { backgroundColor: accentColor }]}>
+            <View style={[styles.sectionBar2, { backgroundColor: colors.storeRedBar, outlineColor: colors.outline }]} />
+            <View style={[styles.cardPotenciador, styles.shadow, { borderColor: accentColor }]}>
+                <View style={[styles.ribbon, { backgroundColor: accentColor }]}>
                     <Text style={[g.text.captionStrong, { color: 'white', textAlign: 'center' }]}>{item.nombreItem}</Text>
                 </View>
-                <View style={[s(colors).iconWrap]}>
-                    <FontAwesome5 name={metaIcon as any} size={28} color={accentColor} />
+
+                <View style={styles.iconWrap}>
+                    <Image source={imgSrc} style={{ width: 78, height: 78 }} resizeMode="contain" />
                 </View>
-                {badge ? (
-                    <View style={[s(colors).badge, { borderColor: accentColor }]}>
-                        <Text style={[g.text.captionStrong, { color: accentColor }]}>{badge}</Text>
-                    </View>
-                ) : null}
-                <View style={s(colors).footer}>
+
+                <View style={styles.footer}>
                     <Text style={[g.text.smallStrong, { color: colors.text }]}>{price > 0 ? `$${price}` : 'Gratis'}</Text>
                     <FontAwesome5 name="chevron-right" size={14} color={colors.mutedText} />
                 </View>

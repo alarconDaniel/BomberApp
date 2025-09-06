@@ -6,6 +6,7 @@ export class ItemTienda {
     public tipoItem: string;
     public metadataItem: any;
     public yaPosee?: boolean;
+    public iconoPath?: string;
 
     constructor(
         cod: number,
@@ -15,6 +16,7 @@ export class ItemTienda {
         tipo: string,
         meta: any,
         yaPosee?: boolean,
+        iconoPath?: string,
     ) {
         this.codItem = cod;
         this.nombreItem = nom;
@@ -23,5 +25,6 @@ export class ItemTienda {
         this.tipoItem = tipo;
         this.metadataItem = meta;
         this.yaPosee = yaPosee;
+        this.iconoPath = iconoPath;
     }
 }

@@ -6,6 +6,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { ItemTienda } from '../../models/ItemTienda';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
+import { resolveItemIconFromBd } from '../../config/icons/itemIcons';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -31,9 +32,8 @@ export default function DetailsStoreItemModal(props: Props) {
     const [qty, setQty] = useState(1);
     const shake = useRef(new Animated.Value(0)).current;
 
-    const meta = (item?.metadataItem ?? {}) as any;
-    const imageUrl: string | undefined = meta?.image;
-    const iconName = meta?.icon || iconFallbackByTipo[String(item?.tipoItem ?? '').toUpperCase()] || 'shopping-bag';
+    const bdIcon = item?.iconoPath;
+    const localImg = resolveItemIconFromBd(bdIcon);
 
     const price = Number(item?.precioItem || 0);
     const quantityToUse = isRopa ? 1 : Math.max(1, qty);
@@ -100,13 +100,7 @@ export default function DetailsStoreItemModal(props: Props) {
                     </Text>
 
                     <View style={s.mediaRow}>
-                        {imageUrl ? (
-                            <Image source={{ uri: imageUrl }} resizeMode="contain" style={s.image} />
-                        ) : (
-                            <View style={s.iconWrap}>
-                                <FontAwesome5 name={iconName as any} size={48} color={accentColor} />
-                            </View>
-                        )}
+                        <Image source={localImg} resizeMode="contain" style={s.image} />
 
                         <View style={{ flex: 1 }}>
                             <Text style={[g.text.body, g.text.secondary]} numberOfLines={5}>

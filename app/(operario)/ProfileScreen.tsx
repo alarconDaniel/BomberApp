@@ -9,6 +9,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import LevelUpOverlay from '../../components/operario/LevelUpOverlay';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
+import { resolveLogroIconFromBd } from '../../config/icons/logroIcons';
 
 const AVATAR_SIZE = 110;
 
@@ -367,7 +368,6 @@ export default function ProfileScreen() {
 
                     <View style={{ marginTop: 12, gap: 14 }}>
                         {logros.map((l) => {
-                            const uri = l.icono.startsWith('http') ? l.icono : `${baseUrl}${l.icono}`;
                             return (
                                 <Pressable
                                     key={l.codLogro}
@@ -385,7 +385,11 @@ export default function ProfileScreen() {
                                 >
                                     {/* Icono grande a la izquierda */}
                                     <View style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', backgroundColor: P.logroImgBg }}>
-                                        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                                        <Image
+                                            source={resolveLogroIconFromBd(l.icono)} // ← usa la pista de BD para elegir el asset local
+                                            style={{ width: '100%', height: '100%' }}
+                                            resizeMode="cover"
+                                        />
                                     </View>
 
                                     {/* Centro: nombre + subtítulo */}

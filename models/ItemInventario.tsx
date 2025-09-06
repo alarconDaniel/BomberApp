@@ -8,6 +8,7 @@ export type ItemInventario = {
         nombre: string;
         descripcion: string;
         tipo: string;
+        icon: string;
     };
     cod: number;
     cantidad: number;
