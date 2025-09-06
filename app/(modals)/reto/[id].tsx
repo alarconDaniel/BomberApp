@@ -14,6 +14,8 @@ import {useMarkModalOnClose} from "../../../navigation/useMarkModalOnClose";
 import {useTheme} from '../../../theme/ThemeProvider';
 import {makeGlobalStyles} from '../../../theme/GlobalStyles';
 import {Reto} from '../../../models/Reto';
+import { ItemInventario, InventarioResponse } from '../../../models/ItemInventario';
+
 
 /** ─────────────────────────────────────────────────
  *  Tipos (modelo UI)
@@ -45,6 +47,8 @@ type InstanciaUR = {
     fechaObjetivo?: string | null;
     ventanaInicio?: string | null;
     ventanaFin?: string | null;
+    codUsuario?: number | null;
+
 };
 
 /** Checklists “por grupos” */
@@ -94,6 +98,113 @@ const todayYMD = () => dayjs().format('YYYY-MM-DD');
 const humanTitle = (k: string) =>
     k.replace(/[_-]+/g, ' ')
         .replace(/\b\w/g, c => c.toUpperCase());
+
+/** ─────────────────────────────────────────────────
+ *  Time power-up: parsing de formatos y offsets
+ *  Soporta: "15s", "1m30s", "2m", "PT45S", "mm:ss", "HH:mm"
+ *  ───────────────────────────────────────────────── */
+const _toInt = (x: any) => Number(x) || 0;
+const _pad2 = (n: number) => (n < 10 ? `0${n}` : String(n));
+
+const _parseISODur = (raw: string): number | null => {
+    const m = /^P(T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)$/i.exec((raw||'').trim());
+    if (!m) return null;
+    const h = _toInt(m[2]), mn = _toInt(m[3]), s = _toInt(m[4]);
+    return h * 3600 + mn * 60 + s;
+};
+
+const _parseOffsetPieces = (s: string): number | null => {
+    const re = /^(\+)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i;
+    const m = re.exec((s||'').replace(/\s+/g, '').toLowerCase());
+    if (!m) return null;
+    const h = _toInt(m[2]), mn = _toInt(m[3]), sec = _toInt(m[4]);
+    if (h === 0 && mn === 0 && sec === 0) return null;
+    return h * 3600 + mn * 60 + sec;
+};
+
+const _parsePlainNumber = (s: string): number | null => {
+    const t = (s||'').trim().toLowerCase();
+    if (/^\+?\d+$/.test(t)) return _toInt(t.replace('+',''));
+    const mS = /^(\+)?(\d+)\s*s(ec|eg|egundos)?$/.exec(t);
+    if (mS) return _toInt(mS[2]);
+    const mM = /^(\+)?(\d+)\s*m(in|inutos)?$/.exec(t);
+    if (mM) return _toInt(mM[2]) * 60;
+    const mH = /^(\+)?(\d+)\s*h(oras?)?$/.exec(t);
+    if (mH) return _toInt(mH[2]) * 3600;
+    return null;
+};
+
+type ExtraTimeSpec = { seconds: number; format: 'offset'|'until'; label: string; hastaHHmm?: string };
+
+const parseExtraTimeSpec = (raw: any): ExtraTimeSpec => {
+    const now = dayjs();
+    const fallback: ExtraTimeSpec = { seconds: 15, format: 'offset', label: '+15s' };
+    if (raw == null) return fallback;
+
+    if (typeof raw === 'number' && isFinite(raw) && raw > 0) {
+        const s = Math.floor(raw);
+        return { seconds: s, format: 'offset', label: `+${s}s` };
+    }
+    if (typeof raw !== 'string') return fallback;
+    const s = raw.trim();
+
+    // ISO: PT#H#M#S
+    if (/^P(T.*)$/i.test(s)) {
+        const secs = _parseISODur(s);
+        if (secs && secs > 0) {
+            const lbl = secs % 60 === 0 ? `+${Math.floor(secs / 60)}m` : `+${secs}s`;
+            return { seconds: secs, format: 'offset', label: lbl };
+        }
+    }
+    // HH:mm (hoy)
+    const mm = /^(\d{1,2}):(\d{2})$/.exec(s);
+    if (mm) {
+        const hh = _toInt(mm[1]), m = _toInt(mm[2]);
+        if (hh >= 0 && hh <= 23 && m >= 0 && m <= 59) {
+            const target = now.hour(hh).minute(m).second(0);
+            const diff = target.diff(now, 'second');
+            const secs = Math.max(0, diff);
+            return { seconds: secs, format: 'until', label: `→ ${_pad2(hh)}:${_pad2(m)}`, hastaHHmm: `${_pad2(hh)}:${_pad2(m)}` };
+        }
+    }
+    // mm:ss (offset)
+    const mms = /^(\d{1,3}):(\d{2})$/.exec(s);
+    if (mms) {
+        const mn = _toInt(mms[1]), sec = _toInt(mms[2]);
+        if (sec <= 59) {
+            const secs = mn * 60 + sec;
+            return { seconds: secs, format: 'offset', label: `+${mn}m${sec ? sec + 's' : ''}` };
+        }
+    }
+    // 1m30s / 2m / 90s / +30s
+    const pieces = _parseOffsetPieces(s);
+    if (pieces && pieces > 0) {
+        const lbl = pieces % 60 === 0 ? `+${Math.floor(pieces / 60)}m` : `+${pieces}s`;
+        return { seconds: pieces, format: 'offset', label: lbl };
+    }
+    // “15” / “2m” / “1h”
+    const plain = _parsePlainNumber(s);
+    if (plain && plain > 0) {
+        const lbl = plain % 60 === 0 ? `+${Math.floor(plain / 60)}m` : `+${plain}s`;
+        return { seconds: plain, format: 'offset', label: lbl };
+    }
+    return fallback;
+};
+
+/** Lee la config del comodín de tiempo desde metadata con varios alias. */
+const getExtraTimeConfig = (meta: any): ExtraTimeSpec => {
+    const m = meta ?? {};
+    const px = (m?.powerups || m?.comodines || {}) as any;
+    const raw =
+        px?.extra_time?.offset ??
+        px?.extraTime?.offset ??
+        m?.extra_time ??
+        m?.extraTime ??
+        m?.tiempoExtra ??
+        m?.tiempoExtraSeg ??
+        '15s';
+    return parseExtraTimeSpec(raw);
+};
 
 /** Heurística: ¿es checklist agrupado? */
 const isGroupedChecklist = (meta: any): boolean => {
@@ -232,6 +343,73 @@ function SiNoToggle({
     );
 }
 
+type PowerupKey = '50-50' | 'extra_time' | 'streak_shield' | 'x2' | 'phoenix';
+
+// Normaliza un objeto { "50-50": 1, extra_time: 2, ... }
+const normalizePowerups = (bag: any): Record<PowerupKey, number> => {
+    const num = (v: any) => Number(v) || 0;
+    return {
+        '50-50':       num(bag?.['50-50'] ?? bag?.fifty_fifty ?? bag?.fiftyFifty ?? bag?.fifty),
+        extra_time:    num(bag?.extra_time ?? bag?.extraTime ?? bag?.mas_tiempo ?? bag?.masTiempo),
+        streak_shield: num(bag?.streak_shield ?? bag?.streakShield ?? bag?.protector_racha ?? bag?.protectorRacha),
+        x2:            num(bag?.x2 ?? bag?.double ?? bag?.double_points),
+        phoenix:       num(bag?.phoenix ?? bag?.ave_fenix ?? bag?.fenix ?? bag?.['fénix']),
+    };
+};
+
+// Limpia texto para matching flexible
+const _norm = (s: string) =>
+    (s || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9+]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+// Adivina qué comodín es a partir del nombre del ítem de inventario
+const resolvePowerupKey = (name?: string): PowerupKey | null => {
+    const n = _norm(name || '');
+    if (!n) return null;
+
+    // 50-50
+    if (n.includes('50 50') || n.includes('5050') || n.includes('fifty')) return '50-50';
+
+    // Extra tiempo (+15s / más tiempo / extra time / pocion)
+    if (
+        n.includes('extra tiempo') || n.includes('mas tiempo') || n.includes('mas  tiempo') ||
+        n.includes('+15') || n.includes('15s') || n.includes('extra time') ||
+        n.includes('pocion') || n.includes('poción') || n.includes('potion')
+    ) return 'extra_time';
+
+    // x2 / doble / boost
+    if (n.includes('x2') || n.includes('doble') || n.includes('double') || n.includes('boost') || n.includes('booster'))
+        return 'x2';
+
+    // Protector de racha / escudo / shield
+    if (n.includes('racha') || n.includes('shield') || n.includes('protector') || n.includes('escudo'))
+        return 'streak_shield';
+
+    // Ave Fénix / Phoenix
+    if (n.includes('phoenix') || n.includes('fenix') || n.includes('fénix') || n.includes('ave fenix') || n.includes('ave fénix'))
+        return 'phoenix';
+
+    return null;
+};
+
+// Convierte items de inventario → objeto de comodines
+const mapInventoryToPowerups = (items: ItemInventario[] | undefined | null): Record<PowerupKey, number> => {
+    const acc: Record<PowerupKey, number> = { '50-50': 0, extra_time: 0, streak_shield: 0, x2: 0, phoenix: 0 };
+    for (const it of items || []) {
+        const qty = Number((it as any)?.cantidad ?? 0) || 0;
+        const name = (it as any)?.item?.nombre as string | undefined;
+        const key = resolvePowerupKey(name);
+        if (key) acc[key] += qty;
+    }
+    return acc;
+};
+
+
 /** ─────────────────────────────────────────────────
  *  Pantalla
  *  ───────────────────────────────────────────────── */
@@ -273,7 +451,15 @@ export default function DetalleRetoScreen() {
 
 
 // quiz state
-    const [idx, setIdx] = useState(0);
+    const [idx, setIdx] = useState(0); // ← FALTA
+    const [inv, setInv] = useState<Record<PowerupKey, number>>({
+        '50-50': 0, extra_time: 0, streak_shield: 0, x2: 0, phoenix: 0
+    });
+    const [usedPowerupForQuestion, setUsedPowerupForQuestion] = useState<PowerupKey | null>(null);
+    const [x2AppliedTo, setX2AppliedTo] = useState<Set<number>>(new Set());
+    const [answeredCorrect, setAnsweredCorrect] = useState<Record<number, boolean>>({});
+    const advanceRef = useRef<null | (() => Promise<void>)>(null);
+
     const [respuestas, setRespuestas] = useState<any>({});
     const preguntaActual = data?.quiz?.preguntas?.[idx];
 
@@ -292,10 +478,7 @@ export default function DetalleRetoScreen() {
     /** ─── Quiz: temporizador y comodines ────────────────────────── */
     const [tiempo, setTiempo] = useState<number>(0);
     const [ocultas, setOcultas] = useState<number[]>([]); // ids de opciones ocultas por 50-50
-    const [comodines, setComodines] = useState<{ '50-50': boolean; extra_time: boolean }>({
-        '50-50': true,
-        extra_time: true,
-    });
+
 
 
     /** ─── Quiz helpers (rellenar) ─────────────────────────────────── */
@@ -365,6 +548,11 @@ export default function DetalleRetoScreen() {
     const finishingRef = useRef(false);
 
 
+// Evita reintentos si el endpoint de comodines no existe (cachea el 404 en esta sesión del modal)
+    const powerupApiMissingRef = useRef<boolean>(false);
+
+// Evita reentradas mientras se usa un comodín (doble tap)
+    const usingPowerupRef = useRef<boolean>(false);
 
 
     // checklist state
@@ -451,7 +639,9 @@ export default function DetalleRetoScreen() {
                     estado: row.estado,
                     fechaObjetivo: row.fechaObjetivo,
                     ventanaInicio: row.ventanaInicio,
-                    ventanaFin: row.ventanaFin
+                    ventanaFin: row.ventanaFin,
+                    // 👇 NUEVO (intenta varios alias comunes)
+                    codUsuario: Number(row.codUsuario ?? row.cod_usuario ?? row.userId ?? row.usuarioId ?? NaN) || null,
                 });
             } else setUr(null);
         } catch {
@@ -497,6 +687,13 @@ export default function DetalleRetoScreen() {
     }, [resolviendo, idx, preguntaActual?.codPregunta, tiempoPorPregunta]);
 
 
+    useEffect(() => {
+        setUsedPowerupForQuestion(null);
+        setOcultas([]);
+    }, [idx, preguntaActual?.codPregunta]);
+
+
+
     /** Derivados */
     const hoy = dayjs().format('YYYY-MM-DD');
     const diaModal = s10(fechaParam || hoy);
@@ -519,6 +716,14 @@ export default function DetalleRetoScreen() {
         return 'No asignado';
     }, [ur, hoy]);
 
+    // Config del comodín de tiempo según metadata (formato/offset dinámico)
+    const extraTimeCfg = useMemo(() => {
+        const meta = (data?.metadataReto ?? (data as any)?.reto?.metadataReto ?? {}) as any;
+        return getExtraTimeConfig(meta);
+    }, [data?.metadataReto, (data as any)?.reto?.metadataReto]);
+
+
+
     const puedeResolver = useMemo(() => {
         if (!ur) return false;
         if (!esHoy) return false;
@@ -527,6 +732,154 @@ export default function DetalleRetoScreen() {
         return isDisponible && estadoOk;
     }, [ur, esHoy, estadoVisible]);
 
+
+    // Usa un snapshot (p. ej. la respuesta de /mis-retos/abrir)
+    const cargarComodinesDisponibles = async (source?: any): Promise<boolean> => {
+        const bag = source?.comodines ?? source?.inventario ?? source?.powerups ?? source?.inventory ?? null;
+        if (bag && typeof bag === 'object') {
+            setInv(normalizePowerups(bag));
+            return true;
+        }
+        return false;
+    };
+
+    // Fallback/refresh: trae inventario real y lo mapea a comodines
+    const cargarComodinesDesdeInventario = async (): Promise<void> => {
+        try {
+            const resp = await fetchJson<InventarioResponse>('/item-inventario/listar');
+            const arr = Array.isArray((resp as any)?.items) ? (resp as any).items as ItemInventario[] : [];
+            const norm = mapInventoryToPowerups(arr);
+            setInv(norm);
+        } catch {
+            // Si falla, dejamos el state como está (evita 404s y ruido de UI)
+        }
+    };
+
+
+    const serverTipoFromKey = (k: PowerupKey) => {
+        switch (k) {
+            case '50-50':         return '50-50';
+            case 'extra_time':    return 'mas_tiempo';
+            case 'streak_shield': return 'protector_racha';
+            case 'x2':            return 'double';
+            case 'phoenix':       return 'ave_fenix';
+            default:              return k as string;
+        }
+    };
+
+// Para backends que aceptan alias distintos, probamos varios hasta que uno pase.
+    const serverTipoCandidates = (k: PowerupKey): string[] => {
+        const main = serverTipoFromKey(k);
+        const alts: Record<PowerupKey, string[]> = {
+            '50-50':       ['50-50', 'fifty_fifty', 'fifty', '5050'],
+            extra_time:    ['mas_tiempo', 'extra_time', 'extraTime', 'tiempo_extra'],
+            streak_shield: ['protector_racha', 'streak_shield', 'shield', 'escudo'],
+            x2:            ['double', 'x2', 'double_points'],
+            phoenix:       ['ave_fenix', 'phoenix', 'fenix', 'fénix'],
+        };
+        const arr = alts[k] || [main];
+        return Array.from(new Set([main, ...arr]));
+    };
+
+
+// Guarda por pregunta el string EXACTO que aceptó el backend
+    const usedPowerupServerTypeRef = useRef<Record<number, string | undefined>>({});
+
+// Intenta registrar el uso en backend probando sinónimos hasta que uno funcione
+    const tryUsePowerupOnServer = async (
+        key: PowerupKey,
+        urId: number,
+        codPregunta?: number
+    ): Promise<string> => {
+        const candidates = serverTipoCandidates(key);
+        for (const tipo of candidates) {
+            try {
+                await fetchJson(
+                    `/mis-retos/${urId}/comodines/usar`,
+                    asJson({ codUsuarioReto: urId, codPregunta, tipo })
+                );
+                return tipo; // este es el que aceptó backend
+            } catch {
+                // pruebo siguiente alias
+            }
+        }
+        throw new Error('No se pudo registrar el uso del comodín en el servidor');
+    };
+
+
+
+    const usarComodin = async (
+        key: PowerupKey,
+        opts?: { sobrePreguntaId?: number; payload?: any }
+    ): Promise<boolean> => {
+        // Evita doble tap / reentradas
+        if (usingPowerupRef.current) return false;
+        usingPowerupRef.current = true;
+
+        try {
+            if (usedPowerupForQuestion) {
+                Alert.alert('Comodines', 'Solo puedes usar 1 comodín por pregunta.');
+                return false;
+            }
+            if ((inv[key] ?? 0) <= 0) {
+                Alert.alert('Comodines', 'No tienes este comodín disponible.');
+                return false;
+            }
+
+            // Descuento optimista + marca de uso para esta pregunta
+            setInv(prev => ({ ...prev, [key]: Math.max(0, (prev[key] ?? 0) - 1) }));
+            setUsedPowerupForQuestion(key);
+
+            const urId = Number(codUsuarioReto ?? ur?.codUsuarioReto ?? NaN) || null;
+            const codPregunta = opts?.sobrePreguntaId ?? preguntaActual?.codPregunta;
+
+            // Sin UR/Pregunta: consumo local (UI) y listo
+            if (!urId || !codPregunta) return true;
+
+            // Si ya sabemos que el endpoint no existe, no volvemos a postear (modo local)
+            if (powerupApiMissingRef.current) {
+                return true;
+            }
+
+            const tipo = serverTipoFromKey(key);
+            let body: any = { codUsuarioReto: urId, codPregunta, tipo };
+
+            if (key === 'extra_time') {
+                const seconds = Math.max(1, Math.floor(Number(opts?.payload?.seconds ?? 15) || 0));
+                const hasta = typeof opts?.payload?.hastaHHmm === 'string' ? opts?.payload?.hastaHHmm : undefined;
+                // Payload canónico para back
+                body = { ...body, segundos: seconds, ...(hasta ? { hasta } : {}) };
+            }
+
+            try {
+                await fetchJson(`/mis-retos/${urId}/comodines/usar`, asJson(body));
+                // Opcional: resync de inventario real
+                await cargarComodinesDesdeInventario().catch(() => {});
+                return true;
+            } catch (e: any) {
+                const msg = String(e?.message || '');
+                const is404 = e?.status === 404 || /404/.test(msg) || /Cannot POST/i.test(msg);
+                if (is404) {
+                    // Cachea el 404 para no volver a “golpear” este endpoint en esta sesión del modal
+                    powerupApiMissingRef.current = true;
+                    // Sin rollback: mantenemos el uso local del comodín
+                    return true;
+                }
+
+                // Otros errores: rollback y aviso
+                setInv(prev => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
+                setUsedPowerupForQuestion(null);
+                Alert.alert('Comodines', e?.message || 'No se pudo usar el comodín.');
+                return false;
+            }
+        } finally {
+            usingPowerupRef.current = false;
+        }
+    };
+
+
+
+
     /** Acciones base */
     const empezar = async () => {
         if (!data) return;
@@ -534,24 +887,35 @@ export default function DetalleRetoScreen() {
             Alert.alert('No disponible', 'Este reto no es resoluble ahora (no corresponde a hoy o está fuera de su ventana).');
             return;
         }
+
         try {
-            const r = await fetchJson<any>(`/mis-retos/abrir`, asJson({codReto: Number(id)}));
-// DESPUÉS (fallbacks por si la API devuelve otro nombre o ya existe la UR del día)
-            const idFromOpen = r?.codUsuarioReto ?? r?.id ?? ur?.codUsuarioReto ?? null;
-            if (!idFromOpen) {
-                throw new Error('No se obtuvo codUsuarioReto al abrir la sesión');
+            const r = await fetchJson<any>(`/mis-retos/abrir`, asJson({ codReto: Number(id) }));
+            const urId = r?.codUsuarioReto ?? r?.cod_usuario_reto ?? r?.id ?? ur?.codUsuarioReto ?? null;
+            if (!urId) throw new Error('No se obtuvo codUsuarioReto al abrir la sesión');
+
+            setCodUsuarioReto(urId);
+
+// 1) Intento con snapshot del "abrir"
+            const updatedFromOpen = await cargarComodinesDisponibles(r);
+
+// 2) Si el open NO trajo inventario/compatibles, cargo desde /item-inventario/listar
+            if (!updatedFromOpen) {
+                await cargarComodinesDesdeInventario();
             }
-            setCodUsuarioReto(idFromOpen);
+
+// ...resto sin cambios:
             setQuizStartedAt(Date.now());
             setSumTiempoSeg(0);
             setOkCount(0);
             setBadCount(0);
-
             setResolviendo(true);
+
         } catch (e: any) {
             Alert.alert('Ups', e?.message || 'No fue posible abrir el reto');
         }
     };
+
+
 
     /** VALIDACIÓN del checklist + estado del botón */
     const validarChecklist = (): { ok: boolean; faltantes: string[] } => {
@@ -730,6 +1094,7 @@ export default function DetalleRetoScreen() {
     const AnswerScreen = (): React.ReactNode => {
         if (!fbVisible || fbOk === null) return null;
         const ok = !!fbOk;
+
         return (
             <View style={{
                 position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
@@ -755,9 +1120,67 @@ export default function DetalleRetoScreen() {
                             {fbMsg}
                         </Text>
                     )}
-                    <Text style={{ marginTop: 14, color: '#374151' }}>
-                        Avanzando…
-                    </Text>
+
+                    {/* Botones especiales cuando es incorrecto */}
+                    {!ok && (inv.phoenix ?? 0) > 0 && !usedPowerupForQuestion && (
+                        <View style={{ marginTop: 16, width: '100%', gap: 10 }}>
+                            <Pressable
+                                onPress={async () => {
+                                    if (!(await usarComodin('phoenix'))) return;
+
+                                    if (fbTimer) clearTimeout(fbTimer);
+                                    // Descontar la mala recién contada
+                                    setBadCount(p => Math.max(0, p - 1));
+
+                                    if (preguntaActual) {
+                                        // Limpia la respuesta guardada para esta pregunta
+                                        setRespuestas((prevResp: any) => {
+                                            const next = { ...prevResp };
+                                            delete next[preguntaActual.codPregunta];
+                                            return next;
+                                        });
+
+                                        // Limpia el registro de correcto/incorrecto para esta pregunta
+                                        setAnsweredCorrect((prevMap: Record<number, boolean>) => {
+                                            const next = { ...prevMap };
+                                            delete next[preguntaActual.codPregunta];
+                                            return next;
+                                        });
+                                    }
+
+
+                                    setTiempo(tiempoPorPregunta);
+                                    setOcultas([]);
+                                    setFbVisible(false);
+                                }}
+                                style={{
+                                    backgroundColor: '#1d4ed8',
+                                    paddingVertical: 12, paddingHorizontal: 20, borderRadius: 999, alignItems: 'center'
+                                }}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '800' }}>Reintentar (Ave Fénix)</Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={async () => {
+                                    const f = advanceRef.current;
+                                    setFbVisible(false);
+                                    if (f) await f();
+                                }}
+                                style={{
+                                    backgroundColor: '#6b7280',
+                                    paddingVertical: 12, paddingHorizontal: 20, borderRadius: 999, alignItems: 'center'
+                                }}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '700' }}>Continuar</Text>
+                            </Pressable>
+                        </View>
+                    )}
+
+                    {/* Mensaje de avance automático cuando es correcto o no hay fénix */}
+                    {(ok || !(inv.phoenix ?? 0) || usedPowerupForQuestion) && (
+                        <Text style={{ marginTop: 14, color: '#374151' }}>Avanzando…</Text>
+                    )}
                 </View>
             </View>
         );
@@ -857,41 +1280,41 @@ export default function DetalleRetoScreen() {
     const ComodinesBar = () => {
         if (!resolviendo || !preguntaActual) return null;
 
-        // deshabilitar 50-50 si no es abcd
-        const fiftyEnabled = comodines['50-50'] && preguntaActual?.tipo === 'abcd';
+        const fiftyEnabled = (inv['50-50'] ?? 0) > 0 && preguntaActual?.tipo === 'abcd' && !usedPowerupForQuestion;
+        const extraEnabled = (inv.extra_time ?? 0) > 0 && !usedPowerupForQuestion;
+        const x2Enabled    = (inv.x2 ?? 0) > 0 && !usedPowerupForQuestion;
+        const shieldEnabled= (inv.streak_shield ?? 0) > 0 && !usedPowerupForQuestion && idx > 0;
 
         return (
             <View
                 style={{
                     position: 'absolute',
                     left: 0, right: 0, bottom: 0,
-                    paddingHorizontal: 16,
-                    paddingTop: 10,
-                    paddingBottom: 16, // deja aire con el borde inferior
-                    backgroundColor: colors.bg,
-                    borderTopWidth: 1,
-                    borderTopColor: colors.divider,
+                    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16,
+                    backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.divider,
                 }}
             >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                     {/* 50-50 */}
                     <Pressable
                         disabled={!fiftyEnabled}
-                        onPress={() => {
+                        onPress={async () => {
                             if (!preguntaActual?.opciones?.length) return;
-                            const visibles = preguntaActual.opciones.map(o => o.codOpcion);
-                            const dejar = 2;
-                            const aOcultar = [...visibles]
-                                .sort(() => Math.random() - 0.5)
-                                .slice(0, Math.max(0, visibles.length - dejar));
-                            setOcultas(aOcultar);
-                            setComodines(s => ({ ...s, ['50-50']: false }));
+                            if (!(await usarComodin('50-50'))) return;
+
+                            const ops = preguntaActual.opciones;
+                            const correcta = ops.find(o => Number(o.correcta) === 1);
+                            const incorrectas = ops.filter(o => Number(o.correcta) !== 1);
+                            if (!correcta || incorrectas.length < 2) {
+                                Alert.alert('50-50', 'No se puede aplicar (no hay suficientes opciones incorrectas).');
+                                return;
+                            }
+                            const shuffled = [...incorrectas].sort(() => Math.random() - 0.5);
+                            const ocultar = shuffled.slice(0, 2).map(x => x.codOpcion);
+                            setOcultas(ocultar);
                         }}
                         style={{
-                            flex: 1,
-                            paddingVertical: 12,
-                            borderRadius: 12,
-                            alignItems: 'center',
+                            flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
                             backgroundColor: fiftyEnabled ? colors.primary : colors.divider
                         }}
                     >
@@ -899,21 +1322,82 @@ export default function DetalleRetoScreen() {
                     </Pressable>
 
                     {/* +15s */}
+                    {/* Extra tiempo (dinámico; se recalcula al click) */}
                     <Pressable
-                        disabled={!comodines.extra_time}
-                        onPress={() => {
-                            setTiempo(t => t + 15);
-                            setComodines(s => ({ ...s, extra_time: false }));
+                        disabled={!extraEnabled}
+                        onPress={async () => {
+                            // Recalcula segundos “ahora” (para soportar correctamente el caso “→ HH:mm”)
+                            const metaNow = (data?.metadataReto ?? (data as any)?.reto?.metadataReto ?? {}) as any;
+                            const cfgNow = getExtraTimeConfig(metaNow); // { seconds, format, label, hastaHHmm }
+
+                            const payload = {
+                                seconds: cfgNow.seconds,
+                                format: cfgNow.format,
+                                hastaHHmm: cfgNow.hastaHHmm,
+                            };
+
+                            const ok = await usarComodin('extra_time', { payload, sobrePreguntaId: preguntaActual?.codPregunta });
+                            if (!ok) return;
+
+                            // Aplica el delta local. Si venía “hasta HH:mm”, seconds ya es el diff calculado “ahora”.
+                            setTiempo(t => Math.max(0, t) + Math.max(1, Math.floor(cfgNow.seconds || 0)));
                         }}
                         style={{
-                            flex: 1,
-                            paddingVertical: 12,
-                            borderRadius: 12,
-                            alignItems: 'center',
-                            backgroundColor: comodines.extra_time ? colors.primary : colors.divider
+                            flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
+                            backgroundColor: extraEnabled ? colors.primary : colors.divider
                         }}
                     >
-                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>+15s</Text>
+                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>
+                            {extraTimeCfg?.label ?? '+15s'}
+                        </Text>
+                    </Pressable>
+
+
+
+
+                    {/* x2 */}
+                    <Pressable
+                        disabled={!x2Enabled}
+                        onPress={async () => {
+                            if (!(await usarComodin('x2'))) return;
+                            setX2AppliedTo(prev => {
+                                const next = new Set(prev);
+                                next.add(preguntaActual.codPregunta);
+                                return next;
+                            });
+                        }}
+                        style={{
+                            flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
+                            backgroundColor: x2Enabled ? colors.primary : colors.divider
+                        }}
+                    >
+                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>x2</Text>
+                    </Pressable>
+
+                    {/* Protector de racha */}
+                    <Pressable
+                        disabled={!shieldEnabled}
+                        onPress={async () => {
+                            const prevIdx = idx - 1;
+                            const prevQ = data?.quiz?.preguntas?.[prevIdx];
+                            if (!prevQ) return;
+
+                            if (answeredCorrect[prevQ.codPregunta] !== false) {
+                                Alert.alert('Protector de racha', 'No tienes una respuesta anterior incorrecta que proteger.');
+                                return;
+                            }
+                            if (!(await usarComodin('streak_shield', { sobrePreguntaId: prevQ.codPregunta }))) return;
+
+                            setBadCount(p => Math.max(0, p - 1));
+                            setOkCount(p => p + 1);
+                            setAnsweredCorrect(prev => ({ ...prev, [prevQ.codPregunta]: true }));
+                        }}
+                        style={{
+                            flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
+                            backgroundColor: shieldEnabled ? colors.primary : colors.divider
+                        }}
+                    >
+                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>Racha</Text>
                     </Pressable>
                 </View>
             </View>
@@ -998,15 +1482,12 @@ export default function DetalleRetoScreen() {
                 `/mis-retos/${curUR}/quiz/responder`,
                 asJson({
                     codUsuarioReto: curUR,
-                    //codUsuarioReto,
                     codPregunta: preguntaActual.codPregunta,
                     valor,
                     tiempoSeg,
-                    comodinesUsados: Object.entries(comodines)
-                        .filter(([, disponible]) => !disponible)
-                        .map(([k]) => k),
                 })
             );
+
 
             // ── Feedback inmediato (si el back lo envía) ─────────────────
             let fueCorrecta: boolean | null = null;
@@ -1037,18 +1518,20 @@ export default function DetalleRetoScreen() {
                 fueCorrecta = esRellenarCorrecto(preguntaActual as any, txt);
             }
 
-            // ── Acumular métricas LOCALES primero ─────────────────────────
+            setAnsweredCorrect(prev => ({ ...prev, [preguntaActual.codPregunta]: !!fueCorrecta }));
+
+// ── Acumular métricas LOCALES ─────────────────────────────────────
             const fueOK = (fueCorrecta === true); // null/false => incorrecta
             const nextTiempo = sumTiempoSeg + tiempoSeg;
             const nextOk = okCount + (fueOK ? 1 : 0);
             const nextBad = badCount + (fueOK ? 0 : 1);
 
-            // actualiza estado (pintará después)
+// actualiza estado (pintará después)
             setSumTiempoSeg(p => p + tiempoSeg);
             if (fueOK) setOkCount(p => p + 1);
             else setBadCount(p => p + 1);
 
-            // ── Avance/finalización ───────────────────────────────────────
+// ── Avance/finalización ───────────────────────────────────────────
             const total = data.quiz?.preguntas?.length ?? 0;
             const esUltima = (idx + 1) >= total;
 
@@ -1061,18 +1544,31 @@ export default function DetalleRetoScreen() {
                 }
             };
 
+// ✅ Usa la MISMA fueOK; calcula disponibilidad de Fénix aquí
+            const phoenixDisponible = (inv.phoenix ?? 0) > 0 && !usedPowerupForQuestion;
+
             if (fueCorrecta !== null) {
                 if (fbTimer) clearTimeout(fbTimer);
                 setFbOk(fueCorrecta);
                 setFbVisible(true);
-                const t = setTimeout(async () => {
-                    setFbVisible(false);
-                    await avanzar();
-                }, 1000);
-                setFbTimer(t);
+
+                if (!fueOK && phoenixDisponible) {
+                    // no avanzamos; guardamos el avance para "Continuar"
+                    advanceRef.current = async () => {
+                        setFbVisible(false);
+                        await avanzar();
+                    };
+                } else {
+                    const t = setTimeout(async () => {
+                        setFbVisible(false);
+                        await avanzar();
+                    }, 1000);
+                    setFbTimer(t);
+                }
             } else {
                 await avanzar();
             }
+
 
         } catch (e: any) {
             Alert.alert('Ups', e?.message || 'No pudimos guardar tu respuesta');
@@ -1088,20 +1584,32 @@ export default function DetalleRetoScreen() {
         const computeRewards = (ok: number, bad: number) => {
             const meta: any = (data?.metadataReto ?? (data as any)?.reto?.metadataReto ?? {}) as any;
 
-            const xpOk    = Number(meta?.xpCorrecta ?? 0);
-            const xpBad   = Number(meta?.xpIncorrecta ?? 0);
-            const cOk     = Number(meta?.monedasCorrecta ?? 0);
-            const cBad    = Number(meta?.monedasIncorrecta ?? 0);
+            const xpOk  = Number(meta?.xpCorrecta ?? 0);
+            const xpBad = Number(meta?.xpIncorrecta ?? 0);
+            const cOk   = Number(meta?.monedasCorrecta ?? 0);
+            const cBad  = Number(meta?.monedasIncorrecta ?? 0);
 
-            // 🏁 "Ganar": al menos 1 correcta. Cambia aquí si quieres otro umbral.
-            const gano = ok > 0;
+            // Correctas que además tenían x2 activado
+            let x2CorrectCount = 0;
+            x2AppliedTo.forEach(qid => {
+                if (answeredCorrect[qid]) x2CorrectCount += 1;
+            });
 
-            // Paga por pregunta (correcta/incorrecta) y aplica la regla de "gano"
+            // Base por pregunta
             const baseXP    = ok * xpOk + bad * xpBad;
             const baseCoins = ok * cOk  + bad * cBad;
 
-            return { xp: gano ? baseXP : 0, coins: gano ? baseCoins : 0 };
+            // Bonus x2: se agrega de nuevo el premio por cada correcta con x2
+            const bonusXP    = x2CorrectCount * xpOk;
+            const bonusCoins = x2CorrectCount * cOk;
+
+            const gano = ok > 0; // regla: al menos una correcta
+            return {
+                xp:   gano ? (baseXP + bonusXP) : 0,
+                coins:gano ? (baseCoins + bonusCoins) : 0,
+            };
         };
+
 
         // 🟡 Fallback local (sin UR / sin backend): mostramos resumen del QUIZ
         if (!curUR) {
@@ -1131,25 +1639,17 @@ export default function DetalleRetoScreen() {
                 asJson({ codUsuarioReto: curUR })
             );
 
+            await cargarComodinesDesdeInventario().catch(() => {}); // opcional
+
             if (data?.tipoReto === 'quiz') {
                 const totalSeg = totals?.tiempo ?? sumTiempoSeg;
                 const ok  = totals?.ok  ?? okCount;
                 const bad = totals?.bad ?? badCount;
-
                 const { xp, coins } = computeRewards(ok, bad);
-
-                setSummary({
-                    visible: true,
-                    tiempoTotal: totalSeg,
-                    ok,
-                    bad,
-                    xp,
-                    coins,
-                });
-                return; // la navegación se hace en "Continuar"
+                setSummary({ visible: true, tiempoTotal: totalSeg, ok, bad, xp, coins });
+                return;
             }
 
-            // No-quiz: deja el comportamiento clásico
             Alert.alert('Reto completado', 'Tu formulario fue enviado.');
             markModalClosed();
             router.back();
@@ -1259,7 +1759,7 @@ export default function DetalleRetoScreen() {
                         <SectionHeaderRow/>
                         <View style={styles.hSep}/>
 
-                        {defs.map((def, idx) => {
+                        {defs.map((def, iDef) => {
                             const fallback: ItemValor = {
                                 n: def.n,
                                 selector: def.selector,
@@ -1267,8 +1767,7 @@ export default function DetalleRetoScreen() {
                                 observacion: ''
                             };
                             const val = itemsVals.find(x => x.n === def.n) ?? fallback;
-                            const zebra = (idx % 2 === 0) ? {backgroundColor: colors.mutedBg} : null;
-                            return (
+                            const zebra = (iDef % 2 === 0) ? {backgroundColor: colors.mutedBg} : null;                            return (
                                 <View key={def.n} style={[{borderRadius: 10, padding: 8, marginBottom: 6}, zebra]}>
                                     <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
                                         {/* Item # */}
