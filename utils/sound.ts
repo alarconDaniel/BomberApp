@@ -3,11 +3,13 @@ import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 
 let enabled = true;
 
-type SoundKey = 'monedas' | 'toggle';
+type SoundKey = 'monedas' | 'switch' | 'claxon' | 'reversa';
 
 const SOUND_FILES: Record<SoundKey, number> = {
-    toggle: require('../assets/sounds/toggle.wav'),
-    monedas: require('../assets/sounds/monedas.wav'), // 👈 corregido: key correcta
+    switch: require('../assets/sounds/switch.wav'),
+    monedas: require('../assets/sounds/monedas.wav'),
+    claxon: require('../assets/sounds/claxon.wav'),
+    reversa: require('../assets/sounds/reversa.wav'),
 };
 
 const cache = new Map<SoundKey, Audio.Sound>();
@@ -28,23 +30,19 @@ export async function initSoundEngine() {
             playThroughEarpieceAndroid: false,
         });
     } catch {
-        // Nunca romper la UI por audio
     }
 }
 
-/** Habilita/inhabilita globalmente los efectos de sonido. */
 export function setSoundsEnabled(value: boolean) {
     enabled = value;
 }
 
-/** Obtiene (y si hace falta crea) la instancia de Audio.Sound para una key. */
 async function getOrCreateSound(key: SoundKey): Promise<Audio.Sound> {
     let sound = cache.get(key);
     if (!sound) {
         sound = new Audio.Sound();
         cache.set(key, sound);
     }
-    // Cargar solo si no está cargado
     try {
         const status = await sound.getStatusAsync();
 
@@ -58,26 +56,21 @@ async function getOrCreateSound(key: SoundKey): Promise<Audio.Sound> {
             await sound.unloadAsync().catch(() => {});
             await sound.loadAsync(SOUND_FILES[key], { shouldPlay: false }, true);
         } catch {
-            // seguir silenciosamente
         }
     }
     return sound;
 }
 
-/** Reproduce un sonido corto; si no está cargado, lo carga y lo cachea. */
 export async function play(key: SoundKey) {
     if (!enabled) return;
     try {
         const sound = await getOrCreateSound(key);
 
-        // Si ya está sonando, reinicia desde el inicio. replayAsync lo hace en 1 llamada.
         await sound.replayAsync();
     } catch {
-        // Nunca lanzar por audio
     }
 }
 
-/** Libera recursos (opcional). A prueba de bombas. */
 export async function unloadAll() {
     const tasks: Promise<void>[] = [];
 
@@ -87,7 +80,6 @@ export async function unloadAll() {
         tasks.push(
             (async () => {
                 try {
-                    // Solo intenta descargar si está cargado
                     const status = await sound.getStatusAsync().catch(() => null);
                     const isLoaded =
                         status && typeof status === 'object' && 'isLoaded' in status
@@ -99,7 +91,6 @@ export async function unloadAll() {
                         await sound.unloadAsync();
                     }
                 } catch {
-                    // ignorar cualquier cosa (ya descargado, estado inválido, etc.)
                 }
             })()
         );
@@ -109,7 +100,6 @@ export async function unloadAll() {
     try {
         await Promise.all(tasks);
     } catch {
-        // ignorar errores de descarga
     }
 }
 
