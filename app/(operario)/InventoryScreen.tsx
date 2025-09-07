@@ -20,6 +20,8 @@ import DetailsInventoryItemModal from "../../components/operario/DetailsInventor
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import ChestOpenModal from '../../components/operario/ChestOpenModal';
+import { Image } from 'react-native';
+import { resolveItemIconFromBd } from '../../config/icons/itemIcons';
 
 export default function InventoryScreen() {
     const {fetchJson} = useAuth();
@@ -236,8 +238,13 @@ export default function InventoryScreen() {
                             onPress={() => openDetails(item)}
                         >
                             <View style={[styles.imageBox, {width: CARD_W, height: CARD_W / CARD_RATIO}]}>
-                                <View style={[styles.cross, {transform: [{rotate: '45deg'}]}]}/>
-                                <View style={[styles.cross, {transform: [{rotate: '-45deg'}]}]}/>
+                                {/* reemplaza las cruces por la imagen */}
+                                <Image
+                                    source={resolveItemIconFromBd(item.item.icon)}
+                                    style={{ width: '70%', height: '70%' }}
+                                    resizeMode="contain"
+                                />
+
                                 <View style={styles.badge}>
                                     <Text style={g.text.captionStrong}>x{item.cantidad}</Text>
                                 </View>

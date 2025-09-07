@@ -19,7 +19,9 @@ type SectionKey = 'POTENCIADOR' | 'COFRE' | 'ROPA';
 type Section = { key: SectionKey; title: string; items: ItemTienda[] };
 
 function toItemTienda(raw: any): ItemTienda {
-    const meta = typeof raw.metadataItem === 'string' ? JSON.parse(raw.metadataItem) : raw.metadataItem ?? {};
+    const meta = typeof raw.metadataItem === 'string' ? JSON.parse(raw.metadataItem) : (raw.metadataItem ?? {});
+    const iconoPath = raw.iconoPath; // 👈 toma la ruta/slug de la BD
+
     return new ItemTienda(
         raw.codItem ?? raw.cod ?? 0,
         raw.nombreItem ?? raw.nombre ?? 'Item',
@@ -28,6 +30,7 @@ function toItemTienda(raw: any): ItemTienda {
         String(raw.tipoItem ?? raw.tipo ?? '').toUpperCase(),
         meta,
         !!raw.yaPosee,
+        iconoPath, // 👈 NUEVO
     );
 }
 
@@ -65,8 +68,10 @@ export default function StoreScreen() {
             setCargando(true);
             setError(null);
             const resultado = await fetchJson<any>('/item-tienda/listar');
+            console.log('[tienda] raw:', JSON.stringify(resultado)?.slice(0, 1200));
             const arr = Array.isArray(resultado) ? resultado : resultado?.items ?? [];
             const mapeados: ItemTienda[] = (arr ?? []).map(toItemTienda);
+            console.log('mapeados:', JSON.stringify(mapeados)?.slice(0, 1200));
             setItems(mapeados);
         } catch (e: any) {
             setError(e?.message || 'Error cargando tienda');

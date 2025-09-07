@@ -9,6 +9,7 @@ import { useTheme } from '../../theme/ThemeProvider';
 import {useMarkModalOnClose} from "../../navigation/useMarkModalOnClose";
 import {markModalClosed} from "../../navigation/ModalTracker";
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
+import { resolveLogroIconFromBd } from '../../config/icons/logroIcons';
 
 export default function LogrosModalScreen() {
     useMarkModalOnClose();
@@ -64,16 +65,23 @@ export default function LogrosModalScreen() {
                 popHint: { marginTop: 6 },
                 popDate: { marginTop: 6, color: isDark ? colors.success : '#0f766e' },
                 popClose: { marginTop: 12, alignSelf: 'flex-end', backgroundColor: isDark ? colors.primary : '#111827', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 999 },
+
+                popIconWrap: { alignItems: 'center', marginBottom: 10 },
+                popIcon:     { width: 112, height: 112, borderRadius: 16, backgroundColor: isDark ? colors.imageBg : '#F1F5F9' },
+
             }),
         [colors, isDark]
     );
 
     const renderItem = ({ item }: { item: Logro }) => {
-        const uri = item.icono.startsWith('http') ? item.icono : `${baseUrl}${item.icono}`;
         return (
             <Pressable style={s.gridItem} onPress={() => setSelected(item)}>
                 <View style={s.iconWrap}>
-                    <Image source={{ uri }} style={[s.icon, item.bloqueado && s.iconLocked]} />
+                    <Image
+                        source={resolveLogroIconFromBd(item.icono)}
+                        style={[s.icon, item.bloqueado && s.iconLocked]}
+                        resizeMode="cover"
+                    />
                     {item.bloqueado && <View style={s.lockOverlay} />}
                 </View>
                 <Text style={[g.text.captionStrong, s.name]} numberOfLines={2}>{item.nombre}</Text>
@@ -121,18 +129,42 @@ export default function LogrosModalScreen() {
                 <Modal visible transparent animationType="fade" onRequestClose={() => setSelected(null)}>
                     <Pressable style={s.popBackdrop} onPress={() => setSelected(null)}>
                         <View style={s.popCard}>
+
+                            {/* 👇 NUEVO: icono grande del logro */}
+                            <View style={s.popIconWrap}>
+                                <Image
+                                    source={resolveLogroIconFromBd(selected.icono)}
+                                    style={s.popIcon}
+                                    resizeMode="contain"
+                                />
+                            </View>
+
                             <Text style={[g.text.title, s.popTitle]}>{selected.nombre}</Text>
                             <Text style={[g.text.body, g.text.secondary, s.popDesc]}>{selected.descripcion}</Text>
-                            <Text style={[g.text.smallStrong, s.popReward]}>Recompensa: {selected.recompensa}</Text>
-                            {selected.bloqueado && <Text style={[g.text.caption, g.text.muted, s.popHint]}>Sigue completando retos para desbloquearlo 🔓</Text>}
-                            {!selected.bloqueado && !!selected.fechaFormateada && (
-                                <Text style={[g.text.caption, s.popDate]}>Obtenido el {selected.fechaFormateada}</Text>
+                            <Text style={[g.text.smallStrong, s.popReward]}>
+                                Recompensa: {selected.recompensa}
+                            </Text>
+
+                            {selected.bloqueado && (
+                                <Text style={[g.text.caption, g.text.muted, s.popHint]}>
+                                    Sigue completando retos para desbloquearlo 🔓
+                                </Text>
                             )}
-                            <Pressable onPress={() => setSelected(null)} style={s.popClose}><Text style={[g.text.smallStrong, g.text.onPrimary]}>Listo</Text></Pressable>
+
+                            {!selected.bloqueado && !!selected.fechaFormateada && (
+                                <Text style={[g.text.caption, s.popDate]}>
+                                    Obtenido el {selected.fechaFormateada}
+                                </Text>
+                            )}
+
+                            <Pressable onPress={() => setSelected(null)} style={s.popClose}>
+                                <Text style={[g.text.smallStrong, g.text.onPrimary]}>Listo</Text>
+                            </Pressable>
                         </View>
                     </Pressable>
                 </Modal>
             )}
+
         </SafeAreaView>
     );
 }

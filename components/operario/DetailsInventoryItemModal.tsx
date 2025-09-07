@@ -1,11 +1,12 @@
 // components/operario/DetailsInventoryItemModal.tsx
 import React from 'react';
-import { Modal, View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
+import {Modal, View, Text, Pressable, StyleSheet, Dimensions, Image} from 'react-native';
 import { BlurView } from 'expo-blur';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { ItemInventario } from '../../models/ItemInventario';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
+import { resolveItemIconFromBd } from '../../config/icons/itemIcons';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -45,6 +46,10 @@ export default function DetailsInventoryItemModal({
     const cantidad = Number(item.cantidad ?? 0);
     const fecha = item.fecha ? new Date(item.fecha) : null;
     const tipo = String(item.item?.tipo ?? '').toUpperCase();
+
+    const bdIcon = item.item.icon;
+    const localImg = resolveItemIconFromBd(bdIcon);
+
 
     const iconName = tipo === 'COFRE'
         ? 'box-open'
@@ -123,7 +128,8 @@ export default function DetailsInventoryItemModal({
 
                     <View style={s.mediaRow}>
                         <View style={s.iconWrap}>
-                            <FontAwesome5 name={iconName as any} size={48} color={accentColor || colors.primary} />
+                            {/* reemplaza el FontAwesome por el PNG local */}
+                            <Image source={localImg} style={{ width: 92, height: 92, borderRadius: 12 }} resizeMode="contain" />
                         </View>
 
                         <View style={{ flex: 1 }}>
