@@ -1,4 +1,4 @@
-// app/(admin)/(tabs)/operarios/index.tsx
+// app/(admin)/OperariosScreen.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView, View, Text, StyleSheet, TextInput, TouchableOpacity,
@@ -44,7 +44,7 @@ function mapUsuarioToUI(u: UsuarioListDTO): OperarioUI {
 }
 
 const getInitial = (name: string) =>
-  (name || '').trim().charAt(0).toUpperCase() || '?';
+    (name || '').trim().charAt(0).toUpperCase() || '?';
 
 /** color pastel estable por id (hash tonto) */
 function pastelFromId(id: string) {
@@ -69,6 +69,19 @@ export default function OperariosScreen() {
   const [cargando, setCargando] = useState(false);
   const [refrescando, setRefrescando] = useState(false);
 
+  // 👇 Nuevo: id del usuario actual
+  const [myId, setMyId] = useState<string | null>(null);
+
+  const cargarMe = useCallback(async () => {
+    try {
+      const me = await fetchJson<UsuarioListDTO>('/usuario/me');
+      if (me && typeof me.codUsuario === 'number') setMyId(String(me.codUsuario));
+    } catch {
+      // Si falla, no bloqueamos la pantalla; el backend igual protege.
+      setMyId(null);
+    }
+  }, [fetchJson]);
+
   const listar = useCallback(async () => {
     try {
       setCargando(true);
@@ -87,17 +100,32 @@ export default function OperariosScreen() {
       setRefrescando(true);
       const json = await fetchJson<UsuarioListDTO[]>('/usuario/listar');
       setData((Array.isArray(json) ? json : []).map(mapUsuarioToUI));
+      await cargarMe(); // mantener me en sync por si acaso
     } catch {
       // silencio
     } finally {
       setRefrescando(false);
     }
-  }, [fetchJson]);
+  }, [fetchJson, cargarMe]);
 
-  useEffect(() => { listar(); }, [listar]);
-  useFocusEffect(useCallback(() => { listar(); }, [listar]));
+  useEffect(() => {
+    // Carga inicial de lista y del usuario actual
+    listar();
+    cargarMe();
+  }, [listar, cargarMe]);
+
+  useFocusEffect(useCallback(() => {
+    listar();
+    cargarMe();
+  }, [listar, cargarMe]));
 
   const borrar = (id: string) => {
+    // 🛡️ Bloqueo client-side: no permitir intento de auto-eliminación
+    if (myId && id === myId) {
+      Alert.alert('Acción no permitida', 'No puedes eliminarte a ti mismo 🤺');
+      return;
+    }
+
     Alert.alert('Confirmar', '¿Deseas borrar este usuario?', [
       { text: 'Cancelar', style: 'cancel' },
       {
@@ -108,9 +136,12 @@ export default function OperariosScreen() {
             setCargando(true);
             await fetchJson(`/usuario/borrar/${Number(id)}`, { method: 'DELETE' });
             await listar();
+            await cargarMe();
           } catch (e: any) {
             const msg = String(e?.message || '');
-            if (/409/.test(msg) || /1451|referenciad/i.test(msg)) {
+            if (/403/.test(msg) || /propi/i.test(msg)) {
+              Alert.alert('Acción no permitida', 'No puedes eliminar tu propio usuario');
+            } else if (/409/.test(msg) || /1451|referenciad/i.test(msg)) {
               Alert.alert('No se puede borrar', 'El usuario está referenciado por otros registros.');
             } else if (/404/.test(msg)) {
               Alert.alert('No existe', 'Usuario no encontrado');
@@ -131,123 +162,145 @@ export default function OperariosScreen() {
   }, [query, data]);
 
   return (
-    <FadeWrapper>
-      <SafeAreaView style={[s.container, { paddingTop: (insets.top || 8) }]}>
-        {/* Header */}
-        <View style={s.header}>
-          <Text style={g.text.h2}>Operarios</Text>
+      <FadeWrapper>
+        <SafeAreaView style={[s.container, { paddingTop: (insets.top || 8) }]}>
+          {/* Header */}
+          <View style={s.header}>
+            <Text style={[g.text.h1, {textAlign: "center", alignSelf: "center", paddingTop: 10}]}>Operarios</Text>
 
-          <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: '/(admin)/(tabs)/operarios/OperarioFormScreen',
-                params: { mode: 'create' },
-              })
-            }
-            style={s.primaryBtn}
-            activeOpacity={0.9}
-          >
-            <Ionicons name="person-add" size={18} color="#fff" />
-            <Text style={[g.text.onPrimary, { marginLeft: 6 }]}>Crear</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Buscador */}
-        <View style={s.searchWrap}>
-          <Ionicons name="search" size={16} color={colors.mutedText} style={{ marginHorizontal: 8 }} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Buscar un operario"
-            placeholderTextColor={colors.mutedText}
-            style={s.searchInput}
-          />
-          <TouchableOpacity style={s.refreshBtn} onPress={listar} accessibilityLabel="Actualizar">
-            <Ionicons name="refresh" size={18} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Lista */}
-        {cargando ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator />
-          </View>
-        ) : (
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <OperarioItem
-                item={item}
-                onEdit={() =>
-                  router.push({
-                    pathname: '/(admin)/(tabs)/operarios/OperarioFormScreen',
-                    params: { mode: 'edit', id: String(item.id) },
-                  })
+            <TouchableOpacity
+                onPress={() =>
+                    router.push({
+                      // 🟣 ABRE MODAL para crear
+                      pathname: '/(modals)/admin/operario-form',
+                      params: { mode: 'create' },
+                    })
                 }
-                onDelete={() => borrar(item.id)}
-                c={colors}
-              />
-            )}
-            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-            contentContainerStyle={{ padding: 16, paddingBottom: FOOTER_HEIGHT + 20 }}
-            showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refrescando} onRefresh={refrescar} />}
-            ListEmptyComponent={
-              <View style={{ padding: 20, alignItems: 'center' }}>
-                <Text style={{ opacity: 0.6 }}>Sin usuarios</Text>
+                style={s.primaryBtn}
+                activeOpacity={0.9}
+            >
+              <Ionicons name="person-add" size={18} color="#fff" />
+              <Text style={[g.text.onPrimary, { marginLeft: 6 }]}>Crear</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Buscador */}
+          <View style={s.searchWrap}>
+            <Ionicons name="search" size={16} color={colors.mutedText} style={{ marginHorizontal: 8 }} />
+            <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Buscar un operario"
+                placeholderTextColor={colors.mutedText}
+                style={s.searchInput}
+            />
+            <TouchableOpacity style={s.refreshBtn} onPress={listar} accessibilityLabel="Actualizar">
+              <Ionicons name="refresh" size={18} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Lista */}
+          {cargando ? (
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator />
               </View>
-            }
-          />
-        )}
-      </SafeAreaView>
-    </FadeWrapper>
+          ) : (
+              <FlatList
+                  data={filtered}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => (
+                      <OperarioItem
+                          item={item}
+                          myId={myId}
+                          onEdit={() =>
+                              router.push({
+                                // 🟣 ABRE MODAL para editar
+                                pathname: '/(modals)/admin/operario-form',
+                                params: { mode: 'edit', id: String(item.id) },
+                              })
+                          }
+                          onDelete={() => borrar(item.id)}
+                          c={colors}
+                      />
+                  )}
+                  ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+                  contentContainerStyle={{ padding: 16, paddingBottom: FOOTER_HEIGHT + 20 }}
+                  showsVerticalScrollIndicator={false}
+                  refreshControl={<RefreshControl refreshing={refrescando} onRefresh={refrescar} />}
+                  ListEmptyComponent={
+                    <View style={{ padding: 20, alignItems: 'center' }}>
+                      <Text style={{ opacity: 0.6 }}>Sin usuarios</Text>
+                    </View>
+                  }
+              />
+          )}
+        </SafeAreaView>
+      </FadeWrapper>
   );
 }
 
 /* ---------- Item ---------- */
 function OperarioItem({
-  item,
-  onEdit,
-  onDelete,
-  c,
-}: {
+                        item,
+                        myId,
+                        onEdit,
+                        onDelete,
+                        c,
+                      }: {
   item: OperarioUI;
+  myId: string | null;
   onEdit: () => void;
   onDelete: () => void;
   c: import('../../theme/ThemeProvider').Palette;
 }) {
   const initial = getInitial(item.nombre);
+  const isSelf = myId && item.id === myId;
+
   return (
-    <View style={[itemStyles.card, { backgroundColor: c.card, borderColor: c.tabBorder }]}>
-      <View style={[itemStyles.avatar, { backgroundColor: pastelFromId(item.id) }]}>
-        <Text style={itemStyles.avatarText}>{initial}</Text>
-      </View>
+      <View style={[itemStyles.card, { backgroundColor: c.card, borderColor: c.tabBorder }]}>
+        <View style={[itemStyles.avatar, { backgroundColor: pastelFromId(item.id) }]}>
+          <Text style={itemStyles.avatarText}>{initial}</Text>
+        </View>
 
-      <View style={itemStyles.info}>
-        <Text numberOfLines={1} style={[itemStyles.name, { color: c.text }]}>{item.nombre}</Text>
-        <Text style={[itemStyles.role, { color: c.mutedText }]}>{item.cargo}</Text>
-      </View>
+        <View style={itemStyles.info}>
+          <Text numberOfLines={1} style={[itemStyles.name, { color: c.text }]}>{item.nombre}</Text>
+          <Text style={[itemStyles.role, { color: c.mutedText }]}>{item.cargo}</Text>
+        </View>
 
-      <View style={itemStyles.actions}>
-        <TouchableOpacity
-          onPress={onEdit}
-          style={[itemStyles.iconBtn, { backgroundColor: c.mutedBg, borderColor: c.outline }]}
-          activeOpacity={0.85}
-          accessibilityLabel="Editar"
-        >
-          <Ionicons name="create-outline" size={16} color={c.text} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={onDelete}
-          style={[itemStyles.iconBtn, { backgroundColor: c.danger, borderColor: c.danger }]}
-          activeOpacity={0.85}
-          accessibilityLabel="Eliminar"
-        >
-          <Ionicons name="trash-outline" size={16} color="#fff" />
-        </TouchableOpacity>
+        <View style={itemStyles.actions}>
+          <TouchableOpacity
+              onPress={onEdit}
+              style={[itemStyles.iconBtn, { backgroundColor: c.mutedBg, borderColor: c.outline }]}
+              activeOpacity={0.85}
+              accessibilityLabel="Editar"
+          >
+            <Ionicons name="create-outline" size={16} color={c.text} />
+          </TouchableOpacity>
+
+          {/* Botón borrar: deshabilitado si soy yo mismo */}
+          <TouchableOpacity
+              onPress={() => {
+                if (isSelf) {
+                  Alert.alert('Acción no permitida', 'No puedes eliminarte a ti mismo 🤺');
+                  return;
+                }
+                onDelete();
+              }}
+              style={[
+                itemStyles.iconBtn,
+                {
+                  backgroundColor: isSelf ? c.mutedBg : c.danger,
+                  borderColor: isSelf ? c.outline : c.danger,
+                  opacity: isSelf ? 0.5 : 1,
+                },
+              ]}
+              activeOpacity={0.85}
+              accessibilityLabel={isSelf ? 'Eliminar (deshabilitado para tu propio usuario)' : 'Eliminar'}
+          >
+            <Ionicons name="trash-outline" size={16} color={isSelf ? c.text : '#fff'} />
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
   );
 }
 

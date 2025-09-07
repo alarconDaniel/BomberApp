@@ -35,6 +35,24 @@ export default function SettingsScreen() {
               <SettingRow
                   colors={colors}
                   text={text}
+                  icon={<Ionicons name="notifications-outline" size={22} color={colors.text} />}
+                  label="Notificaciones"
+                  right={
+                    <Switch
+                        value={notif}
+                        onValueChange={setNotif}
+                        trackColor={{ false: '#dbeafe', true: colors.primarySoft }}
+                        thumbColor={notif ? colors.primary : '#fff'}
+                    />
+                  }
+                  subtitle="Avisos de actividad y recordatorios"
+              />
+
+              <Divider colors={colors} />
+
+              <SettingRow
+                  colors={colors}
+                  text={text}
                   icon={<Ionicons name="volume-high-outline" size={22} color={colors.text} />}
                   label="Sonidos de la app"
                   right={
