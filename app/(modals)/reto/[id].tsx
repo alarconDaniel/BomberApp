@@ -50,6 +50,14 @@ export default function DetalleRetoScreen() {
     const [codUsuarioReto, setCodUsuarioReto] = useState<number|null>(null);
     const [ur, setUr] = useState<InstanciaUR|null>(null);
 
+    const [preguntasQuiz, setPreguntasQuiz] = useState<any[]>([]);
+
+    const onFinishQuiz = ({ xp, coins, nuevaRacha }: any) => {
+        const extra = nuevaRacha ? `\n🔥 Racha: ${nuevaRacha} día${nuevaRacha===1?'':'s'}` : '';
+        Alert.alert('Reto completado', `+${xp} XP, +${coins} monedas${extra}`);
+        markModalClosed(); router.back();
+    };
+
     const cargarReto = async () => {
         try {
             setCargando(true);
@@ -113,6 +121,10 @@ export default function DetalleRetoScreen() {
         try {
             const r = await fetchJson<any>(`/mis-retos/abrir`, asJson({codReto: Number(id)}));
             setCodUsuarioReto(r.codUsuarioReto);
+
+            const qs = await fetchJson<any[]>(`/mis-retos/${r.codUsuarioReto}/preguntas`);
+            setPreguntasQuiz(Array.isArray(qs) ? qs : []);
+
             setResolviendo(true);
         } catch (e:any) {
             Alert.alert('Ups', e?.message || 'No fue posible abrir el reto');
@@ -227,10 +239,11 @@ export default function DetalleRetoScreen() {
                     ) : data.tipoReto === 'quiz' ? (
                         <QuizReto
                             codUsuarioReto={codUsuarioReto!}
-                            preguntas={data.quiz?.preguntas || []}
+                            preguntas={preguntasQuiz.length ? preguntasQuiz : (data.quiz?.preguntas || [])}
                             fetchJson={fetchJson}
-                            onFinish={finalizar}
+                            onFinish={onFinishQuiz}
                         />
+
                     ) : data.tipoReto === 'archivo' ? (
                         <ArchivoReto
                             codReto={data.reto.codReto}

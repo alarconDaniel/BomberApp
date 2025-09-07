@@ -1,20 +1,18 @@
 // components/reto/QuizReto.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, Alert, SafeAreaView } from 'react-native';
+import {
+    View, Text, ScrollView, Pressable, TextInput, Alert, SafeAreaView
+} from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { Pregunta, asJson } from './utils';
 
-/** ─────────────────────────────────────────────────
- *  Tipos y helpers locales (self-contained)
- *  ───────────────────────────────────────────────── */
-type PowerupKey = '50-50' | 'extra_time' | 'streak_shield' | 'x2' | 'phoenix';
+type PowerupKey = '50/50' | 'extra_time' | 'x2' | 'phoenix';
 type RespuestasMap = Record<number, any>;
 
 const _toInt = (x: any) => Number(x) || 0;
 const _pad2 = (n: number) => (n < 10 ? `0${n}` : String(n));
 
-/** Parseadores de tiempo extra (offsets tipo "15s", "1m30s", "PT45S", "mm:ss", "HH:mm") */
 const _parseISODur = (raw: string): number | null => {
     const m = /^P(T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)$/i.exec((raw || '').trim());
     if (!m) return null;
@@ -40,9 +38,9 @@ const _parsePlainNumber = (s: string): number | null => {
     if (mH) return _toInt(mH[2]) * 3600;
     return null;
 };
+
 type ExtraTimeSpec = { seconds: number; format: 'offset' | 'until'; label: string; hastaHHmm?: string };
 const parseExtraTimeSpec = (raw: any): ExtraTimeSpec => {
-    // En modular no recibimos metadataReto; por compat, usamos 15s por defecto.
     const fallback: ExtraTimeSpec = { seconds: 15, format: 'offset', label: '+15s' };
     if (raw == null) return fallback;
     if (typeof raw === 'number' && isFinite(raw) && raw > 0) {
@@ -52,7 +50,6 @@ const parseExtraTimeSpec = (raw: any): ExtraTimeSpec => {
     if (typeof raw !== 'string') return fallback;
     const s = raw.trim();
 
-    // ISO
     if (/^P(T.*)$/i.test(s)) {
         const secs = _parseISODur(s);
         if (secs && secs > 0) {
@@ -60,7 +57,6 @@ const parseExtraTimeSpec = (raw: any): ExtraTimeSpec => {
             return { seconds: secs, format: 'offset', label: lbl };
         }
     }
-    // HH:mm (hoy)
     const mm = /^(\d{1,2}):(\d{2})$/.exec(s);
     if (mm) {
         const hh = _toInt(mm[1]), m = _toInt(mm[2]);
@@ -72,7 +68,6 @@ const parseExtraTimeSpec = (raw: any): ExtraTimeSpec => {
             return { seconds: diff, format: 'until', label: `→ ${_pad2(hh)}:${_pad2(m)}`, hastaHHmm: `${_pad2(hh)}:${_pad2(m)}` };
         }
     }
-    // mm:ss
     const mms = /^(\d{1,3}):(\d{2})$/.exec(s);
     if (mms) {
         const mn = _toInt(mms[1]), sec = _toInt(mms[2]);
@@ -81,13 +76,11 @@ const parseExtraTimeSpec = (raw: any): ExtraTimeSpec => {
             return { seconds: secs, format: 'offset', label: `+${mn}m${sec ? sec + 's' : ''}` };
         }
     }
-    // 1m30s / 2m / 90s / +30s
     const pieces = _parseOffsetPieces(s);
     if (pieces && pieces > 0) {
         const lbl = pieces % 60 === 0 ? `+${Math.floor(pieces / 60)}m` : `+${pieces}s`;
         return { seconds: pieces, format: 'offset', label: lbl };
     }
-    // “15” / “2m” / “1h”
     const plain = _parsePlainNumber(s);
     if (plain && plain > 0) {
         const lbl = plain % 60 === 0 ? `+${Math.floor(plain / 60)}m` : `+${plain}s`;
@@ -108,80 +101,77 @@ const _norm = (s: string) =>
 const resolvePowerupKey = (name?: string): PowerupKey | null => {
     const n = _norm(name || '');
     if (!n) return null;
-    if (n.includes('50 50') || n.includes('5050') || n.includes('fifty')) return '50-50';
-    if (
-        n.includes('extra tiempo') || n.includes('mas tiempo') || n.includes('+15') || n.includes('15s') ||
-        n.includes('extra time') || n.includes('pocion') || n.includes('poción') || n.includes('potion')
-    ) return 'extra_time';
+    if (n.includes('50 50') || n.includes('5050') || n.includes('fifty')) return '50/50';
     if (n.includes('x2') || n.includes('doble') || n.includes('double') || n.includes('boost')) return 'x2';
-    if (n.includes('racha') || n.includes('shield') || n.includes('protector') || n.includes('escudo')) return 'streak_shield';
     if (n.includes('phoenix') || n.includes('fenix') || n.includes('fénix') || n.includes('ave fenix') || n.includes('ave fénix')) return 'phoenix';
+    if (n.includes('extra') || n.includes('tiempo') || n.includes('15s') || n.includes('+15')) return 'extra_time';
     return null;
 };
 
 const mapInventoryToPowerups = (items: any[] | undefined | null): Record<PowerupKey, number> => {
-    const acc: Record<PowerupKey, number> = { '50-50': 0, extra_time: 0, streak_shield: 0, x2: 0, phoenix: 0 };
+    const acc: Record<PowerupKey, number> = { '50/50': 0, extra_time: 0, x2: 0, phoenix: 0 };
     for (const it of items || []) {
         const qty = Number((it as any)?.cantidad ?? 0) || 0;
-        const name = (it as any)?.item?.nombre as string | undefined;
-        const key = resolvePowerupKey(name);
-        if (key) acc[key] += qty;
+        some: {
+            const name = (it as any)?.item?.nombre as string | undefined;
+            const key = resolvePowerupKey(name);
+            if (key) acc[key] += qty;
+        }
     }
     return acc;
 };
 
 const serverTipoFromKey = (k: PowerupKey) => {
     switch (k) {
-        case '50-50': return '50-50';
+        case '50/50': return '50/50';
         case 'extra_time': return 'mas_tiempo';
-        case 'streak_shield': return 'protector_racha';
         case 'x2': return 'double';
         case 'phoenix': return 'ave_fenix';
         default: return k as string;
     }
 };
-const serverTipoCandidates = (k: PowerupKey): string[] => {
-    const main = serverTipoFromKey(k);
-    const alts: Record<PowerupKey, string[]> = {
-        '50-50': ['50-50', 'fifty_fifty', 'fifty', '5050'],
-        extra_time: ['mas_tiempo', 'extra_time', 'extraTime', 'tiempo_extra'],
-        streak_shield: ['protector_racha', 'streak_shield', 'shield', 'escudo'],
-        x2: ['double', 'x2', 'double_points'],
-        phoenix: ['ave_fenix', 'phoenix', 'fenix', 'fénix'],
+
+/** ===========================
+ *  Emparejar — helpers
+ *  =========================== */
+type MatchItem = { id: number; label: string };
+type MatchData = { A: MatchItem[]; B: MatchItem[] };
+type Pair = { a: number; b: number };
+const keyAB = (a: number, b: number) => `${a}-${b}`;
+
+function extractMatchData(p: any): MatchData | null {
+    const cand1 = p?.emparejar;
+    const cand2 = p?.items;
+    const cand3 = p;
+
+    const getArr = (obj: any, key: string): MatchItem[] | null => {
+        const raw = obj?.[key];
+        if (!Array.isArray(raw)) return null;
+        return raw
+            .map((r: any) => {
+                const id = Number(r?.codItem ?? r?.id ?? r?.cod_item ?? r?.codigo ?? NaN);
+                const label = (r?.contenido ?? r?.texto ?? r?.label ?? r?.nombre ?? '').toString();
+                return Number.isFinite(id) && label ? { id, label } : null;
+            })
+            .filter(Boolean) as MatchItem[];
     };
-    const arr = alts[k] || [main];
-    return Array.from(new Set([main, ...arr]));
-};
 
-/** Normaliza para comparar respuestas de 'rellenar' */
-const normalizeAnswer = (s: string) =>
-    (s || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, ' ');
-
-/** Acepta respuesta correcta de 'rellenar' desde opciones correctas o respuesta_correcta */
-const esRellenarCorrecto = (q: Pregunta & any, respuestaUsuario: string): boolean => {
-    if (!q || q.tipo !== 'rellenar') return false;
-    const candidatos: string[] = [];
-    if (Array.isArray(q.opciones)) {
-        for (const o of q.opciones) if (Number(o?.correcta) === 1 && typeof o?.texto === 'string') candidatos.push(o.texto);
+    if (cand1 && getArr(cand1, 'A') && getArr(cand1, 'B')) {
+        return { A: getArr(cand1, 'A')!, B: getArr(cand1, 'B')! };
     }
-    const rawRC: unknown = q.respuesta_correcta ?? q.respuestaCorrecta ?? q.correcta;
-    if (typeof rawRC === 'string' && rawRC.trim()) {
-        rawRC.split(/[|,]/).forEach(v => { const t = v.trim(); if (t) candidatos.push(t); });
+    if (cand2 && getArr(cand2, 'A') && getArr(cand2, 'B')) {
+        return { A: getArr(cand2, 'A')!, B: getArr(cand2, 'B')! };
     }
-    if (candidatos.length === 0) return false;
-    const ru = normalizeAnswer(respuestaUsuario || '');
-    if (!ru) return false;
-    return candidatos.some(txt => normalizeAnswer(txt) === ru);
-};
+    const itemsA = getArr(cand3, 'itemsA') || getArr(cand3, 'a') || null;
+    const itemsB = getArr(cand3, 'itemsB') || getArr(cand3, 'b') || null;
+    if (itemsA && itemsB) return { A: itemsA, B: itemsB };
 
-/** ─────────────────────────────────────────────────
+    return null;
+}
+
+/** ===========================
  *  Componente principal
- *  ───────────────────────────────────────────────── */
+ *  =========================== */
 export default function QuizReto({
                                      codUsuarioReto,
                                      preguntas,
@@ -191,7 +181,7 @@ export default function QuizReto({
     codUsuarioReto: number;
     preguntas: Pregunta[];
     fetchJson: <T = any>(url: string, init?: any) => Promise<T>;
-    onFinish: () => void;
+    onFinish: (res?: { xp: number; coins: number; nuevaRacha?: number | null }) => void;
 }) {
     const { colors, isDark } = useTheme();
     const g = makeGlobalStyles(colors);
@@ -203,67 +193,98 @@ export default function QuizReto({
     const [respuestas, setRespuestas] = useState<RespuestasMap>({});
     const [usedPowerupForQuestion, setUsedPowerupForQuestion] = useState<PowerupKey | null>(null);
 
-    // Feedback UI
+    // emparejar: pares y selección A
+    const [pairsByQ, setPairsByQ] = useState<Record<number, Pair[]>>({});
+    const [selectedAByQ, setSelectedAByQ] = useState<Record<number, number | null>>({});
+    const selectedARef = useRef<Record<number, number | null>>({});
+
+    // emparejar: veredicto por pregunta tras validar
+    const [verdictByQ, setVerdictByQ] = useState<Record<number, { checked: boolean; correct: Set<string>; wrong: Set<string> }>>({});
+
+    // x2 solo una vez por quiz
+    const [x2UsadoEnQuiz, setX2UsadoEnQuiz] = useState(false);
+
+    // feedback (solo para abcd/rellenar)
     const [fbVisible, setFbVisible] = useState(false);
     const [fbOk, setFbOk] = useState<boolean | null>(null);
     const [fbMsg, setFbMsg] = useState<string>('');
     const [fbTimer, setFbTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => () => { if (fbTimer) clearTimeout(fbTimer); }, [fbTimer]);
 
-    // Métricas
     const [okCount, setOkCount] = useState(0);
     const [badCount, setBadCount] = useState(0);
     const [sumTiempoSeg, setSumTiempoSeg] = useState(0);
-    const [answeredCorrect, setAnsweredCorrect] = useState<Record<number, boolean>>({});
-    const [x2AppliedTo, setX2AppliedTo] = useState<Set<number>>(new Set());
 
     const finishingRef = useRef(false);
     const usingPowerupRef = useRef(false);
-    const powerupApiMissingRef = useRef(false);
-    const advanceRef = useRef<null | (() => Promise<void>)>(null);
-    const usedPowerupServerTypeRef = useRef<Record<number, string | undefined>>({});
 
-    // Inventario de comodines
+    // inventario
     const [inv, setInv] = useState<Record<PowerupKey, number>>({
-        '50-50': 0, extra_time: 0, streak_shield: 0, x2: 0, phoenix: 0
+        '50/50': 0, extra_time: 0, x2: 0, phoenix: 0,
     });
 
-    // Carga inventario real y lo mapea → comodines
+    // ⏱ control del timer: ref + pausa
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const timerPausedRef = useRef(false);
+    const pauseTimer = () => {
+        timerPausedRef.current = true;
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    };
+
+    // Colores consistentes para feedback
+    const successBG = '#dcfce7';
+    const successBorder = '#16a34a';
+    const successText = '#065f46';
+
+    const errorBG = '#fee2e2';
+    const errorBorder = '#ef4444';
+    const errorText = '#7f1d1d';
+
+    const baseCardBG = (isDark ? colors.card : '#fff');
+
     const cargarComodinesDesdeInventario = async () => {
         try {
             const resp: any = await fetchJson('/item-inventario/listar');
             const arr = Array.isArray((resp as any)?.items) ? (resp as any).items : [];
             const norm = mapInventoryToPowerups(arr);
             setInv(norm);
-        } catch {
-            // Silencioso; mantenemos estado como esté
-        }
+        } catch { }
     };
-
-    useEffect(() => { cargarComodinesDesdeInventario().catch(() => {}); }, []);
+    useEffect(() => { cargarComodinesDesdeInventario().catch(() => { }); }, []);
 
     const preguntaActual = preguntas[idx];
-
-    /** Tiempo por pregunta: pregunta.tiempoMax > 0 ? ese : 30 (sin metadata en modular) */
     const tiempoPorPregunta = useMemo<number>(() => {
         return Math.max(1, Number(preguntaActual?.tiempoMax ?? 30) || 30);
     }, [preguntaActual?.tiempoMax]);
 
-    /** Temporizador de la pregunta */
     useEffect(() => {
         if (!preguntaActual) return;
+
         setTiempo(tiempoPorPregunta);
         setOcultas([]);
         setUsedPowerupForQuestion(null);
 
-        const idInt = setInterval(() => {
+        // reset emparejar selection/veredicto al cambiar de pregunta
+        selectedARef.current[preguntaActual.codPregunta] = null;
+        setSelectedAByQ(prev => ({ ...prev, [preguntaActual.codPregunta]: null }));
+        setVerdictByQ(prev => ({
+            ...prev,
+            [preguntaActual.codPregunta]:
+            prev[preguntaActual.codPregunta] ?? { checked: false, correct: new Set(), wrong: new Set() }
+        }));
+
+        // al entrar a una pregunta, reanudamos timer
+        timerPausedRef.current = false;
+        if (timerRef.current) { clearInterval(timerRef.current); }
+        timerRef.current = setInterval(() => {
+            if (timerPausedRef.current) return;
             setTiempo(t => {
                 if (t <= 1) {
-                    clearInterval(idInt);
+                    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
                     if (!finishingRef.current) {
                         finishingRef.current = true;
                         responderYAvanzar({ autoPorTiempo: true })
-                            .catch(() => {})
+                            .catch(() => { })
                             .finally(() => { finishingRef.current = false; });
                     }
                     return 0;
@@ -272,29 +293,14 @@ export default function QuizReto({
             });
         }, 1000);
 
-        return () => clearInterval(idInt);
+        return () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
     }, [idx, preguntaActual?.codPregunta, tiempoPorPregunta]);
 
     const setResp = (codPregunta: number, v: any) =>
         setRespuestas(prev => ({ ...prev, [codPregunta]: v }));
 
-    /** Extra time config (en modular usamos 15s por defecto; si necesitas otra cosa, pasa por metadata y ajústalo aquí) */
     const extraTimeCfg = parseExtraTimeSpec('15s');
 
-    /** Registrar uso de comodín en backend, probando alias de tipo */
-    const tryUsePowerupOnServer = async (key: PowerupKey, urId: number, codPregunta?: number): Promise<string> => {
-        const candidates = serverTipoCandidates(key);
-        for (const tipo of candidates) {
-            try {
-                const bodyBase: any = { codUsuarioReto: urId, codPregunta, tipo };
-                await fetchJson(`/mis-retos/${urId}/comodines/usar`, asJson(bodyBase));
-                return tipo;
-            } catch { /* prueba siguiente */ }
-        }
-        throw new Error('No se pudo registrar el uso del comodín en el servidor');
-    };
-
-    /** Usa un comodín con manejo de UI/stock local y registro en servidor cuando sea posible */
     const usarComodin = async (
         key: PowerupKey,
         opts?: { sobrePreguntaId?: number; payload?: any }
@@ -302,7 +308,7 @@ export default function QuizReto({
         if (usingPowerupRef.current) return false;
         usingPowerupRef.current = true;
         try {
-            if (usedPowerupForQuestion) {
+            if (usedPowerupForQuestion && key !== 'x2') {
                 Alert.alert('Comodines', 'Solo puedes usar 1 comodín por pregunta.');
                 return false;
             }
@@ -310,39 +316,34 @@ export default function QuizReto({
                 Alert.alert('Comodines', 'No tienes este comodín disponible.');
                 return false;
             }
+            if (key === 'x2' && x2UsadoEnQuiz) {
+                Alert.alert('x2', 'Ya usaste x2 en este quiz.');
+                return false;
+            }
 
             // Descuento optimista
             setInv(prev => ({ ...prev, [key]: Math.max(0, (prev[key] ?? 0) - 1) }));
-            setUsedPowerupForQuestion(key);
+            if (key !== 'x2') setUsedPowerupForQuestion(key);
 
             const urId = codUsuarioReto || null;
             const codPregunta = opts?.sobrePreguntaId ?? preguntaActual?.codPregunta;
+            if (!urId) return true;
 
-            if (!urId || !codPregunta) return true;
-            if (powerupApiMissingRef.current) return true;
-
-            let body: any = { codUsuarioReto: urId, codPregunta, tipo: serverTipoFromKey(key) };
+            const body: any = { codUsuarioReto: urId, codPregunta, tipo: serverTipoFromKey(key) };
             if (key === 'extra_time') {
                 const seconds = Math.max(1, Math.floor(Number(opts?.payload?.seconds ?? 15) || 0));
                 const hasta = typeof opts?.payload?.hastaHHmm === 'string' ? opts?.payload?.hastaHHmm : undefined;
-                body = { ...body, segundos: seconds, ...(hasta ? { hasta } : {}) };
+                body.segundos = seconds; if (hasta) body.hasta = hasta;
             }
 
             try {
                 await fetchJson(`/mis-retos/${urId}/comodines/usar`, asJson(body));
-                await cargarComodinesDesdeInventario().catch(() => {});
-                usedPowerupServerTypeRef.current[codPregunta] = body.tipo;
+                await cargarComodinesDesdeInventario().catch(() => { });
+                if (key === 'x2') setX2UsadoEnQuiz(true);
                 return true;
             } catch (e: any) {
-                const msg = String(e?.message || '');
-                const is404 = e?.status === 404 || /404/.test(msg) || /Cannot POST/i.test(msg);
-                if (is404) {
-                    powerupApiMissingRef.current = true; // evita reintentos
-                    return true; // mantenemos uso local
-                }
-                // Rollback en otros errores
                 setInv(prev => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
-                setUsedPowerupForQuestion(null);
+                if (key !== 'x2') setUsedPowerupForQuestion(null);
                 Alert.alert('Comodines', e?.message || 'No se pudo usar el comodín.');
                 return false;
             }
@@ -351,18 +352,107 @@ export default function QuizReto({
         }
     };
 
-    /** Responder y avanzar (auto por tiempo o manual) */
+    const reintentarConPhoenix = async () => {
+        if (!preguntaActual) return;
+        const ok = await usarComodin('phoenix', { sobrePreguntaId: preguntaActual.codPregunta });
+        if (!ok) return;
+        setFbVisible(false);
+        setFbOk(null);
+        setFbMsg('');
+    };
+
+    /** ===========================
+     *  Validar y avanzar
+     *  =========================== */
+    const validarEmparejar = async () => {
+        if (!preguntaActual) return;
+        pauseTimer(); // ⏱ pausa el cronómetro al validar emparejar
+
+        const list = pairsByQ[preguntaActual.codPregunta] ?? [];
+        if (list.length === 0) {
+            Alert.alert('Emparejar', 'Crea al menos una pareja A→B.');
+            return;
+        }
+
+        const valor = { emparejar: list.map(p => [p.a, p.b]) };
+
+        const limite = Number(preguntaActual.tiempoMax ?? tiempoPorPregunta ?? 30);
+        const tiempoRest = Math.max(0, Number(tiempo ?? 0));
+        const tiempoSeg = Math.max(0, Math.floor(limite - tiempoRest));
+
+        try {
+            const r: any = await fetchJson(
+                `/mis-retos/${codUsuarioReto}/quiz/responder`,
+                asJson({
+                    codUsuarioReto,
+                    codPregunta: preguntaActual.codPregunta,
+                    valor,
+                    tiempoSeg,
+                })
+            );
+
+            const toBool = (v: any) =>
+                (typeof v === 'boolean') ? v :
+                    (v === 1) ? true :
+                        (v === 0) ? false : null;
+
+            const fueCorrecta: boolean | null = toBool(r?.esCorrecta) ?? toBool(r?.correcta);
+
+            // calcular veredicto por pares
+            const enviadosKeys = new Set(list.map(p => keyAB(p.a, p.b)));
+            const correctSetFromServer: Set<string> = new Set(
+                Array.isArray(r?.paresCorrectos)
+                    ? (r.paresCorrectos as any[]).map((x: any) => keyAB(Number(x?.a ?? x[0]), Number(x?.b ?? x[1])))
+                    : []
+            );
+
+            const correct: Set<string> = new Set();
+            const wrong: Set<string> = new Set();
+
+            if (correctSetFromServer.size > 0) {
+                enviadosKeys.forEach(k => { if (correctSetFromServer.has(k)) correct.add(k); else wrong.add(k); });
+            } else if (fueCorrecta !== null) {
+                enviadosKeys.forEach(k => { (fueCorrecta ? correct : wrong).add(k); });
+            }
+
+            setVerdictByQ(prev => ({
+                ...prev,
+                [preguntaActual.codPregunta]: { checked: true, correct, wrong }
+            }));
+
+            if (typeof r?.explicacion === 'string' && r.explicacion.trim()) setFbMsg(r.explicacion);
+            else setFbMsg('');
+
+            // acumular stats
+            const fueOK = (fueCorrecta === true);
+            if (fueOK) setOkCount(p => p + 1); else setBadCount(p => p + 1);
+            setSumTiempoSeg(p => p + tiempoSeg);
+        } catch (e: any) {
+            Alert.alert('Ups', e?.message || 'No pudimos validar tu respuesta');
+        }
+    };
+
     const responderYAvanzar = async ({ autoPorTiempo = false }: { autoPorTiempo?: boolean } = {}) => {
         if (!preguntaActual) return;
 
-        // Construir valor
+        // si es emparejar y NO viene por autoPorTiempo, usamos flujo especial
+        if (preguntaActual.tipo === 'emparejar' && !autoPorTiempo) {
+            pauseTimer(); // ⏱ pausa al validar manual
+            await validarEmparejar();
+            return; // NO avanzar aquí
+        }
+
+        if (!autoPorTiempo) pauseTimer(); // ⏱ pausa para ABCD / rellenar
+
         let valor: any = null;
         if (autoPorTiempo) {
             valor = preguntaActual.tipo === 'abcd'
                 ? { abcd: [] }
                 : preguntaActual.tipo === 'rellenar'
                     ? { rellenar: '' }
-                    : {};
+                    : preguntaActual.tipo === 'emparejar'
+                        ? { emparejar: [] }
+                        : {};
         } else {
             const v = respuestas[preguntaActual.codPregunta];
             if (preguntaActual.tipo === 'abcd') {
@@ -384,7 +474,6 @@ export default function QuizReto({
             }
         }
 
-        // Tiempo consumido
         const limite = Number(preguntaActual.tiempoMax ?? tiempoPorPregunta ?? 30);
         const tiempoRest = Math.max(0, Number(tiempo ?? 0));
         const tiempoSeg = Math.max(0, Math.floor(limite - tiempoRest));
@@ -400,113 +489,96 @@ export default function QuizReto({
                 })
             );
 
-            // Feedback inmediato si viene del back
-            let fueCorrecta: boolean | null = null;
-            if (r && typeof r === 'object') {
-                if (typeof r.esCorrecta === 'boolean') fueCorrecta = r.esCorrecta;
-                else if (typeof r.correcta === 'boolean') fueCorrecta = r.correcta;
-                if (typeof r.explicacion === 'string' && r.explicacion.trim()) setFbMsg(r.explicacion);
-                else setFbMsg('');
-            }
+            const toBool = (v: any) =>
+                (typeof v === 'boolean') ? v :
+                    (v === 1) ? true :
+                        (v === 0) ? false : null;
 
-            // Inferencia local si no vino del back
-            if (fueCorrecta === null && preguntaActual.tipo === 'abcd' && !autoPorTiempo) {
-                const sel = (respuestas[preguntaActual.codPregunta]?.abcd) ?? respuestas[preguntaActual.codPregunta];
-                const op = (preguntaActual.opciones ?? []).find(o => o.codOpcion === sel);
-                if (op && typeof op.correcta === 'number') fueCorrecta = op.correcta === 1;
-            }
-            if (fueCorrecta === null && preguntaActual.tipo === 'rellenar' && !autoPorTiempo) {
-                const txt = String(
-                    (typeof respuestas[preguntaActual.codPregunta] === 'string'
-                        ? respuestas[preguntaActual.codPregunta]
-                        : respuestas[preguntaActual.codPregunta]?.rellenar) ?? ''
-                );
-                fueCorrecta = esRellenarCorrecto(preguntaActual as any, txt);
-            }
+            const fueCorrecta: boolean | null = toBool(r?.esCorrecta) ?? toBool(r?.correcta);
 
-            setAnsweredCorrect(prev => ({ ...prev, [preguntaActual.codPregunta]: !!fueCorrecta }));
+            if (typeof r?.explicacion === 'string' && r.explicacion.trim()) setFbMsg(r.explicacion);
+            else setFbMsg('');
 
-            // Acumular métricas
             const fueOK = (fueCorrecta === true);
-            setSumTiempoSeg(p => p + tiempoSeg);
-            if (fueOK) setOkCount(p => p + 1); else setBadCount(p => p + 1);
-
-            const totalQ = total;
-            const esUltima = (idx + 1) >= totalQ;
-
-            const avanzar = async () => {
-                if (!esUltima) {
-                    setIdx(p => p + 1);
-                    setOcultas([]);
-                } else {
-                    await finalizar({ ok: okCount + (fueOK ? 1 : 0), bad: badCount + (fueOK ? 0 : 1), tiempo: sumTiempoSeg + tiempoSeg });
-                }
-            };
-
-            // Overlay de feedback y control de avance (Ave Fénix detiene para reintentar)
             const phoenixDisponible = (inv.phoenix ?? 0) > 0 && !usedPowerupForQuestion;
 
+            if (fueOK) {
+                setOkCount(p => p + 1);
+                setSumTiempoSeg(p => p + tiempoSeg);
+            } else {
+                if (!phoenixDisponible) {
+                    setBadCount(p => p + 1);
+                    setSumTiempoSeg(p => p + tiempoSeg);
+                }
+            }
+
+            // para abcd/rellenar mostramos overlay breve y avanzamos
             if (fueCorrecta !== null) {
                 if (fbTimer) clearTimeout(fbTimer);
                 setFbOk(fueCorrecta);
                 setFbVisible(true);
 
+                const esUltima = (idx + 1) >= total;
+                const avanzar = async () => {
+                    if (!esUltima) {
+                        setIdx(p => p + 1);
+                        setOcultas([]);
+                    } else {
+                        await finalizar();
+                    }
+                };
+
                 if (!fueOK && phoenixDisponible) {
-                    // Guardar "continuar" para cuando el usuario no reintente
-                    advanceRef.current = async () => {
-                        setFbVisible(false);
-                        await avanzar();
-                    };
+                    // permite usar phoenix, luego usuario avanza manual desde overlay si lo deseas
                 } else {
+                    const delay = 1000;
                     const t = setTimeout(async () => {
                         setFbVisible(false);
                         await avanzar();
-                    }, 1000);
+                    }, delay);
                     setFbTimer(t);
                 }
-            } else {
-                await avanzar();
             }
         } catch (e: any) {
             Alert.alert('Ups', e?.message || 'No pudimos guardar tu respuesta');
         }
     };
 
-    /** Finalizar: mostramos resumen local; si el back da XP/coins, lo respetamos; si no, fallback 0s */
-    const [summary, setSummary] = useState<{ visible: boolean; tiempoTotal: number; ok: number; bad: number; xp: number; coins: number; }>({
-        visible: false, tiempoTotal: 0, ok: 0, bad: 0, xp: 0, coins: 0
+    /** ===========================
+     *  Finalizar → resumen
+     *  =========================== */
+    const [summary, setSummary] = useState<{ visible: boolean; tiempoTotal: number; ok: number; bad: number; xp: number; coins: number; nuevaRacha?: number | null; }>({
+        visible: false, tiempoTotal: 0, ok: 0, bad: 0, xp: 0, coins: 0, nuevaRacha: null
     });
 
-    const finalizar = async (totals?: { ok?: number; bad?: number; tiempo?: number }) => {
-        const ok = totals?.ok ?? okCount;
-        const bad = totals?.bad ?? badCount;
-        const tiempo = totals?.tiempo ?? sumTiempoSeg;
-
+    const finalizar = async () => {
+        pauseTimer(); // por si acaso queda activo
         try {
             const r: any = await fetchJson(`/mis-retos/${codUsuarioReto}/finalizar`, asJson({ codUsuarioReto }));
             setSummary({
                 visible: true,
-                tiempoTotal: tiempo,
-                ok,
-                bad,
+                tiempoTotal: sumTiempoSeg,
+                ok: okCount,
+                bad: badCount,
                 xp: Number(r?.xpGanada ?? 0),
                 coins: Number(r?.coins ?? 0),
+                nuevaRacha: (typeof r?.nuevaRacha === 'number') ? r.nuevaRacha : null,
             });
         } catch {
-            // Fallback: mostramos resumen aunque el finalizar falle (consistencia con monolítico)
             setSummary({
                 visible: true,
-                tiempoTotal: tiempo,
-                ok,
-                bad,
+                tiempoTotal: sumTiempoSeg,
+                ok: okCount,
+                bad: badCount,
                 xp: 0,
                 coins: 0,
+                nuevaRacha: null,
             });
         }
     };
 
-    /** Cabecera: progreso + timer */
     const progresoPct = total > 0 ? Math.round((idx / total) * 100) : 0;
+
     const QuizHeader = () => (
         <View style={{ marginTop: 10 }}>
             <View style={{ height: 8, backgroundColor: colors.divider, borderRadius: 999, overflow: 'hidden' }}>
@@ -519,121 +591,132 @@ export default function QuizReto({
         </View>
     );
 
-    /** Barra de comodines (fija abajo) */
+    // ===== Barra de comodines =====
+    const PowerButton = ({
+                             label,
+                             enabled,
+                             qty,
+                             onPress,
+                         }: { label: string; enabled: boolean; qty: number; onPress: () => void }) => (
+        <View style={{ flex: 1, alignItems: 'center' }}>
+            <View style={{
+                position: 'absolute', top: -8,
+                backgroundColor: enabled ? colors.primary : colors.mutedBg,
+                borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2,
+                borderWidth: 2, borderColor: colors.bg, zIndex: 5
+            }}>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>x{qty}</Text>
+            </View>
+
+            <Pressable
+                disabled={!enabled}
+                onPress={onPress}
+                style={{
+                    width: '100%',
+                    paddingVertical: 12, borderRadius: 12, alignItems: 'center',
+                    backgroundColor: enabled ? colors.primary : colors.divider,
+                }}
+            >
+                <Text style={[g.text.smallStrong, { color: '#fff' }]}>{label}</Text>
+            </Pressable>
+        </View>
+    );
+
     const ComodinesBar = () => {
-        if (!preguntaActual) return null;
-        const fiftyEnabled = (inv['50-50'] ?? 0) > 0 && preguntaActual?.tipo === 'abcd' && !usedPowerupForQuestion;
-        const extraEnabled = (inv.extra_time ?? 0) > 0 && !usedPowerupForQuestion;
-        const x2Enabled = (inv.x2 ?? 0) > 0 && !usedPowerupForQuestion;
-        const shieldEnabled = (inv.streak_shield ?? 0) > 0 && !usedPowerupForQuestion && idx > 0;
+        if (!preguntaActual || summary.visible) return null;
+        const qty5050 = inv['50/50'] ?? 0;
+        const qtyExtra = inv.extra_time ?? 0;
+        const qtyX2 = inv.x2 ?? 0;
+
+        const fiftyEnabled = qty5050 > 0 && preguntaActual?.tipo === 'abcd' && !usedPowerupForQuestion;
+        const extraEnabled = qtyExtra > 0 && !usedPowerupForQuestion;
+        const x2Enabled = qtyX2 > 0 && !x2UsadoEnQuiz;
 
         return (
-            <View style={{
-                position: 'absolute', left: 0, right: 0, bottom: 0,
-                paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16,
-                backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.divider,
-                height: 70
-            }}>
-                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                    {/* 50-50 */}
-                    <Pressable
-                        disabled={!fiftyEnabled}
+            <View
+                style={{
+                    position: 'absolute', left: 0, right: 0, bottom: 0,
+                    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16,
+                    backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.divider,
+                    zIndex: 1000, elevation: 12
+                }}
+            >
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <PowerButton
+                        label="50/50"
+                        qty={qty5050}
+                        enabled={fiftyEnabled}
                         onPress={async () => {
                             if (!preguntaActual?.opciones?.length) return;
-                            if (!(await usarComodin('50-50', { sobrePreguntaId: preguntaActual?.codPregunta }))) return;
+                            const ok = await usarComodin('50/50', { sobrePreguntaId: preguntaActual.codPregunta });
+                            if (!ok) return;
 
                             const ops = preguntaActual.opciones!;
                             const correcta = ops.find(o => Number(o.correcta) === 1);
                             const incorrectas = ops.filter(o => Number(o.correcta) !== 1);
                             if (!correcta || incorrectas.length < 2) {
-                                Alert.alert('50-50', 'No se puede aplicar (no hay suficientes opciones incorrectas).');
+                                Alert.alert('50/50', 'No se puede aplicar (no hay suficientes opciones incorrectas).');
                                 return;
                             }
                             const shuffled = [...incorrectas].sort(() => Math.random() - 0.5);
                             const ocultar = shuffled.slice(0, 2).map(x => x.codOpcion);
                             setOcultas(ocultar);
+                            setUsedPowerupForQuestion('50/50');
                         }}
-                        style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: fiftyEnabled ? colors.primary : colors.divider }}
-                    >
-                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>50-50</Text>
-                    </Pressable>
+                    />
 
-                    {/* Extra tiempo */}
-                    <Pressable
-                        disabled={!extraEnabled}
+                    <PowerButton
+                        label={extraTimeCfg.label ?? '+15s'}
+                        qty={qtyExtra}
+                        enabled={extraEnabled}
                         onPress={async () => {
-                            // Recalcula seconds en el momento (por si algún día cambias la fuente)
                             const cfgNow = parseExtraTimeSpec(extraTimeCfg.label || '15s');
                             const payload = { seconds: cfgNow.seconds, format: cfgNow.format, hastaHHmm: cfgNow.hastaHHmm };
-                            const ok = await usarComodin('extra_time', { payload, sobrePreguntaId: preguntaActual?.codPregunta });
+                            const ok = await usarComodin('extra_time', { payload, sobrePreguntaId: preguntaActual.codPregunta });
                             if (!ok) return;
                             setTiempo(t => Math.max(0, t) + Math.max(1, Math.floor(cfgNow.seconds || 0)));
+                            setUsedPowerupForQuestion('extra_time');
                         }}
-                        style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: extraEnabled ? colors.primary : colors.divider }}
-                    >
-                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>{extraTimeCfg?.label ?? '+15s'}</Text>
-                    </Pressable>
+                    />
 
-                    {/* x2 */}
-                    <Pressable
-                        disabled={!x2Enabled}
+                    <PowerButton
+                        label="x2"
+                        qty={qtyX2}
+                        enabled={x2Enabled}
                         onPress={async () => {
-                            if (!(await usarComodin('x2', { sobrePreguntaId: preguntaActual?.codPregunta }))) return;
-                            setX2AppliedTo(prev => {
-                                const next = new Set(prev);
-                                next.add(preguntaActual.codPregunta);
-                                return next;
-                            });
-                        }}
-                        style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: x2Enabled ? colors.primary : colors.divider }}
-                    >
-                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>x2</Text>
-                    </Pressable>
-
-                    {/* Protector de racha */}
-                    <Pressable
-                        disabled={!shieldEnabled}
-                        onPress={async () => {
-                            const prevIdx = idx - 1;
-                            const prevQ = preguntas?.[prevIdx];
-                            if (!prevQ) return;
-
-                            if (answeredCorrect[prevQ.codPregunta] !== false) {
-                                Alert.alert('Protector de racha', 'No tienes una respuesta anterior incorrecta que proteger.');
-                                return;
-                            }
-                            const ok = await usarComodin('streak_shield', { sobrePreguntaId: prevQ.codPregunta });
+                            const ok = await usarComodin('x2', { sobrePreguntaId: preguntaActual.codPregunta });
                             if (!ok) return;
-
-                            setBadCount(p => Math.max(0, p - 1));
-                            setOkCount(p => p + 1);
-                            setAnsweredCorrect(prev => ({ ...prev, [prevQ.codPregunta]: true }));
+                            setX2UsadoEnQuiz(true);
                         }}
-                        style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: shieldEnabled ? colors.primary : colors.divider }}
-                    >
-                        <Text style={[g.text.smallStrong, { color: '#fff' }]}>Racha</Text>
-                    </Pressable>
+                    />
                 </View>
             </View>
         );
     };
 
-    /** Overlay grande Correcto/Incorrecto con Ave Fénix */
+    /** ===========================
+     *  UI feedback (solo abcd/rellenar)
+     *  =========================== */
     const AnswerScreen = (): React.ReactNode => {
-        if (!fbVisible || fbOk === null) return null;
+        if (!fbVisible || fbOk === null || (preguntaActual?.tipo === 'emparejar')) return null;
         const ok = !!fbOk;
 
+        const phoenixHabilitado = (inv.phoenix ?? 0) > 0 && !usedPowerupForQuestion && !ok;
+
         return (
-            <View style={{
-                position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
-                backgroundColor: ok ? 'rgba(16,185,129,0.90)' : 'rgba(239,68,68,0.90)',
-                alignItems: 'center', justifyContent: 'center', padding: 24
-            }}>
+            <View
+                style={{
+                    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+                    backgroundColor: ok ? 'rgba(16,185,129,0.90)' : 'rgba(239,68,68,0.90)',
+                    alignItems: 'center', justifyContent: 'center', padding: 24,
+                    zIndex: 1500, elevation: 20
+                }}
+            >
                 <View style={{
                     backgroundColor: '#ffffff', borderRadius: 20, paddingVertical: 28, paddingHorizontal: 22,
-                    alignItems: 'center', width: '86%', maxWidth: 460, borderWidth: 2, borderColor: ok ? '#10b981' : '#ef4444'
+                    alignItems: 'center', width: '86%', maxWidth: 460, borderWidth: 2, borderColor: ok ? successBorder : errorBorder
                 }}>
-                    <Text style={{ fontSize: 32, fontWeight: '800', color: ok ? '#065f46' : '#7f1d1d' }}>
+                    <Text style={{ fontSize: 32, fontWeight: '800', color: ok ? successText : errorText }}>
                         {ok ? '¡Correcto!' : 'Incorrecto'}
                     </Text>
                     {!!fbMsg && (
@@ -642,81 +725,44 @@ export default function QuizReto({
                         </Text>
                     )}
 
-                    {!ok && (inv.phoenix ?? 0) > 0 && !usedPowerupForQuestion && (
-                        <View style={{ marginTop: 16, width: '100%', gap: 10 }}>
-                            <Pressable
-                                onPress={async () => {
-                                    if (!(await usarComodin('phoenix', { sobrePreguntaId: preguntaActual?.codPregunta }))) return;
-
-                                    if (fbTimer) clearTimeout(fbTimer);
-                                    // Descontar la mala recién contada
-                                    setBadCount(p => Math.max(0, p - 1));
-
-                                    if (preguntaActual) {
-                                        // Limpia la respuesta guardada para esta pregunta
-                                        setRespuestas(prevResp => {
-                                            const next = { ...prevResp };
-                                            delete next[preguntaActual.codPregunta];
-                                            return next;
-                                        });
-                                        // Limpia registro de correcto/incorrecto para esta pregunta
-                                        setAnsweredCorrect(prevMap => {
-                                            const next = { ...prevMap };
-                                            delete next[preguntaActual.codPregunta];
-                                            return next;
-                                        });
-                                    }
-
-                                    // Reset de timer y ocultas
-                                    setTiempo(tiempoPorPregunta);
-                                    setOcultas([]);
-                                    setFbVisible(false);
-                                }}
-                                style={{ backgroundColor: '#1d4ed8', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 999, alignItems: 'center' }}
-                            >
-                                <Text style={{ color: '#fff', fontWeight: '800' }}>Reintentar (Ave Fénix)</Text>
-                            </Pressable>
-
-                            <Pressable
-                                onPress={async () => {
-                                    const f = advanceRef.current;
-                                    setFbVisible(false);
-                                    if (f) await f();
-                                }}
-                                style={{ backgroundColor: '#6b7280', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 999, alignItems: 'center' }}
-                            >
-                                <Text style={{ color: '#fff', fontWeight: '700' }}>Continuar</Text>
-                            </Pressable>
-                        </View>
-                    )}
-
-                    {(ok || !(inv.phoenix ?? 0) || usedPowerupForQuestion) && (
-                        <Text style={{ marginTop: 14, color: '#374151' }}>Avanzando…</Text>
-                    )}
+                    <View style={{ flexDirection: 'column', gap: 10, marginTop: 18, width: '100%' }}>
+                        {!ok && (
+                            <>
+                                {phoenixHabilitado && (
+                                    <Pressable onPress={reintentarConPhoenix}
+                                               style={{ paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#7c3aed', alignItems: 'center' }}>
+                                        <Text style={{ color: '#fff', fontWeight: '800' }}>Reintentar (Ave Fénix)</Text>
+                                    </Pressable>
+                                )}
+                            </>
+                        )}
+                    </View>
                 </View>
             </View>
         );
     };
 
-    /** Toast inferior breve */
     const FeedbackToast = (): React.ReactNode => {
-        if (!fbVisible) return null;
+        if (!fbVisible || (preguntaActual?.tipo === 'emparejar')) return null;
         return (
-            <View style={{
-                position: 'absolute',
-                left: 16, right: 16, bottom: 24,
-                paddingVertical: 12, paddingHorizontal: 16,
-                borderRadius: 12,
-                backgroundColor: fbOk ? '#d1fae5' : '#fee2e2',
-                borderWidth: 1,
-                borderColor: fbOk ? '#10b981' : '#ef4444',
-                alignItems: 'center'
-            }}>
-                <Text style={{ color: fbOk ? '#065f46' : '#7f1d1d', fontWeight: '700' }}>
+            <View
+                style={{
+                    position: 'absolute',
+                    left: 16, right: 16, bottom: 24,
+                    paddingVertical: 12, paddingHorizontal: 16,
+                    borderRadius: 12,
+                    backgroundColor: fbOk ? successBG : errorBG,
+                    borderWidth: 1,
+                    borderColor: fbOk ? successBorder : errorBorder,
+                    alignItems: 'center',
+                    zIndex: 1400, elevation: 16
+                }}
+            >
+                <Text style={{ color: fbOk ? successText : errorText, fontWeight: '700' }}>
                     {fbOk ? '✔ Correcto' : '✖ Incorrecto'}
                 </Text>
                 {!!fbMsg && (
-                    <Text style={{ marginTop: 4, color: fbOk ? '#065f46' : '#7f1d1d' }}>
+                    <Text style={{ marginTop: 4, color: fbOk ? successText : errorText }}>
                         {fbMsg}
                     </Text>
                 )}
@@ -724,7 +770,9 @@ export default function QuizReto({
         );
     };
 
-    /** Summary screen FULL dentro del mismo componente */
+    /** ===========================
+     *  Resumen
+     *  =========================== */
     const SummaryScreen = (): React.ReactNode => {
         if (!summary.visible) return null;
         const textColor = isDark ? '#E5E7EB' : '#111827';
@@ -739,10 +787,15 @@ export default function QuizReto({
                             <Text style={[g.text.body, { color: textColor }]}><Text style={[g.text.bodyStrong, { fontStyle: 'italic', color: textColor }]}>Respuestas incorrectas</Text> : {summary.bad}</Text>
                             <Text style={[g.text.body, { color: textColor }]}><Text style={[g.text.bodyStrong, { fontStyle: 'italic', color: textColor }]}>Monedas ganadas</Text> : ${summary.coins}</Text>
                             <Text style={[g.text.body, { color: textColor }]}><Text style={[g.text.bodyStrong, { fontStyle: 'italic', color: textColor }]}>XP</Text> : {summary.xp}</Text>
+                            {typeof summary.nuevaRacha === 'number' && (
+                                <Text style={[g.text.body, { color: textColor }]}>
+                                    <Text style={[g.text.bodyStrong, { fontStyle: 'italic', color: textColor }]}>Racha</Text> : {summary.nuevaRacha} día{summary.nuevaRacha === 1 ? '' : 's'}
+                                </Text>
+                            )}
                         </View>
 
                         <Pressable
-                            onPress={() => { onFinish(); }}
+                            onPress={() => { onFinish({ xp: summary.xp, coins: summary.coins, nuevaRacha: summary.nuevaRacha }); }}
                             style={{ marginTop: 24, alignSelf: 'center', backgroundColor: '#22c55e', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 999, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, elevation: 4 }}
                         >
                             <Text style={[g.text.smallStrong, { color: '#ffffff' }]}>Continuar</Text>
@@ -753,102 +806,371 @@ export default function QuizReto({
         );
     };
 
-    /** UI principal */
-    if (summary.visible) {
-        return <>{SummaryScreen()}</>;
-    }
+    /** ===========================
+     *  EmparejarBoard — sin scroll en columnas
+     *  =========================== */
+    const EmparejarBoard = ({ qid, data }: { qid: number; data: MatchData }) => {
+        const selectedA = selectedAByQ[qid] ?? null;
+        const pairs = pairsByQ[qid] ?? [];
+        const verdict = verdictByQ[qid] ?? { checked: false, correct: new Set<string>(), wrong: new Set<string>() };
 
-    return (
-        <View style={{ flex: 1 }}>
-            <ScrollView style={{ padding: 16, paddingBottom: 96, marginBottom: 90 }}>
-                {!preguntaActual ? (
-                    <Text style={g.text.body}>No hay preguntas. Un labubu travieso se las llevó 🐾</Text>
-                ) : (
-                    <>
-                        <QuizHeader />
-                        <Text style={[g.text.h3, { marginTop: 10 }]}>Pregunta {preguntaActual.numero}</Text>
-                        <Text style={[g.text.body, { marginTop: 6 }]}>{preguntaActual.enunciado}</Text>
+        const setPair = (a: number, b: number) => {
+            if (verdict.checked) return; // no editar después de validar
+            setPairsByQ(prev => {
+                const list = [...(prev[qid] ?? [])]
+                    .filter(p => p.a !== a && p.b !== b);
+                list.push({ a, b });
+                return { ...prev, [qid]: list };
+            });
+            selectedARef.current[qid] = null;
+            setSelectedAByQ(prev => ({ ...prev, [qid]: null }));
+        };
 
-                        {preguntaActual.tipo === 'abcd' && (
-                            <View style={{ marginTop: 12 }}>
-                                {(preguntaActual.opciones || [])
-                                    .filter((o) => !ocultas.includes(o.codOpcion))
-                                    .map((op) => {
-                                        const active =
-                                            (respuestas[preguntaActual.codPregunta]?.abcd ?? respuestas[preguntaActual.codPregunta]) === op.codOpcion;
-                                        return (
-                                            <Pressable
-                                                key={op.codOpcion}
-                                                onPress={() => setResp(preguntaActual.codPregunta, { abcd: active ? null : op.codOpcion })}
-                                                style={{
-                                                    marginBottom: 8,
-                                                    padding: 12,
-                                                    borderRadius: 10,
-                                                    borderWidth: 1,
-                                                    borderColor: active ? colors.primary : colors.divider,
-                                                    backgroundColor: active ? (isDark ? '#0b1022' : '#fff7ed') : 'transparent',
-                                                }}
-                                            >
-                                                <Text style={{ color: colors.text }}>{op.texto}</Text>
-                                            </Pressable>
-                                        );
-                                    })}
-                            </View>
-                        )}
+        const onPickA = (id: number) => {
+            if (verdict.checked) return;
+            selectedARef.current[qid] = (selectedARef.current[qid] === id ? null : id);
+            setSelectedAByQ(prev => ({ ...prev, [qid]: selectedARef.current[qid] }));
+        };
 
-                        {preguntaActual.tipo === 'rellenar' && (
-                            <TextInput
-                                placeholder="Tu respuesta"
-                                placeholderTextColor={colors.mutedText}
-                                value={respuestas[preguntaActual.codPregunta]?.rellenar ?? ''}
-                                onChangeText={(t) => setResp(preguntaActual.codPregunta, { rellenar: t })}
-                                onSubmitEditing={() => responderYAvanzar()}
-                                returnKeyType="send"
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                style={{
-                                    borderWidth: 1, borderColor: colors.divider, borderRadius: 10,
-                                    padding: 10, color: colors.text, marginTop: 8,
-                                }}
-                            />
-                        )}
+        const onPickB = (id: number) => {
+            if (verdict.checked) return;
+            const aSel = selectedARef.current[qid] ?? null;
+            if (aSel == null) return;
+            setPair(aSel, id);
+        };
 
-                        {preguntaActual.tipo === 'emparejar' && (
-                            <Text style={g.text.caption}>
-                                Para emparejar usa un campo de texto (ej: 1-6,2-5,3-4). Aquí puedes integrar un UI drag&drop.
-                            </Text>
-                        )}
+        const removePair = (a: number, b: number) => {
+            if (verdict.checked) return;
+            setPairsByQ(prev => ({ ...prev, [qid]: (prev[qid] ?? []).filter(p => !(p.a === a && p.b === b)) }));
+        };
 
-                        {preguntaActual.tipo === 'reporte' && (
-                            <Text style={g.text.caption}>Este tipo requiere upload de archivo; conecta tu picker y manda metadata al backend.</Text>
-                        )}
+        const usedA = new Set((pairsByQ[qid] ?? []).map(p => p.a));
+        const usedB = new Set((pairsByQ[qid] ?? []).map(p => p.b));
+
+        const tileBase = {
+            paddingVertical: 12,
+            paddingHorizontal: 10,
+            borderRadius: 12,
+            borderWidth: 1,
+            marginVertical: 6,
+        } as const;
+
+        // color para B según veredicto
+        const colorForB = (bId: number) => {
+            if (!verdict.checked) return { borderColor: colors.divider, bg: baseCardBG, text: colors.text };
+            const pair = (pairsByQ[qid] ?? []).find(p => p.b === bId);
+            if (!pair) return { borderColor: colors.divider, bg: baseCardBG, text: colors.text };
+            const k = keyAB(pair.a, pair.b);
+            if (verdict.correct.has(k)) return { borderColor: successBorder, bg: successBG, text: successText };
+            if (verdict.wrong.has(k)) return { borderColor: errorBorder, bg: errorBG, text: errorText };
+            return { borderColor: colors.divider, bg: baseCardBG, text: colors.text };
+        };
+
+        return (
+            <View style={{ marginTop: 12 }}>
+                <Text style={[g.text.smallStrong, { marginBottom: 8 }]}>Emparejar</Text>
+
+                <View style={{ flexDirection: 'row', gap: 16 }}>
+                    {/* Columna A sin Scroll interno */}
+                    <View style={{ flex: 1, borderWidth: 1, borderColor: colors.divider, borderRadius: 12, overflow: 'hidden' }}>
+                        <View style={{ paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.cardTint }}>
+                            <Text style={g.text.caption}>Columna A</Text>
+                        </View>
+                        <View style={{ paddingHorizontal: 10, paddingVertical: 8 }}>
+                            {data.A.map(item => {
+                                const selected = selectedA === item.id;
+                                const paired = usedA.has(item.id);
+                                return (
+                                    <Pressable
+                                        key={`A-${item.id}`}
+                                        onPress={() => onPickA(item.id)}
+                                        disabled={verdict.checked}
+                                        style={[
+                                            tileBase,
+                                            {
+                                                borderColor: selected ? colors.primary : colors.divider,
+                                                backgroundColor: selected ? (isDark ? '#0b1022' : '#fff7ed') : baseCardBG,
+                                                opacity: paired && !selected ? 0.9 : 1,
+                                            }
+                                        ]}
+                                    >
+                                        <Text style={[g.text.body, { color: colors.text }]}>{item.label}</Text>
+                                        {paired && !selected && (
+                                            <Text style={[g.text.caption, { marginTop: 4, color: colors.mutedText }]}>Emparejado</Text>
+                                        )}
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+                    </View>
+
+                    {/* Columna B sin Scroll interno */}
+                    <View style={{ flex: 1, borderWidth: 1, borderColor: colors.divider, borderRadius: 12, overflow: 'hidden' }}>
+                        <View style={{ paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.cardTint }}>
+                            <Text style={g.text.caption}>Columna B</Text>
+                        </View>
+                        <View style={{ paddingHorizontal: 10, paddingVertical: 8 }}>
+                            {data.B.map(item => {
+                                const selectedAExists = selectedA != null;
+                                const bAlreadyUsed = usedB.has(item.id);
+                                const canPick = selectedAExists && !verdict.checked;
+                                const col = colorForB(item.id);
+                                return (
+                                    <Pressable
+                                        key={`B-${item.id}`}
+                                        onPress={() => { if (canPick) onPickB(item.id); }}
+                                        disabled={!canPick}
+                                        style={[
+                                            tileBase,
+                                            {
+                                                borderColor: col.borderColor,
+                                                backgroundColor: col.bg,
+                                                opacity: canPick ? 1 : (verdict.checked ? 1 : 0.7)
+                                            }
+                                        ]}
+                                    >
+                                        <Text style={[g.text.body, { color: col.text }]}>{item.label}</Text>
+                                        {bAlreadyUsed && !verdict.checked && (
+                                            <Text style={[g.text.caption, { marginTop: 4, color: colors.mutedText }]}>Emparejado</Text>
+                                        )}
+                                        {!canPick && !verdict.checked && (
+                                            <Text style={[g.text.caption, { marginTop: 4, color: colors.mutedText }]}>Selecciona un A ↑</Text>
+                                        )}
+                                        {verdict.checked && bAlreadyUsed && (
+                                            <Text style={[g.text.caption, { marginTop: 4, color: col.text }]}>
+                                                {(() => {
+                                                    const pair = (pairsByQ[qid] ?? []).find(p => p.b === item.id);
+                                                    if (!pair) return '';
+                                                    const k = keyAB(pair.a, pair.b);
+                                                    return verdict.correct.has(k) ? '✔ Correcto' : verdict.wrong.has(k) ? '✖ Incorrecto' : '';
+                                                })()}
+                                            </Text>
+                                        )}
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+                    </View>
+                </View>
+
+                {/* Pares actuales */}
+                <View style={{ marginTop: 12, borderWidth: 1, borderColor: colors.divider, borderRadius: 12 }}>
+                    <View style={{ paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.cardTint }}>
+                        <Text style={g.text.caption}>Pares seleccionados</Text>
+                    </View>
+                    <View style={{ padding: 10, gap: 8 }}>
+                        {(pairs.length === 0) ? (
+                            <Text style={g.text.caption}>Aún no agregas pares.</Text>
+                        ) : pairs.map((p, i) => {
+                            const aLabel = data.A.find(x => x.id === p.a)?.label ?? p.a;
+                            const bLabel = data.B.find(x => x.id === p.b)?.label ?? p.b;
+                            const k = keyAB(p.a, p.b);
+                            const checked = verdict.checked;
+                            const isC = checked && verdict.correct.has(k);
+                            const isW = checked && verdict.wrong.has(k);
+
+                            const containerBorder = isC ? successBorder : isW ? errorBorder : colors.divider;
+                            const containerBG = isC ? successBG : isW ? errorBG : baseCardBG;
+                            const containerText = isC ? successText : isW ? errorText : colors.text;
+
+                            return (
+                                <View
+                                    key={`${p.a}-${p.b}-${i}`}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'flex-start', // importante para que el botón no estire la altura
+                                        gap: 10,
+                                        padding: 8,
+                                        borderRadius: 10,
+                                        borderWidth: 1,
+                                        borderColor: containerBorder,
+                                        backgroundColor: containerBG
+                                    }}
+                                >
+                                    <Text
+                                        style={[g.text.body, { color: containerText, flex: 1, flexWrap: 'wrap', flexShrink: 1 }]} // wrap para que no se salga
+                                    >
+                                        • {aLabel}  →  {bLabel}
+                                    </Text>
+
+                                    {!checked && (
+                                        <Pressable
+                                            onPress={() => removePair(p.a, p.b)}
+                                            style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.mutedBg, alignSelf: 'flex-start' }}
+                                        >
+                                            <Text style={{ color: colors.text, fontWeight: '700' }}>Quitar</Text>
+                                        </Pressable>
+                                    )}
+                                </View>
+                            );
+                        })}
+                    </View>
+                </View>
+
+                {/* Acciones */}
+                {!verdict.checked ? (
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                        <Pressable
+                            onPress={() => {
+                                setPairsByQ(prev => ({ ...prev, [qid]: [] }));
+                                selectedARef.current[qid] = null;
+                                setSelectedAByQ(prev => ({ ...prev, [qid]: null }));
+                            }}
+                            style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: colors.mutedBg }}
+                        >
+                            <Text style={{ color: colors.text, fontWeight: '700' }}>Limpiar</Text>
+                        </Pressable>
 
                         <Pressable
-                            onPress={() => responderYAvanzar()}
-                            style={{
-                                marginTop: 18,
-                                paddingVertical: 14,
-                                paddingHorizontal: 28,
-                                backgroundColor: (idx + 1 < total) ? '#facc15' : '#f97316',
-                                borderRadius: 999,
-                                alignSelf: 'center',
-                            }}
+                            onPress={validarEmparejar}
+                            style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: colors.primary }}
                         >
-                            <Text style={{
-                                fontWeight: '800',
-                                color: (idx + 1 < total) ? '#1f2937' : '#ffffff'
-                            }}>
+                            <Text style={{ color: '#fff', fontWeight: '800' }}>Validar</Text>
+                        </Pressable>
+                    </View>
+                ) : (
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                        <Pressable
+                            onPress={async () => {
+                                const esUltima = (idx + 1) >= total;
+                                if (!esUltima) setIdx(p => p + 1);
+                                else await finalizar();
+                            }}
+                            style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: (idx + 1 < total) ? '#f59e0b' : '#f97316' }}
+                        >
+                            <Text style={{ color: '#fff', fontWeight: '800' }}>
                                 {(idx + 1 < total) ? 'Siguiente' : 'Finalizar'}
                             </Text>
                         </Pressable>
-                    </>
+                    </View>
                 )}
-            </ScrollView>
 
-            {/* Overlays */}
-            <AnswerScreen />
-            <FeedbackToast />
-            <ComodinesBar />
+                {!!fbMsg && verdict.checked && (
+                    <Text style={[g.text.caption, { marginTop: 8, color: colors.mutedText }]}>{fbMsg}</Text>
+                )}
+            </View>
+        );
+    };
+
+    /** ===========================
+     *  Render principal (único return → evita errores de hooks)
+     *  =========================== */
+    const matchData = useMemo(() => {
+        if (preguntaActual?.tipo !== 'emparejar') return null;
+        return extractMatchData(preguntaActual);
+    }, [preguntaActual]);
+
+    return (
+        <View style={{ flex: 1 }}>
+            {/* Resumen */}
+            {SummaryScreen()}
+
+            {/* Contenido principal (se oculta si summary.visible) */}
+            {!summary.visible && (
+                <>
+                    <ScrollView
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{ padding: 16, paddingBottom: 160 }}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {!preguntaActual ? (
+                            <Text style={g.text.body}>No hay preguntas. Un labubu travieso se las llevó 🐾</Text>
+                        ) : (
+                            <>
+                                <View style={{ marginTop: 10 }}>
+                                    <QuizHeader />
+                                </View>
+
+                                <Text style={[g.text.h3, { marginTop: 10 }]}>Pregunta {preguntaActual.numero}</Text>
+                                <Text style={[g.text.body, { marginTop: 6 }]}>{preguntaActual.enunciado}</Text>
+
+                                {preguntaActual.tipo === 'abcd' && (
+                                    <View style={{ marginTop: 12 }}>
+                                        {(preguntaActual.opciones || [])
+                                            .filter((o: any) => !ocultas.includes(o.codOpcion))
+                                            .map((op: any) => {
+                                                const active =
+                                                    (respuestas[preguntaActual.codPregunta]?.abcd ?? respuestas[preguntaActual.codPregunta]) === op.codOpcion;
+                                                return (
+                                                    <Pressable
+                                                        key={op.codOpcion}
+                                                        onPress={() => setResp(preguntaActual.codPregunta, { abcd: active ? null : op.codOpcion })}
+                                                        style={{
+                                                            marginBottom: 8,
+                                                            padding: 12,
+                                                            borderRadius: 10,
+                                                            borderWidth: 1,
+                                                            borderColor: active ? colors.primary : colors.divider,
+                                                            backgroundColor: active ? (isDark ? '#0b1022' : '#fff7ed') : 'transparent',
+                                                        }}
+                                                    >
+                                                        <Text style={{ color: colors.text }}>{op.texto}</Text>
+                                                    </Pressable>
+                                                );
+                                            })}
+                                    </View>
+                                )}
+
+                                {preguntaActual.tipo === 'rellenar' && (
+                                    <TextInput
+                                        placeholder="Tu respuesta"
+                                        placeholderTextColor={colors.mutedText}
+                                        value={respuestas[preguntaActual.codPregunta]?.rellenar ?? ''}
+                                        onChangeText={(t) => setResp(preguntaActual.codPregunta, { rellenar: t })}
+                                        onSubmitEditing={() => responderYAvanzar()}
+                                        returnKeyType="send"
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        style={{
+                                            borderWidth: 1, borderColor: colors.divider, borderRadius: 10,
+                                            padding: 10, color: colors.text, marginTop: 8,
+                                        }}
+                                    />
+                                )}
+
+                                {preguntaActual.tipo === 'emparejar' && matchData && (
+                                    <EmparejarBoard qid={preguntaActual.codPregunta} data={matchData} />
+                                )}
+                                {preguntaActual.tipo === 'emparejar' && !matchData && (
+                                    <Text style={[g.text.caption, { marginTop: 8 }]}>
+                                        No se pudo cargar la configuración de emparejar (faltan columnas A/B).
+                                    </Text>
+                                )}
+
+                                {preguntaActual.tipo === 'reporte' && (
+                                    <Text style={g.text.caption}>Este tipo requiere upload de archivo; conecta tu picker y manda metadata al backend.</Text>
+                                )}
+
+                                {(preguntaActual.tipo === 'abcd' || preguntaActual.tipo === 'rellenar' || preguntaActual.tipo === 'reporte') && (
+                                    <Pressable
+                                        onPress={() => responderYAvanzar()}
+                                        style={{
+                                            marginTop: 18,
+                                            paddingVertical: 14,
+                                            paddingHorizontal: 28,
+                                            backgroundColor: (idx + 1 < total) ? '#facc15' : '#f97316',
+                                            borderRadius: 999,
+                                            alignSelf: 'center',
+                                        }}
+                                    >
+                                        <Text style={{
+                                            fontWeight: '800',
+                                            color: (idx + 1 < total) ? '#1f2937' : '#ffffff'
+                                        }}>
+                                            {(idx + 1 < total) ? 'Siguiente' : 'Finalizar'}
+                                        </Text>
+                                    </Pressable>
+                                )}
+                            </>
+                        )}
+                    </ScrollView>
+
+                    {/* Overlays y barra */}
+                    {AnswerScreen()}
+                    {FeedbackToast()}
+                    <ComodinesBar />
+                </>
+            )}
         </View>
     );
 }

@@ -1,9 +1,10 @@
-// app/(admin)/(tabs)/PerfilScreen.tsx
+// app/(admin)/PerfilScreen.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFocusEffect } from '@react-navigation/native';
 
 import FadeWrapper from '../../components/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
@@ -27,10 +28,10 @@ function fromEmail(email?: string | null) {
 function toTitle(s?: string) {
   if (!s) return '';
   return s
-    .trim()
-    .split(/\s+/)
-    .map(w => w[0].toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ');
+      .trim()
+      .split(/\s+/)
+      .map(w => w[0].toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
 }
 function pickFirst<T = any>(...vals: T[]) {
   for (const v of vals) {
@@ -43,13 +44,13 @@ function pickFirst<T = any>(...vals: T[]) {
 function extractCedula(u: any): string {
   if (!u) return '—';
   const found = pickFirst(
-    u.cedula, u.cédula, u.cedulaUsuario, u.cedula_usuario,
-    u.dni, u.documento, u.documentNumber, u.numeroDocumento, u.nroDocumento,
-    u.identificacion, u.identification, u.cc,
-    u.usuario?.cedula, u.usuario?.cédula, u.usuario?.cedulaUsuario, u.usuario?.cedula_usuario,
-    u.usuario?.dni, u.usuario?.documento, u.usuario?.numeroDocumento, u.usuario?.identificacion, u.usuario?.cc,
-    u.perfil?.cedula, u.perfil?.dni,
-    u.datos?.cedula, u.datos?.dni
+      u.cedula, u.cédula, u.cedulaUsuario, u.cedula_usuario,
+      u.dni, u.documento, u.documentNumber, u.numeroDocumento, u.nroDocumento,
+      u.identificacion, u.identification, u.cc,
+      u.usuario?.cedula, u.usuario?.cédula, u.usuario?.cedulaUsuario, u.usuario?.cedula_usuario,
+      u.usuario?.dni, u.usuario?.documento, u.usuario?.numeroDocumento, u.usuario?.identificacion, u.usuario?.cc,
+      u.perfil?.cedula, u.perfil?.dni,
+      u.datos?.cedula, u.datos?.dni
   );
   return found ?? '—';
 }
@@ -58,8 +59,8 @@ function extractRol(u: any): string {
   const id = pickFirst(u.rolId, u.codRol, u.idRol, u.roleId, u.rol?.id, u.role?.id, u.usuario?.rolId, u.usuario?.codRol);
   if (id && Number(id) === 1) return 'admin';
   const name = pickFirst(
-    u.rol, u.role, u.rol?.nombre, u.rol?.name, u.role?.nombre, u.role?.name,
-    u.usuario?.rol, u.usuario?.role, u.usuario?.rol?.nombre
+      u.rol, u.role, u.rol?.nombre, u.rol?.name, u.role?.nombre, u.role?.name,
+      u.usuario?.rol, u.usuario?.role, u.usuario?.rol?.nombre
   );
   if (!name) return '—';
   const s = String(name).toLowerCase();
@@ -75,10 +76,20 @@ export default function PerfilScreen() {
 
   const u = user as any;
 
+  // Estados mostrados en UI
   const [fullName, setFullName] = useState<string>(() =>
-    toTitle(pickFirst(u?.nombre, u?.name, u?.usuario?.nombre, fromEmail(u?.email)) || 'Administrador')
+      toTitle(pickFirst(u?.nombre, u?.name, u?.usuario?.nombre, fromEmail(u?.email)) || 'Administrador')
   );
+  const [emailApi, setEmailApi] = useState<string | null>(null);
+  const [cedulaApi, setCedulaApi] = useState<string | null>(null);
 
+  // Derivados con fallback a user base
+  const rolLabel = extractRol(u);
+  const cedulaFromUser = extractCedula(u);
+  const cedula = pickFirst(cedulaApi, cedulaFromUser) || '—';
+  const email = pickFirst(emailApi, u?.email, u?.usuario?.correo, '—')!;
+
+  // Carga del nombre "bonito" desde lista (tu helper)
   const loadFullName = useCallback(async () => {
     try {
       const name = await fetchFullNameFromUsuariosList(fetchJson, u);
@@ -86,15 +97,42 @@ export default function PerfilScreen() {
     } catch {}
   }, [fetchJson, u]);
 
+  // Primer render
   useEffect(() => { loadFullName(); }, [loadFullName]);
 
-  const rolLabel = extractRol(u);
+  // Refresco “duro” desde /mi-perfil/resumen
+  const refreshFromResumen = useCallback(async () => {
+    try {
+      const r: any = await fetchJson('/mi-perfil/resumen');
+      const c = extractCedula(r?.usuario);
+      if (c && c !== '—') setCedulaApi(c);
 
-  const [cedulaApi, setCedulaApi] = useState<string | null>(null);
+      const apiEmail = pickFirst(r?.usuario?.email, r?.usuario?.correo);
+      if (apiEmail) setEmailApi(String(apiEmail));
 
-  const cedulaFromUser = extractCedula(u);
-  const cedula = pickFirst(cedulaApi, cedulaFromUser) || '—';
+      const apiFull =
+          toTitle(
+              `${pickFirst(r?.usuario?.nombre, '') ?? ''} ${pickFirst(r?.usuario?.apellido, '') ?? ''}`.trim()
+          ) || null;
+      if (apiFull) setFullName(apiFull);
+    } catch {}
+  }, [fetchJson]);
 
+  // 🔥 Recargar en cada focus
+  useFocusEffect(
+      useCallback(() => {
+        let active = true;
+        (async () => {
+          // hacemos ambas cargas; si se des-enfoca en medio, “abortamos” via flag
+          await loadFullName();
+          if (!active) return;
+          await refreshFromResumen();
+        })();
+        return () => { active = false; };
+      }, [loadFullName, refreshFromResumen])
+  );
+
+  // También cubrimos el caso inicial en el que no había cédula
   useEffect(() => {
     let isMounted = true;
     (async () => {
@@ -109,6 +147,7 @@ export default function PerfilScreen() {
     return () => { isMounted = false; };
   }, [cedulaFromUser, fetchJson]);
 
+  // Animación avatar
   const pulse = useRef(new Animated.Value(0)).current;
   const onPressAvatar = () => {
     Animated.sequence([
@@ -121,105 +160,95 @@ export default function PerfilScreen() {
   };
 
   return (
-    <FadeWrapper>
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-        {/* Header */}
-        <View
-          style={{
-            paddingHorizontal: 18,
-            paddingTop: 6,
-            paddingBottom: 10,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <Text style={g.text.h2}>Mi perfil</Text>
-
-          <Pressable
-            onPress={() => router.push('/(admin)/(tabs)/SettingsScreen')}
-            hitSlop={8}
-            style={({ pressed }) => [
-              styles.settingsBtn,
-              {
-                backgroundColor: colors.primary,
-                borderColor: colors.primary,
-                shadowColor: colors.primary,
-                opacity: pressed ? 0.92 : 1,
-              },
-            ]}
+      <FadeWrapper>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+          {/* Header */}
+          <View
+              style={{
+                paddingHorizontal: 18,
+                paddingTop: 6,
+                paddingBottom: 10,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
           >
-            <Ionicons name="settings-sharp" size={22} color="#fff" />
-          </Pressable>
-        </View>
+            <Text style={g.text.h1}>Mi perfil</Text>
+          </View>
 
-        {/* Tarjeta principal */}
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.card, borderColor: colors.tabBorder, shadowColor: colors.tabBorder },
-          ]}
-        >
-          <Pressable onPress={onPressAvatar} style={{ alignItems: 'center' }}>
-            <Animated.View
+          {/* Tarjeta principal */}
+          <View
               style={[
-                {
-                  width: AVATAR,
-                  height: AVATAR,
-                  borderRadius: AVATAR / 2,
-                  backgroundColor: colors.brandBlueSoft,
-                  borderWidth: 3,
-                  borderColor: colors.brandBlueBorder,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                },
-                avatarStyle,
+                styles.card,
+                { backgroundColor: colors.card, borderColor: colors.tabBorder, shadowColor: colors.tabBorder },
               ]}
-            >
-              <Text style={{ fontSize: 36, fontWeight: '800', color: colors.primary }}>
-                {initials(fullName)}
-              </Text>
-            </Animated.View>
-          </Pressable>
+          >
+            <Pressable onPress={onPressAvatar} style={{ alignItems: 'center' }}>
+              <Animated.View
+                  style={[
+                    {
+                      width: AVATAR,
+                      height: AVATAR,
+                      borderRadius: AVATAR / 2,
+                      backgroundColor: colors.brandBlueSoft,
+                      borderWidth: 3,
+                      borderColor: colors.brandBlueBorder,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    },
+                    avatarStyle,
+                  ]}
+              >
+                <Text style={{ fontSize: 36, fontWeight: '800', color: colors.primary }}>
+                  {initials(fullName)}
+                </Text>
+              </Animated.View>
+            </Pressable>
 
-          <Text style={[g.text.h3, { marginTop: 10 }]}>{fullName}</Text>
-          <Text style={[g.text.small, g.text.muted]}>{pickFirst(u?.email, u?.usuario?.correo, '—')}</Text>
+            <Text style={[g.text.h3, { marginTop: 10 }]}>{fullName}</Text>
+            <Text style={[g.text.small, g.text.muted]}>{email}</Text>
 
-          <View style={styles.infoRow}>
-            <InfoChip icon="id-card-outline" label="Rol" value={rolLabel} colors={colors} g={g} />
-            <InfoChip icon="finger-print-outline" label="Cédula" value={cedula} colors={colors} g={g} />
+            <View style={styles.infoRow}>
+              <InfoChip icon="id-card-outline" label="Rol" value={rolLabel} colors={colors} g={g} />
+              <InfoChip icon="finger-print-outline" label="Cédula" value={cedula} colors={colors} g={g} />
+            </View>
+
+            <View style={styles.actionsRow}>
+              <ActionButton
+                  icon="create-outline"
+                  label="Editar perfil"
+                  onPress={() => {
+                    const isAdmin = (rolLabel || '').toLowerCase().includes('admin');
+                    const route = isAdmin
+                        ? '/(modals)/admin/editar-perfil-admin'
+                        : '/(modals)/editar-perfil';
+                    router.push(route);
+                  }}
+                  colors={colors}
+                  g={g}
+              />
+            </View>
           </View>
 
-          <View style={styles.actionsRow}>
-            <ActionButton
-              icon="create-outline"
-              label="Editar perfil"
-              onPress={() => router.push('/(modals)/editar-perfil')}
-              colors={colors}
-              g={g}
-            />
+          {/* Card secundaria */}
+          <View style={[styles.secondary, { backgroundColor: colors.cardTint, borderColor: colors.tabBorder }]}>
+            <Row label="Correo" value={email} g={g} />
+            <Row label="Cédula" value={cedula} g={g} />
+            <Row label="Rol" value={rolLabel} g={g} />
           </View>
-        </View>
-
-        {/* Card secundaria */}
-        <View style={[styles.secondary, { backgroundColor: colors.cardTint, borderColor: colors.tabBorder }]}>
-          <Row label="Correo" value={pickFirst(u?.email, u?.usuario?.correo, '—')!} g={g} />
-          <Row label="Cédula" value={cedula} g={g} />
-          <Row label="Rol" value={rolLabel} g={g} />
-        </View>
-      </SafeAreaView>
-    </FadeWrapper>
+        </SafeAreaView>
+      </FadeWrapper>
   );
 }
 
 /* ---------------- subcomponentes ---------------- */
 function InfoChip({
-  icon,
-  label,
-  value,
-  colors,
-  g,
-}: {
+                    icon,
+                    label,
+                    value,
+                    colors,
+                    g,
+                  }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: string;
@@ -227,32 +256,32 @@ function InfoChip({
   g: ReturnType<typeof makeGlobalStyles>;
 }) {
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: colors.mutedBg,
-        borderRadius: 12,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: colors.outline,
-      }}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Ionicons name={icon} size={18} color={colors.tabIconActive} />
-        <Text style={[g.text.smallStrong, { marginLeft: 8 }]}>{label}</Text>
+      <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.mutedBg,
+            borderRadius: 12,
+            padding: 12,
+            borderWidth: 1,
+            borderColor: colors.outline,
+          }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Ionicons name={icon} size={18} color={colors.tabIconActive} />
+          <Text style={[g.text.smallStrong, { marginLeft: 8 }]}>{label}</Text>
+        </View>
+        <Text style={[g.text.body, { marginTop: 4 }]}>{value}</Text>
       </View>
-      <Text style={[g.text.body, { marginTop: 4 }]}>{value}</Text>
-    </View>
   );
 }
 
 function ActionButton({
-  icon,
-  label,
-  onPress,
-  colors,
-  g,
-}: {
+                        icon,
+                        label,
+                        onPress,
+                        colors,
+                        g,
+                      }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
@@ -260,30 +289,30 @@ function ActionButton({
   g: ReturnType<typeof makeGlobalStyles>;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        flex: 1,
-        height: 44,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.primary,
-        flexDirection: 'row',
-      }}
-    >
-      <Ionicons name={icon} size={18} color="#fff" />
-      <Text style={[g.text.onPrimary, { marginLeft: 8 }]}>{label}</Text>
-    </Pressable>
+      <Pressable
+          onPress={onPress}
+          style={{
+            flex: 1,
+            height: 44,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.primary,
+            flexDirection: 'row',
+          }}
+      >
+        <Ionicons name={icon} size={18} color="#fff" />
+        <Text style={[g.text.onPrimary, { marginLeft: 8 }]}>{label}</Text>
+      </Pressable>
   );
 }
 
 function Row({ label, value, g }: { label: string; value: string; g: ReturnType<typeof makeGlobalStyles> }) {
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 }}>
-      <Text style={[g.text.small, g.text.muted]}>{label}</Text>
-      <Text style={g.text.bodyStrong}>{value}</Text>
-    </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 }}>
+        <Text style={[g.text.small, g.text.muted]}>{label}</Text>
+        <Text style={g.text.bodyStrong}>{value}</Text>
+      </View>
   );
 }
 
