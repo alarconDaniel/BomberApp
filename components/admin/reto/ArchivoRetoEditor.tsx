@@ -4,7 +4,7 @@ import { Pressable, Text, TextInput, View, StyleSheet } from 'react-native';
 import { makeGlobalStyles } from '../../../theme/GlobalStyles';
 import { EditorHandle } from './types';
 
-const FORM_TYPES = ['pdf', 'jpg', 'png', 'docx'] as const;
+const FORM_TYPES = ['pdf', 'jpg', 'png', 'docx', 'mp4', 'mov', 'heif', 'heic', 'xslx', 'webp'] as const;
 type FormType = typeof FORM_TYPES[number];
 
 export type ArchivoEditorProps = {

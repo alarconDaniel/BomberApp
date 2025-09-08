@@ -15,11 +15,11 @@ import QuizRetoEditor from '../../../components/admin/reto/QuizRetoEditor';
 import ChecklistRetoEditor from '../../../components/admin/reto/ChecklistRetoEditor';
 import ArchivoRetoEditor from '../../../components/admin/reto/ArchivoRetoEditor';
 import { EditorHandle } from '../../../components/admin/reto/types';
-import { Radio, Segment, getStyles, clampInt } from '../../../components/admin/reto/EditorPrimitives';
+import { Segment, getStyles, clampInt } from '../../../components/admin/reto/EditorPrimitives';
 
 type TipoReto = 'quiz' | 'form' | 'archivo';
-type Cargo = 'Bomberman' | 'Gruaman' | 'Robin';
-const cargos: Cargo[] = ['Bomberman', 'Gruaman', 'Robin'] as const;
+type CargoRow = { id: number; nombre: string };
+
 const MAX_DESC = 255 as const;
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
@@ -47,7 +47,6 @@ export default function EditarRetoModal() {
     const [tipo, setTipo] = useState<TipoReto>('quiz');
     const [nombre, setNombre] = useState('');
     const [descripcion, setDescripcion] = useState('');
-    const [cargo, setCargo] = useState<Cargo>('Bomberman');
     const [esAutomatico, setEsAutomatico] = useState<boolean>(true);
     const [activo, setActivo] = useState<boolean>(true);
 
@@ -78,17 +77,21 @@ export default function EditarRetoModal() {
     const checklistRef = useRef<EditorHandle>(null);
     const archivoRef = useRef<EditorHandle>(null);
 
+    // ============ CARGOS DINÁMICOS ============
+    const [cargos, setCargos] = useState<CargoRow[]>([]);
+    const [selCargoIds, setSelCargoIds] = useState<number[]>([]);
+    const [cargandoCargos, setCargandoCargos] = useState(false);
+
+    // carga/parseo del reto
     useEffect(() => {
-        // Prefill desde params
         async function hydrate() {
             setCargandoInit(true);
             try {
                 let parsed: any = null;
                 try { parsed = item ? JSON.parse(item) : null; } catch { parsed = null; }
 
-                // Si no vino completo, intenta varias rutas
+                // si no vino completo, intenta rutas comunes
                 if (!parsed || !parsed.codReto) {
-                    // fallback simple (compatible con tu "fetchDetalle" previo)
                     const maybeId = parsed?.codReto ?? parsed?.id ?? null;
                     const id = maybeId || null;
                     if (id) {
@@ -126,11 +129,8 @@ export default function EditarRetoModal() {
                 setFin(parsed.fechaFinReto ?? parsed.fecha_fin_reto ?? isoDate(hoy));
                 setTiempoEstimadoMin(Math.max(0, Math.round(Number(parsed.tiempoEstimadoSegReto ?? 0) / 60)));
 
-                const activoFlag = (parsed?.activo !== 0 && parsed?.activo !== false);
-                setActivo(!!activoFlag);
-                const autoFlag = !!(parsed?.esAutomaticoReto ?? parsed?.es_automatico_reto);
-                setEsAutomatico(autoFlag);
-                if (parsed?.cargo) setCargo(String(parsed.cargo) as Cargo);
+                setActivo(!!(parsed?.activo !== 0 && parsed?.activo !== false));
+                setEsAutomatico(!!(parsed?.esAutomaticoReto ?? parsed?.es_automatico_reto));
 
                 // tipo + config
                 const rawTipo = (parsed?.tipo ?? parsed?.tipoReto ?? parsed?.tipo_reto) as TipoReto | undefined;
@@ -142,23 +142,74 @@ export default function EditarRetoModal() {
                 if (rawTipo === 'quiz') t = 'quiz';
                 else if (rawTipo === 'archivo' || kind === 'archivo') t = 'archivo';
                 else t = 'form';
-
                 setTipo(t);
                 setInitialConfig(typeof cfgAny === 'string' ? JSON.parse(cfgAny) : cfgAny);
             } finally {
                 setCargandoInit(false);
             }
         }
-        hydrate().catch(() => { setCargandoInit(false); });
+        hydrate().catch(() => setCargandoInit(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // carga de cargos + preselección (versión simplificada y determinística)
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            try {
+                setCargandoCargos(true);
+
+                // 1) Cargar catálogo de cargos
+                const rows: CargoRow[] = await fetchJson('/catalogos/cargos');
+                if (!alive) return;
+                setCargos(rows || []);
+
+                // 2) Si ya tenemos el id del reto → pedir cargos asignados a ese reto
+                const id = itemParsed?.codReto ?? itemParsed?.id ?? null;
+                if (!id) {
+                    setSelCargoIds([]); // nada que preseleccionar todavía
+                    return;
+                }
+
+                const asignados: Array<{ id: number; nombre: string }> =
+                    await fetchJson(`/reto/${id}/cargos`);
+
+                if (!alive) return;
+
+                const ids = (asignados || [])
+                    .map((r) => Number(r?.id))
+                    .filter((n) => Number.isFinite(n) && n > 0);
+
+                setSelCargoIds(ids);
+            } catch (e: any) {
+                Alert.alert('Error', String(e?.message || 'No se pudieron cargar los cargos'));
+            } finally {
+                setCargandoCargos(false);
+            }
+        })();
+        return () => { alive = false; };
+    }, [fetchJson, itemParsed]);
+
+    const toggleCargo = (id: number) => {
+        setSelCargoIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    };
+
     const [cargando, setCargando] = useState(false);
+
+    function validarFechas(): boolean {
+        if (!isYYYYMMDD(inicio) || !isYYYYMMDD(fin)) {
+            Alert.alert('Fecha inválida', 'Usa el formato YYYY-MM-DD.');
+            return false;
+        }
+        if (new Date(inicio) > new Date(fin)) {
+            Alert.alert('Rango inválido', 'La fecha de inicio no puede ser mayor a la de fin.');
+            return false;
+        }
+        return true;
+    }
 
     function buildPayload(config: any) {
         const tiempoEstimadoSegReto = Math.max(0, Math.floor(Number(tiempoEstimadoMin) * 60));
-
-        // ✅ antes: forzado a quiz|form
         const tipoApi: TipoReto = tipo;
 
         return {
@@ -168,13 +219,14 @@ export default function EditarRetoModal() {
             tiempoEstimadoSegReto,
             fechaInicioReto: inicio,
             fechaFinReto: fin,
-            cargo,
+
+            // >>> clave: multi-cargos desde BD
+            cargoIds: selCargoIds,
+
             esAutomaticoReto: !!esAutomatico,
             activo,
-
-            tipo: tipoApi,        // ✅ ahora soporta "archivo"
-            tipoReto: tipoApi,    // idem
-
+            tipo: tipoApi,
+            tipoReto: tipoApi,
             config,
             metadataReto: config,
             metadata_reto: config,
@@ -187,6 +239,10 @@ export default function EditarRetoModal() {
             return;
         }
         if (!validarFechas()) return;
+        if (!selCargoIds.length) {
+            Alert.alert('Asignación requerida', 'Selecciona al menos un cargo para este reto.');
+            return;
+        }
 
         let handle = quizRef.current as EditorHandle | null;
         if (tipo === 'form') handle = checklistRef.current;
@@ -199,7 +255,7 @@ export default function EditarRetoModal() {
 
         try {
             setCargando(true);
-            // 1) Cabecera
+            // 1) Cabecera + cargos
             await fetchJson('/reto/modificar', {
                 method: 'PUT',
                 headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -227,19 +283,7 @@ export default function EditarRetoModal() {
         }
     };
 
-    function validarFechas(): boolean {
-        if (!isYYYYMMDD(inicio) || !isYYYYMMDD(fin)) {
-            Alert.alert('Fecha inválida', 'Usa el formato YYYY-MM-DD.');
-            return false;
-        }
-        if (new Date(inicio) > new Date(fin)) {
-            Alert.alert('Rango inválido', 'La fecha de inicio no puede ser mayor a la de fin.');
-            return false;
-        }
-        return true;
-    }
-
-    // si cambian el tipo en edición, advierte (porque descarta config visual actual)
+    // si cambian el tipo en edición, advertimos (como antes)
     const onSwitchTipo = (t: TipoReto) => {
         if (t === tipo) return;
         Alert.alert(
@@ -269,7 +313,7 @@ export default function EditarRetoModal() {
         <FadeWrapper>
             <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
                 {/* Header modal */}
-                <View style={{ paddingHorizontal: 18, paddingTop: insets.top + 8, paddingBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ paddingHorizontal: 18, paddingTop: 10, paddingBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
                     <Pressable onPress={() => router.back()} style={{ marginRight: 8 }}>
                         <Ionicons name="close" size={24} color={colors.text} />
                     </Pressable>
@@ -340,18 +384,45 @@ export default function EditarRetoModal() {
                             display="inline"
                         />
 
-                        {/* Cargo */}
-                        <Text style={[g.text.smallStrong, { marginTop: 12 }]}>Seleccione el cargo</Text>
-                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-                            {cargos.map((c) => (
-                                <Radio key={c} label={c} selected={cargo === c} onPress={() => setCargo(c)} c={colors} g={g} />
-                            ))}
-                        </View>
+                        {/* CARGOS DINÁMICOS (multi) */}
+                        <Text style={[g.text.smallStrong, { marginTop: 12 }]}>Asignar a cargos</Text>
+                        {cargandoCargos ? (
+                            <View style={{ paddingVertical: 10 }}><ActivityIndicator color={colors.text} /></View>
+                        ) : (
+                            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                                {cargos.map(cg => {
+                                    const selected = selCargoIds.includes(cg.id);
+                                    return (
+                                        <Pressable
+                                            key={cg.id}
+                                            onPress={() => toggleCargo(cg.id)}
+                                            style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                paddingHorizontal: 12,
+                                                height: 36,
+                                                borderRadius: 999,
+                                                borderWidth: 1,
+                                                borderColor: selected ? colors.primary : colors.outline,
+                                                backgroundColor: selected ? colors.primary + '20' : colors.mutedBg,
+                                                gap: 8,
+                                            }}
+                                        >
+                                            <Text style={g.text.body}>{cg.nombre}</Text>
+                                            {selected ? <Ionicons name="checkmark" size={16} color={colors.primary} /> : null}
+                                        </Pressable>
+                                    );
+                                })}
+                                {!cargos.length && <Text style={g.text.caption}>No hay cargos configurados</Text>}
+                            </View>
+                        )}
 
                         {/* Activo */}
                         <View style={{ marginTop: 12 }}>
                             <Pressable onPress={() => setActivo(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 40 }}>
-                                <View style={[s.check, { alignItems: 'center', justifyContent: 'center' }]}>{activo ? <Ionicons name="checkmark" size={16} color={colors.primary} /> : null}</View>
+                                <View style={[s.check, { alignItems: 'center', justifyContent: 'center' }]}>
+                                    {activo ? <Ionicons name="checkmark" size={16} color={colors.primary} /> : null}
+                                </View>
                                 <Text style={g.text.body}>Activo</Text>
                             </Pressable>
                         </View>
@@ -362,7 +433,9 @@ export default function EditarRetoModal() {
                                 onPress={() => setEsAutomatico(v => !v)}
                                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 40 }}
                             >
-                                <View style={[s.check, { alignItems: 'center', justifyContent: 'center' }]}>{esAutomatico ? <Ionicons name="checkmark" size={16} color={colors.primary} /> : null}</View>
+                                <View style={[s.check, { alignItems: 'center', justifyContent: 'center' }]}>
+                                    {esAutomatico ? <Ionicons name="checkmark" size={16} color={colors.primary} /> : null}
+                                </View>
                                 <Text style={g.text.body}>Es automático</Text>
                             </Pressable>
                         </View>
@@ -370,7 +443,7 @@ export default function EditarRetoModal() {
                         {/* ===== Sección modular según tipo ===== */}
                         {tipo === 'quiz' && (
                             <QuizRetoEditor
-                                key={`editar-${itemParsed?.codReto ?? 'new'}`}   // <—
+                                key={`editar-${itemParsed?.codReto ?? 'new'}`}
                                 ref={quizRef}
                                 colors={colors}
                                 g={g}
@@ -379,8 +452,23 @@ export default function EditarRetoModal() {
                             />
                         )}
 
-                        {tipo === 'form' && <ChecklistRetoEditor ref={checklistRef} colors={colors} g={g} initialConfig={initialConfig?.kind === 'checklist' ? initialConfig : undefined} />}
-                        {tipo === 'archivo' && <ArchivoRetoEditor ref={archivoRef} colors={colors} g={g} initialConfig={initialConfig?.kind === 'archivo' ? initialConfig : undefined} />}
+                        {tipo === 'form' && (
+                            <ChecklistRetoEditor
+                                ref={checklistRef}
+                                colors={colors}
+                                g={g}
+                                initialConfig={initialConfig}
+                            />
+                        )}
+
+                        {tipo === 'archivo' && (
+                            <ArchivoRetoEditor
+                                ref={archivoRef}
+                                colors={colors}
+                                g={g}
+                                initialConfig={initialConfig?.kind === 'archivo' ? initialConfig : undefined}
+                            />
+                        )}
 
                         {/* Acciones */}
                         <View style={{ marginTop: 16, gap: 10 }}>

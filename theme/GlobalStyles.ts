@@ -73,6 +73,7 @@ export function makeGlobalStyles(
         h2: { fontSize: 22, fontWeight: '600', color: c.text },
         title: { fontSize: 20, fontWeight: '800', color: c.text },
         h3: { fontSize: 18, fontWeight: '800', color: c.text },
+        h4: { fontSize: 17, fontWeight: '600', color: c.text },
 
         body: { fontSize: 16, color: c.text },
         bodyStrong: { fontSize: 16, fontWeight: '600', color: c.text },
