@@ -97,6 +97,7 @@ export default function RetosScreen() {
     return null;
   };
 
+  // Dentro de RetosScreen
   const abrirEditar = async (item: RetoDTO) => {
     try {
       setLoading(true);
@@ -130,18 +131,19 @@ export default function RetosScreen() {
       };
 
       router.push({
-        pathname: '/(modals)/reto/crear-reto',
-        params: { mode: 'edit', item: JSON.stringify(merged) },
+        pathname: '/(modals)/reto/editar-reto',
+        params: { item: JSON.stringify(merged) },
       });
     } catch {
       router.push({
-        pathname: '/(modals)/reto/crear-reto',
-        params: { mode: 'edit', item: JSON.stringify(item) },
+        pathname: '/(modals)/reto/editar-reto',
+        params: { item: JSON.stringify(item) },
       });
     } finally {
       setLoading(false);
     }
   };
+
 
   const borrar = async (item: RetoDTO) => {
     Alert.alert('Confirmar', `¿Borrar el reto "${item.nombreReto}"?`, [
@@ -167,8 +169,8 @@ export default function RetosScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       {/* Header */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={[g.text.h2, { flex: 1 }]}>Retos</Text>
+      <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={[g.text.h1, { flex: 1 }]}>Retos</Text>
 
         <Pressable
           onPress={abrirCrear}
@@ -314,17 +316,7 @@ export default function RetosScreen() {
         />
       )}
 
-      {/* FAB crear */}
-      <Pressable
-        onPress={abrirCrear}
-        style={{
-          position: 'absolute', right: 16, bottom: 20, width: 56, height: 56, borderRadius: 28,
-          backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
-          shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3
-        }}
-      >
-        <Ionicons name="add" size={24} color="#fff" />
-      </Pressable>
+
     </SafeAreaView>
   );
 }

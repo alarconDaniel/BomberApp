@@ -15,14 +15,27 @@ import {API, uploadToSignedUrl, BASE_URL} from '../../config/api';
 
 type Area = 'mantenimiento' | 'supervision' | null;
 
-type MetaLike = {
-    // posibles alias donde podría venir el tipo/área desde metadata
-    areaArchivo?: string;
-    area?: string;
-    tipoArchivo?: string;
-    archivoTipo?: string;
-    uploadTipo?: string;
+type MetaArchivo = {
+    kind?: string; // 'archivo'
+    instrucciones?: string;
+    tiposPermitidos?: Array<'pdf'|'jpg'|'png'|'docx'>;
 };
+
+const DEFAULT_ALLOWED = ['pdf'] as const;
+type AllowedExt = typeof DEFAULT_ALLOWED[number] | 'jpg' | 'png' | 'docx';
+
+function extFromNameOrMime(name?: string, mime?: string): string | null {
+    const byName = (name || '').split('.').pop()?.toLowerCase();
+    if (byName) return byName;
+    if (!mime) return null;
+    // Simplón: mapear mimes comunes
+    if (mime === 'application/pdf') return 'pdf';
+    if (mime === 'image/jpeg') return 'jpg';
+    if (mime === 'image/png') return 'png';
+    if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
+    if (mime === 'application/msword') return 'doc';
+    return null;
+}
 
 export default function ArchivoReto({
                                         codReto,
@@ -43,7 +56,7 @@ export default function ArchivoReto({
         (user as any)?.codUsuario ??
         (user as any)?.id ??
         (user as any)?.usuario?.id ??
-        1; // fallback defensivo (igual que en ReportesScreen)
+        1; // fallback defensivo
 
     // UI
     const [loadingMeta, setLoadingMeta] = useState(true);
@@ -51,11 +64,15 @@ export default function ArchivoReto({
     const [file, setFile] = useState<{ name: string; uri: string; mimeType?: string; size?: number } | null>(null);
     const [nombre, setNombre] = useState<string>('');
 
-    // Selector de “área/tipo” igual que la screen de reportes
+    // Selector de “área/tipo” — SOLO decide carpeta en el storage
     const [selectedTipo, setSelectedTipo] = useState<Area>(null);
 
+    // Metadata del reto (instrucciones + tiposPermitidos)
+    const [instrucciones, setInstrucciones] = useState<string>('');
+    const [allowedExts, setAllowedExts] = useState<AllowedExt[]>(['pdf']);
+
     // ───────────────────────────────────────────────────────────────
-    // 1) Cargar metadata del reto para inferir “área/tipo” si viene
+    // 1) Cargar metadata del reto para leer instrucciones y tiposPermitidos
     // ───────────────────────────────────────────────────────────────
     useEffect(() => {
         let cancelled = false;
@@ -63,42 +80,37 @@ export default function ArchivoReto({
             try {
                 setLoadingMeta(true);
                 const api = await fetchJson<any>(`/reto/ver/full/${codReto}`);
-                // buscar hints en api.metadataReto
-                const meta: MetaLike = (api?.metadataReto ?? {}) as any;
+                const meta: MetaArchivo | null = (() => {
+                    const raw = api?.metadataReto ?? null;
+                    if (!raw) return null;
+                    try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+                })();
 
-                const raw =
-                    meta?.areaArchivo ??
-                    meta?.area ??
-                    meta?.tipoArchivo ??
-                    meta?.archivoTipo ??
-                    meta?.uploadTipo ??
-                    null;
-
-                const norm = (raw ?? '').toString().trim().toLowerCase();
-                const inferred: Area =
-                    norm === 'mantenimiento' ? 'mantenimiento' :
-                        norm === 'supervision' ? 'supervision' :
-                            null;
+                const instr = (meta?.instrucciones || '').toString().trim();
+                const allowed = Array.isArray(meta?.tiposPermitidos) && meta?.tiposPermitidos.length
+                    ? meta!.tiposPermitidos.map(x => String(x).toLowerCase()) as AllowedExt[]
+                    : (DEFAULT_ALLOWED as unknown as AllowedExt[]);
 
                 if (!cancelled) {
-                    setSelectedTipo(inferred);
-                    // nombre sugerido (si viene de BD)
-                    const n = (api?.reto?.nombreReto || '').toString().trim();
-                    if (n) setNombre(n);
+                    setInstrucciones(instr);
+                    setAllowedExts(allowed);
+                    const title = (api?.reto?.nombreReto || '').toString().trim();
+                    if (title) setNombre(title);
                 }
             } catch {
-                // sin drama: seguimos sin tipo preseleccionado
+                if (!cancelled) {
+                    setInstrucciones('');
+                    setAllowedExts(DEFAULT_ALLOWED as unknown as AllowedExt[]);
+                }
             } finally {
                 if (!cancelled) setLoadingMeta(false);
             }
         })();
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, [codReto, fetchJson]);
 
     // ───────────────────────────────────────────────────────────────
-    // 2) Document picker (igual al de Reportes)
+    // 2) Document picker
     // ───────────────────────────────────────────────────────────────
     const pick = useCallback(async () => {
         try {
@@ -116,13 +128,31 @@ export default function ArchivoReto({
     }, []);
 
     // ───────────────────────────────────────────────────────────────
-    // 3) Subida: presign → PUT → complete → registrar como reto
+    // 3) Validación por extensión contra allowedExts
+    // ───────────────────────────────────────────────────────────────
+    function validateExtensionOrWarn(): boolean {
+        if (!file) return false;
+        const ext = extFromNameOrMime(file.name, file.mimeType);
+        if (!ext) {
+            Alert.alert('Validación', `No pudimos determinar la extensión. Tipos permitidos: ${allowedExts.join(', ').toUpperCase()}`);
+            return false;
+        }
+        const ok = allowedExts.includes(ext as AllowedExt);
+        if (!ok) {
+            Alert.alert('Tipo no permitido', `Este reto acepta: ${allowedExts.join(', ').toUpperCase()}\nTu archivo: “.${ext}”`);
+        }
+        return ok;
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // 4) Subida: presign → PUT → complete → registrar como reto
     // ───────────────────────────────────────────────────────────────
     const subirYRegistrar = useCallback(async () => {
         if (!file) {
             Alert.alert('Archivo requerido', 'Por favor selecciona un archivo.');
             return;
         }
+        if (!validateExtensionOrWarn()) return;
 
         const filename = file.name ?? 'archivo';
         const contentType = file.mimeType ?? 'application/octet-stream';
@@ -130,14 +160,14 @@ export default function ArchivoReto({
         try {
             setBusy(true);
 
-            // 3.1 Presign (JWT via fetchJson). Pasamos selectedTipo si el usuario/BD lo define
+            // 4.1 Presign (JWT via fetchJson). Pasamos selectedTipo solo para carpeta.
             const presign = await fetchJson<{ signedUrl: string; objectKey?: string; key?: string }>(
                 API.uploads.presign(filename, contentType, codUsuario, selectedTipo ?? undefined)
             );
             const objectKey = presign.key ?? presign.objectKey;
             if (!presign.signedUrl || !objectKey) throw new Error('Presign inválido');
 
-            // 3.2 Validación de entorno (igual que en ReportesScreen)
+            // 4.2 Validación de entorno
             if (/^http:\/\/localhost:9000/i.test(presign.signedUrl)) {
                 Alert.alert(
                     'Configuración',
@@ -147,14 +177,13 @@ export default function ArchivoReto({
                 return;
             }
 
-            // 3.3 PUT directo al bucket (sin bearer)
+            // 4.3 PUT directo al bucket (sin bearer)
             const fileRes = await fetch(file.uri);
             const blob = await fileRes.blob();
 
             await uploadToSignedUrl(presign.signedUrl, blob, contentType);
 
-            // 3.4 Registrar metadatos de la subida en BD
-            // Importante: si el usuario escribió un "Nombre (opcional)", lo usamos como nombre_original en BD.
+            // 4.4 Registrar metadatos de la subida en BD
             const filenameForDB = (nombre || '').trim() ? nombre.trim() : filename;
             await fetchJson(API.uploads.complete, {
                 method: 'POST',
@@ -165,14 +194,12 @@ export default function ArchivoReto({
                     contentType,
                     size: (blob as any).size ?? file.size ?? 0,
                     codUsuario,
-                    tipo: selectedTipo ?? undefined, // “área”
-                    // Puedes agregar etiquetas extra si el back las soporta:
-                    // tags: { origen: 'reto', codReto, codUsuarioReto }
+                    // 'tipo' (área) NO se persiste como atributo lógico en BD; solo afecta carpeta
+                    tipo: selectedTipo ?? undefined,
                 }),
             });
 
-            // 3.5 Registrar snapshot como resolución del reto (mis-retos/form/enviar)
-            //     Esto asegura XP/coins y que quede “pegado” al reto.
+            // 4.5 Registrar snapshot como resolución del reto (XP/coins)
             const snapshot = {
                 kind: 'fileUpload',
                 key: objectKey,
@@ -182,8 +209,9 @@ export default function ArchivoReto({
                 codUsuario,
                 codReto,
                 codUsuarioReto,
-                tipo: selectedTipo ?? undefined,
+                tipo: selectedTipo ?? undefined, // solo informativo
                 nombre: nombre || undefined,
+                allowedAtSubmit: allowedExts,    // traza útil
             };
 
             const r = await fetchJson(
@@ -194,17 +222,16 @@ export default function ArchivoReto({
             const extra = r?.nuevaRacha ? `\n🔥 Racha: ${r.nuevaRacha} día${r.nuevaRacha === 1 ? '' : 's'}` : '';
             Alert.alert('¡Listo!', `Archivo enviado ✅\n+${r?.xpGanada ?? 0} XP, +${r?.coins ?? 0} monedas${extra}`);
 
-            // cerrar el modal (orquestador hace mark + back en onSent)
             onSent();
         } catch (e: any) {
             Alert.alert('Subida', e?.message ?? 'No se pudo subir/registrar el archivo.');
         } finally {
             setBusy(false);
         }
-    }, [file, codUsuario, selectedTipo, fetchJson, codReto, codUsuarioReto, nombre, onSent]);
+    }, [file, codUsuario, selectedTipo, fetchJson, codReto, codUsuarioReto, nombre, allowedExts, onSent]);
 
     // ───────────────────────────────────────────────────────────────
-    // 4) Helpers UI (pill tipo y estética similar a Reportes)
+    // 5) UI helpers
     // ───────────────────────────────────────────────────────────────
     const c = useMemo(() => ({
         bg: colors.bg,
@@ -236,7 +263,7 @@ export default function ArchivoReto({
     };
 
     // ───────────────────────────────────────────────────────────────
-    // 5) Render
+    // 6) Render
     // ───────────────────────────────────────────────────────────────
     if (loadingMeta) {
         return (
@@ -247,12 +274,21 @@ export default function ArchivoReto({
         );
     }
 
+    const allowedText = allowedExts.length ? allowedExts.map(x=>x.toUpperCase()).join(', ') : 'PDF';
+
     return (
         <ScrollView>
-            <Text style={[g.text.body, {marginTop: 8}]}>
-                Adjunta tu evidencia/archivo para completar el reto. Si el área (tipo) viene definida desde la BD, ya la
-                verás preseleccionada.
-            </Text>
+            {!!instrucciones ? (
+                <View style={{padding:12, borderRadius:12, backgroundColor: colors.card, borderColor: colors.inputBorder, borderWidth: StyleSheet.hairlineWidth}}>
+                    <Text style={g.text.bodyStrong}>Instrucciones</Text>
+                    <Text style={[g.text.body, {marginTop:6}]}>{instrucciones}</Text>
+                    <Text style={[g.text.caption, {marginTop:6}]}>Tipos permitidos: {allowedText}</Text>
+                </View>
+            ) : (
+                <Text style={[g.text.body, {marginTop: 8}]}>
+                    Adjunta tu evidencia/archivo para completar el reto. Tipos permitidos: {allowedText}.
+                </Text>
+            )}
 
             {/* Nombre / etiqueta opcional (se llena con el nombre del reto si existe) */}
             <View style={{marginTop: 12}}>
@@ -270,7 +306,7 @@ export default function ArchivoReto({
                 />
             </View>
 
-            {/* Selector de área/tipo como en Reportes */}
+            {/* Selector de área/tipo: SOLO para carpeta (mantenimiento / supervisión) */}
             <View style={{flexDirection: 'row', gap: 8, marginTop: 12}}>
                 <TipoPill value="mantenimiento" label="Mantenimiento"/>
                 <TipoPill value="supervision" label="Supervisión"/>
