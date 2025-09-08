@@ -1,13 +1,15 @@
 // app/(operario)/RankingScreen.tsx
 import React, { useCallback } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import FadeWrapper from '../../components/operario/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
 import DetailsTrophyModal from '../../components/operario/DetailsTrophyModal';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
+import { resolveTrofeoIconFromBd } from '../../config/icons/trofeoIcon';
 
 type TopItem = {
     codUsuario: number;
@@ -21,7 +23,7 @@ type TopItem = {
 type TrophyItem = {
     codTrofeo: number;
     nombre: string;
-    icono: string;
+    icono: string; // slug/ruta local; se resuelve con trofeoIcons.ts
     descripcion: string;
     holder: null | { codUsuario: number; nombre: string; nickname: string | null };
 };
@@ -43,8 +45,8 @@ function initials(n?: string, a?: string) {
 
 export default function RankingScreen() {
     const router = useRouter();
-    const { fetchJson, baseUrl } = useAuth();
-    const { colors } = useTheme();
+    const { fetchJson } = useAuth();
+    const { colors, isDark } = useTheme();
     const g = useMemoedG(colors);
 
     const [data, setData] = React.useState<RankingResumen | null>(null);
@@ -201,14 +203,16 @@ export default function RankingScreen() {
                     <Text style={[g.text.small, { marginTop: 6 }]}>{data.mensaje}</Text>
                 </View>
 
-                {/* Trofeos */}
+                {/* Trofeos (locales) */}
                 <View style={{ marginTop: 24, paddingHorizontal: 16, marginBottom: 32 }}>
                     <Text style={[g.text.h1]}>Trofeos en juego</Text>
-                    <Text style={[g.text.caption, g.text.muted, { marginTop: 4 }]}>El trono cambia de manos todos los dias a las 10PM… si te lo ganas 😉</Text>
+                    <Text style={[g.text.caption, g.text.muted, { marginTop: 4 }]}>
+                        El trono cambia de manos todos los días a las 10PM… si te lo ganas 😉
+                    </Text>
 
                     <View style={{ marginTop: 14, gap: 12 }}>
                         {data.trofeos.map((t) => {
-                            const uri = t.icono.startsWith('http') ? t.icono : `${baseUrl}${t.icono}`;
+                            const imgSrc = resolveTrofeoIconFromBd(t.icono, isDark);
                             return (
                                 <Pressable
                                     onPress={() => openTrophy(t)}
@@ -239,7 +243,13 @@ export default function RankingScreen() {
                                             marginRight: 12,
                                         }}
                                     >
-                                        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                                        <Image
+                                            source={imgSrc}
+                                            style={{ width: '100%', height: '100%' }}
+                                            contentFit="cover"
+                                            cachePolicy="memory-disk"
+                                            transition={120}
+                                        />
                                     </View>
 
                                     {/* Nombre trofeo + holder */}
@@ -267,7 +277,6 @@ export default function RankingScreen() {
                 visible={trophyOpen}
                 trophy={selectedTrophy}
                 onClose={closeTrophy}
-                baseUrl={baseUrl}
             />
         </FadeWrapper>
     );

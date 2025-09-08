@@ -20,12 +20,13 @@ import DetailsInventoryItemModal from "../../components/operario/DetailsInventor
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import ChestOpenModal from '../../components/operario/ChestOpenModal';
-import { Image } from 'react-native';
+import { Image } from 'expo-image';
 import { resolveItemIconFromBd } from '../../config/icons/itemIcons';
+
 
 export default function InventoryScreen() {
     const {fetchJson} = useAuth();
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const g = useMemo(() => makeGlobalStyles(colors), [colors]);
 
     const [items, setItems] = useState<ItemInventario[]>([]);
@@ -239,11 +240,14 @@ export default function InventoryScreen() {
                         >
                             <View style={[styles.imageBox, {width: CARD_W, height: CARD_W / CARD_RATIO}]}>
                                 {/* reemplaza las cruces por la imagen */}
-                                <Image
-                                    source={resolveItemIconFromBd(item.item.icon)}
-                                    style={{ width: '70%', height: '70%' }}
-                                    resizeMode="contain"
-                                />
+                                 <Image
+                                   source={resolveItemIconFromBd(item.item.icon, isDark)}
+                                   style={{ width: '70%', height: '70%' }}
+                                   contentFit="contain"
+                                   cachePolicy="memory-disk"
+                                   transition={120}
+                                   recyclingKey={String(item.cod)}
+                                 />
 
                                 <View style={styles.badge}>
                                     <Text style={g.text.captionStrong}>x{item.cantidad}</Text>

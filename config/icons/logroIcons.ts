@@ -1,9 +1,7 @@
 // /config/icons/logroIcons.ts
 
-// 👇 Fallback oficial (si el valor de BD está vacío o no mapea)
 export const LOGRO_ICON_DEFAULT = require('../../assets/labubu.png');
 
-// 👇 Mapa slug → imagen local (EXACTAMENTE los nombres de tu carpeta assets/icons/logros)
 export const LOGRO_ICONS: Record<string, any> = {
     'avaro-feliz':         require('../../assets/icons/logros/avaro-feliz.png'),
     'bandera-al-viento':   require('../../assets/icons/logros/bandera-al-viento.png'),
@@ -21,30 +19,27 @@ export const LOGRO_ICONS: Record<string, any> = {
     'velocista':           require('../../assets/icons/logros/velocista.png'),
 };
 
-// 1) Extrae un slug a partir de una ruta o URL que venga de BD.
-//    /static/icons/logros/perfecto.png  -> perfecto
-//    https://.../racha-7.png            -> racha-7
-//    "racha-7"                          -> racha-7
+// si en el futuro agregas *_dark.png para logros, mapea aquí:
+export const LOGRO_ICONS_DARK: Record<string, any> = {
+    // 'avaro-feliz': require('../../assets/icons/logros/avaro-feliz_dark.png'),
+};
+
 export function iconSlugFromBd(value?: string | null): string {
     const s = String(value || '').trim();
     if (!s) return '';
-    // quita dominio si hay
     const noDomain = s.replace(/^https?:\/\/[^/]+/i, '');
-    // toma el último segmento
     const last = noDomain.split('/').filter(Boolean).pop() || s;
-    // quita extensión
     const base = last.replace(/\.(png|jpg|jpeg|webp|svg)$/i, '');
-    return base.toLowerCase();
+    return base.toLowerCase().replace(/-dark$/, '');
 }
 
-// 2) Resuelve un slug a la imagen empaquetada
-export function resolveLogroIcon(slug?: string | null) {
+export function resolveLogroIcon(slug?: string | null, isDark?: boolean) {
     if (!slug) return LOGRO_ICON_DEFAULT;
     const key = String(slug).trim().toLowerCase();
+    if (isDark && LOGRO_ICONS_DARK[key]) return LOGRO_ICONS_DARK[key];
     return LOGRO_ICONS[key] || LOGRO_ICON_DEFAULT;
 }
 
-// 3) Atajo: pásame DIRECTO lo que vino en BD (ruta/slug/url) y te regreso la imagen local
-export function resolveLogroIconFromBd(value?: string | null) {
-    return resolveLogroIcon(iconSlugFromBd(value));
+export function resolveLogroIconFromBd(value?: string | null, isDark?: boolean) {
+    return resolveLogroIcon(iconSlugFromBd(value), isDark);
 }

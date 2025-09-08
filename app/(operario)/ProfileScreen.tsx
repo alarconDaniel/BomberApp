@@ -1,6 +1,6 @@
 // app/(operario)/ProfileScreen.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, ActivityIndicator, Image, Pressable, Text, View, ScrollView } from 'react-native';
+import { Animated, ActivityIndicator, Pressable, Text, View, ScrollView } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import FadeWrapper from '../../components/operario/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
@@ -10,6 +10,7 @@ import LevelUpOverlay from '../../components/operario/LevelUpOverlay';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { resolveLogroIconFromBd } from '../../config/icons/logroIcons';
+import { Image } from 'expo-image';
 
 const AVATAR_SIZE = 110;
 
@@ -385,11 +386,13 @@ export default function ProfileScreen() {
                                 >
                                     {/* Icono grande a la izquierda */}
                                     <View style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', backgroundColor: P.logroImgBg }}>
-                                        <Image
-                                            source={resolveLogroIconFromBd(l.icono)} // ← usa la pista de BD para elegir el asset local
-                                            style={{ width: '100%', height: '100%' }}
-                                            resizeMode="cover"
-                                        />
+                                         <Image
+                                           source={resolveLogroIconFromBd(l.icono, isDark)}
+                                           style={{ width: '100%', height: '100%' }}
+                                           contentFit="cover"
+                                           cachePolicy="memory-disk"
+                                           transition={120}
+                                         />
                                     </View>
 
                                     {/* Centro: nombre + subtítulo */}

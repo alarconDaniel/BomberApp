@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Dimensions, Image } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { ItemTienda } from '../../models/ItemTienda';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -18,11 +19,11 @@ type Props = {
 const iconFallbackByTipo: Record<string, string> = { POTENCIADOR: 'bolt', COFRE: 'box-open', ROPA: 'tshirt' };
 
 export default function StoreItemCard({ item, onPress, accentColor = '#3B5BDB', variant = 'POTENCIADOR' }: Props) {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const g = makeGlobalStyles(colors);
 
     const bdIcon = item.iconoPath;
-    const imgSrc = resolveItemIconFromBd(bdIcon);
+    const imgSrc = resolveItemIconFromBd(bdIcon, isDark);
     const price = Number(item.precioItem || 0);
     const isRopa = String(item.tipoItem).toUpperCase() === 'ROPA';
     const ropaDisabled = isRopa && !!item.yaPosee;
@@ -43,7 +44,7 @@ export default function StoreItemCard({ item, onPress, accentColor = '#3B5BDB', 
                 </View>
 
                 <View style={[styles.iconWrap, { marginVertical: 10 }]}>
-                    <Image source={imgSrc} style={{ width: 98, height: 98 }} resizeMode="contain" />
+                    <Image source={imgSrc} style={{ width: 98, height: 98 }} contentFit="contain" cachePolicy="memory-disk" transition={120} />
                 </View>
 
                 {ropaDisabled && (
@@ -69,14 +70,16 @@ export default function StoreItemCard({ item, onPress, accentColor = '#3B5BDB', 
                 </View>
 
                 <View style={{ alignSelf: 'center', paddingVertical: 10, justifyContent: 'flex-end', flex: 1 }}>
-                    <Image
-                        source={imgSrc}
-                        style={{
-                            width: item.precioItem == 1000 ? 100 : item.precioItem == 100 ? 88 : 80,
-                            height: item.precioItem == 1000 ? 100 : item.precioItem == 100 ? 88 : 80,
-                        }}
-                        resizeMode="contain"
-                    />
+                     <Image
+                       source={imgSrc}
+                       style={{
+                         width: item.precioItem == 1000 ? 100 : item.precioItem == 100 ? 88 : 80,
+                         height: item.precioItem == 1000 ? 100 : item.precioItem == 100 ? 88 : 80,
+                       }}
+                       contentFit="contain"
+                       cachePolicy="memory-disk"
+                       transition={120}
+                     />
                 </View>
 
                 <View>
@@ -98,7 +101,7 @@ export default function StoreItemCard({ item, onPress, accentColor = '#3B5BDB', 
                 </View>
 
                 <View style={styles.iconWrap}>
-                    <Image source={imgSrc} style={{ width: 78, height: 78 }} resizeMode="contain" />
+                    <Image source={imgSrc} style={{ width: 78, height: 78 }} contentFit="contain" cachePolicy="memory-disk" transition={120} />
                 </View>
 
                 <View style={styles.footer}>

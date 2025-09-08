@@ -1,12 +1,13 @@
 // components/operario/DetailsInventoryItemModal.tsx
 import React from 'react';
-import {Modal, View, Text, Pressable, StyleSheet, Dimensions, Image} from 'react-native';
+import {Modal, View, Text, Pressable, StyleSheet, Dimensions} from 'react-native';
 import { BlurView } from 'expo-blur';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { ItemInventario } from '../../models/ItemInventario';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { resolveItemIconFromBd } from '../../config/icons/itemIcons';
+import { Image } from 'expo-image';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -37,7 +38,7 @@ export default function DetailsInventoryItemModal({
                                                       onOpenChest,
                                                       opening = false,
                                                   }: Props) {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const g = makeGlobalStyles(colors);
     if (!visible || !item) return null;
 
@@ -48,7 +49,7 @@ export default function DetailsInventoryItemModal({
     const tipo = String(item.item?.tipo ?? '').toUpperCase();
 
     const bdIcon = item.item.icon;
-    const localImg = resolveItemIconFromBd(bdIcon);
+    const localImg = resolveItemIconFromBd(bdIcon, isDark);
 
 
     const iconName = tipo === 'COFRE'
@@ -129,7 +130,13 @@ export default function DetailsInventoryItemModal({
                     <View style={s.mediaRow}>
                         <View style={s.iconWrap}>
                             {/* reemplaza el FontAwesome por el PNG local */}
-                            <Image source={localImg} style={{ width: 92, height: 92, borderRadius: 12 }} resizeMode="contain" />
+                            <Image
+                               source={localImg}
+                               style={{ width: 92, height: 92, borderRadius: 12 }}
+                               contentFit="contain"
+                               cachePolicy="memory-disk"
+                               transition={120}
+                             />
                         </View>
 
                         <View style={{ flex: 1 }}>

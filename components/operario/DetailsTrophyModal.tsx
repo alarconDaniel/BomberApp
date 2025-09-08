@@ -1,10 +1,12 @@
-// components/DetailsTrophyModal.tsx
-import React, { useMemo } from 'react';
-import { Modal, View, Text, Pressable, StyleSheet, Dimensions, Image } from 'react-native';
+// components/operario/DetailsTrophyModal.tsx
+import React from 'react';
+import { Modal, View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
+import { resolveTrofeoIconFromBd } from '../../config/icons/trofeoIcon';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -13,7 +15,7 @@ type Holder = { codUsuario: number; nombre: string; nickname: string | null };
 export type Trophy = {
     codTrofeo: number;
     nombre: string;
-    icono: string;
+    icono: string;      // slug o ruta relativa (se resuelve a asset local)
     descripcion: string;
     holder: Holder | null;
 };
@@ -22,17 +24,12 @@ type Props = {
     visible: boolean;
     trophy?: Trophy | null;
     onClose: () => void;
-    baseUrl?: string;
+    baseUrl?: string; // <- ya no se usa (quedó por compatibilidad si tu tipo lo trae)
 };
 
-export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl = '' }: Props) {
-    const { colors } = useTheme();
+export default function DetailsTrophyModal({ visible, trophy, onClose }: Props) {
+    const { colors, isDark } = useTheme();
     const g = makeGlobalStyles(colors);
-
-    const uri = useMemo(() => {
-        if (!trophy?.icono) return null;
-        return trophy.icono.startsWith('http') ? trophy.icono : `${baseUrl}${trophy.icono}`;
-    }, [trophy?.icono, baseUrl]);
 
     if (!visible || !trophy) return null;
 
@@ -90,6 +87,8 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
         },
     });
 
+    const localImg = resolveTrofeoIconFromBd(trophy.icono, isDark);
+
     return (
         <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
             {/* Backdrop + blur */}
@@ -102,11 +101,13 @@ export default function DetailsTrophyModal({ visible, trophy, onClose, baseUrl =
                     {/* Header: icono + título */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                         <View style={s.iconBox}>
-                            {uri ? (
-                                <Image source={{ uri }} style={s.iconImg} resizeMode="cover" />
-                            ) : (
-                                <FontAwesome5 name="trophy" size={28} color={colors.warning} />
-                            )}
+                            <Image
+                                source={localImg}
+                                style={s.iconImg}
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
+                                transition={120}
+                            />
                         </View>
                         <Text style={[g.text.h3]} numberOfLines={2} ellipsizeMode="tail">
                             {trophy.nombre}
