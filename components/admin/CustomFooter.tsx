@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 // Theme opcional (si no hay provider, usamos fallback sin romper)
-import * as Theme from '../theme/ThemeProvider';
+import * as Theme from '../../theme/ThemeProvider';
 
 const FALLBACK = {
   tabBg: '#ffffff',

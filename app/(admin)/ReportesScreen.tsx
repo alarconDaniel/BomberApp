@@ -7,8 +7,8 @@ import * as Linking from 'expo-linking';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as DocumentPicker from 'expo-document-picker';
 
-import FadeWrapper from '../../components/FadeWrapper';
-import HeaderOperario from '../../components/HeaderOperario';
+import FadeWrapper from '../../components/admin/FadeWrapper';
+import HeaderOperario from '../../components/admin/HeaderOperario';
 
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';

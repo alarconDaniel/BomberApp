@@ -1,373 +1,330 @@
-// app/(admin)/(tabs)/RetosScreen.tsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput,
-  Alert, ActivityIndicator, Pressable, StatusBar, FlatList
+  View, Text, FlatList, Pressable, ActivityIndicator, TextInput, Alert
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter, useFocusEffect } from 'expo-router';
 
-import FadeWrapper from '../../components/FadeWrapper';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { useAuth } from '../../auth/AuthContext';
 
-const FOOTER_HEIGHT = 64;
+import { fetchRetos, deleteReto, type RetoDTO, type TipoReto } from './lib/retos';
 
-/* ===== Tipos & helpers ===== */
-export type RetoDTO = {
-  codReto: number;
-  nombreReto: string;
-  [k: string]: any;
-};
-
-function normalizeReto(r: any): RetoDTO {
-  // Soporta {codReto, nombreReto} ó {cod_reto, nombre_reto}
-  const codReto = Number(r?.codReto ?? r?.cod_reto ?? r?.id ?? r?.cod);
-  const nombreReto = String(r?.nombreReto ?? r?.nombre_reto ?? r?.nombre ?? '');
-  return { codReto, nombreReto, ...r };
-}
-
-/* ===== Permisos ===== */
-function hasAdminRole(u: any): boolean {
-  if (!u) return false;
-  const flat = [
-    u?.rol, u?.role, u?.roleId, u?.rolId, u?.codRol, u?.cod_rol,
-    u?.idRol, u?.id_rol, u?.perfil, u?.nombreRol, u?.nombre_rol,
-  ].filter(v => v !== undefined && v !== null);
-
-  for (const v of flat) {
-    if (v === true || v === 1) return true;
-    const s = String(v).trim().toLowerCase();
-    if (s === '1' || s === 'admin' || s === 'administrador') return true;
-    const n = Number(s);
-    if (!Number.isNaN(n) && n === 1) return true;
-  }
-  const rname = u?.rol?.name ?? u?.rol?.nombre ?? u?.role?.name ?? u?.role?.nombre;
-  if (rname && ['admin', 'administrador'].includes(String(rname).toLowerCase())) return true;
-  const rid = u?.rol?.id ?? u?.role?.id ?? u?.codRol ?? u?.cod_rol;
-  return rid === 1 || String(rid) === '1';
-}
-
-/* ===== API local usando fetchJson del AuthContext ===== */
-// Lista: si es admin → usa listar-admin; de lo contrario → listar
-async function apiListarRetos(fetchJson: any, isAdmin: boolean): Promise<RetoDTO[]> {
-  const adminFirst = [
-    '/reto/listar-admin',
-    '/api/reto/listar-admin',
-    '/reto/listar',
-    '/api/reto/listar',
-  ];
-  const userFirst = [
-    '/reto/listar',
-    '/api/reto/listar',
-    '/reto/listar-admin',      // fallback por si solo expusiste admin
-    '/api/reto/listar-admin',
-  ];
-  const candidates = isAdmin ? adminFirst : userFirst;
-
-  let lastErr: any;
-  for (const path of candidates) {
-    try {
-      const res = await fetchJson(path, { method: 'GET' });
-      const arr = Array.isArray(res) ? res : (res?.data ?? res?.items ?? res?.retos ?? []);
-      return (arr as any[]).map(normalizeReto);
-    } catch (e: any) {
-      const msg = String(e?.message || '');
-      // Si el server responde 401/403, no sigas probando rutas "equivalentes"
-      if (/401|403/.test(msg)) throw e;
-      // Sigue probando solo si parece ruta no encontrada
-      if (!/404|Cannot GET|Not Found/i.test(msg)) lastErr = e;
-    }
-  }
-  throw lastErr || new Error('No se encontró endpoint de listar retos');
-}
-
-// Borrar: intenta primero los admin
-async function apiBorrarReto(fetchJson: any, id: number | string): Promise<void> {
-  const candidates = [
-    `/reto/borrar-admin/${id}`,
-    `/api/reto/borrar-admin/${id}`,
-    `/reto/borrar/${id}`,
-    `/api/reto/borrar/${id}`,
-  ];
-  let lastErr: any;
-  for (const url of candidates) {
-    try {
-      await fetchJson(url, { method: 'DELETE' });
-      return;
-    } catch (e: any) {
-      const msg = String(e?.message || '');
-      if (/401|403/.test(msg)) throw e;
-      if (!/404|Cannot/i.test(msg)) lastErr = e;
-    }
-  }
-  throw lastErr || new Error('No se encontró endpoint de borrado de retos');
-}
+type TipoUI = 'all' | TipoReto; // 'all' | 'quiz' | 'form' | 'archivo'
 
 export default function RetosScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const g = useMemo(() => makeGlobalStyles(colors), [colors]);
-  const s = useMemo(() => getStyles(colors), [colors]);
+  const { fetchJson } = useAuth();
 
-  const { user, loading: authLoading, fetchJson } = useAuth();
-  const isAdmin = useMemo(() => hasAdminRole(user), [user]);
-
-  const scrollRef = useRef<ScrollView>(null);
-
-  const [query, setQuery] = useState('');
-  const [cargando, setCargando] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [retos, setRetos] = useState<RetoDTO[]>([]);
+  const [query, setQuery] = useState('');
+  const [filtro, setFiltro] = useState<TipoUI>('all');
+  const [openFiltro, setOpenFiltro] = useState(false);
 
-  const listarRetos = useCallback(async () => {
+  const iconFor: Record<string, keyof typeof Ionicons.glyphMap> = {
+    quiz: 'help-circle',
+    form: 'checkbox',     // Checklist
+    archivo: 'document',  // Subida de archivo
+  };
+
+  const labelFor: Record<TipoUI, string> = {
+    all: 'Todos',
+    quiz: 'Quiz',
+    form: 'Checklist',
+    archivo: 'Archivo',
+  };
+
+  const cargar = useCallback(async () => {
     try {
-      setCargando(true);
-      const arr = await apiListarRetos(fetchJson, isAdmin);
-      setRetos(arr);
+      setLoading(true);
+      const data = await fetchRetos(fetchJson);
+      setRetos(Array.isArray(data) ? data : []);
     } catch (e: any) {
-      const msg = String(e?.message || '');
-      if (msg.includes('401')) Alert.alert('Sesión expirada', 'Vuelve a iniciar sesión.');
-      else if (msg.includes('403')) Alert.alert('Sin permisos', 'El servidor denegó la consulta (403).');
-      else Alert.alert('Error', msg || 'No se pudo cargar la lista de retos');
+      Alert.alert('Error', String(e?.message || 'No se pudo cargar la lista de retos'));
     } finally {
-      setCargando(false);
+      setLoading(false);
     }
-  }, [fetchJson, isAdmin]);
+  }, [fetchJson]);
 
-  useEffect(() => { listarRetos(); }, [listarRetos]);
+  useEffect(() => { cargar(); }, [cargar]);
+  useFocusEffect(useCallback(() => { cargar(); }, [cargar]));
 
-  useFocusEffect(
-    useCallback(() => {
-      listarRetos();
-      return () => {};
-    }, [listarRetos])
-  );
+  const tipoUIFrom = (r: RetoDTO): TipoReto => {
+    const t = (r.tipo ?? (r as any).tipoReto ?? (r as any).tipo_reto) as TipoReto | undefined;
+    const cfg = (r as any)?.config ?? (r as any)?.metadataReto ?? (r as any)?.metadata_reto;
+    let kind: string | undefined;
+    if (cfg) { try { kind = (typeof cfg === 'string' ? JSON.parse(cfg) : cfg)?.kind; } catch {} }
+    if (t === 'quiz') return 'quiz';
+    if (t === 'archivo') return 'archivo';
+    if (t === 'form') return kind === 'archivo' ? 'archivo' : 'form';
+    return 'form';
+  };
 
-  if (authLoading) {
-    return (
-      <FadeWrapper>
-        <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }} edges={['top']}>
-          <ActivityIndicator />
-          <Text style={{ marginTop: 8 }}>Verificando sesión…</Text>
-        </SafeAreaView>
-      </FadeWrapper>
-    );
-  }
+  const dataFiltrada = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return retos.filter(r => {
+      const tipo = tipoUIFrom(r);
+      const okTipo = (filtro === 'all') || (tipo === filtro);
+      const okTxt = !q || `${r.nombreReto ?? ''} ${r.descripcionReto ?? ''}`.toLowerCase().includes(q);
+      return okTipo && okTxt;
+    });
+  }, [retos, filtro, query]);
 
-  const borrar = (id: number | string) => {
-    if (!isAdmin) { Alert.alert('Sin permisos', 'Solo un administrador puede borrar retos.'); return; }
-    Alert.alert('Confirmar', '¿Deseas borrar este reto?', [
+  const abrirCrear = () => router.push('/(modals)/reto/crear-reto');
+
+  const fetchDetalle = async (id: number | string) => {
+    const paths = [
+      `/reto/detalle/${id}`,
+      `/reto/get/${id}`,
+      `/reto/${id}`,
+      `/reto/buscar/${id}`,
+      `/retos/detalle/${id}`,
+      `/retos/${id}`,
+      `/reto/config/${id}`,
+      `/reto/metadata/${id}`,
+    ];
+    for (const p of paths) {
+      try {
+        const resp = await fetchJson<any>(p, { method: 'GET', headers: { Accept: 'application/json' } });
+        if (resp) return resp;
+      } catch {}
+    }
+    return null;
+  };
+
+  const abrirEditar = async (item: RetoDTO) => {
+    try {
+      setLoading(true);
+      const resp = await fetchDetalle(item.codReto);
+      const raw = resp?.data ?? resp?.reto ?? resp ?? {};
+      const cfg = raw?.metadataReto ?? raw?.metadata_reto ?? raw?.config ?? (item as any)?.metadataReto ?? (item as any)?.config;
+
+      let tipoResolved: TipoReto = (raw?.tipo ?? raw?.tipoReto ?? raw?.tipo_reto ?? item.tipo) as TipoReto;
+      try {
+        const parsed = typeof cfg === 'string' ? JSON.parse(cfg) : cfg;
+        if ((tipoResolved === 'form' || !tipoResolved) && parsed?.kind === 'archivo') {
+          tipoResolved = 'archivo';
+        } else if (!tipoResolved) {
+          tipoResolved = 'form';
+        }
+      } catch {}
+
+      const merged = {
+        ...item,
+        tipo: tipoResolved,
+        metadataReto: cfg,
+        config: cfg,
+        esAutomaticoReto: raw?.esAutomaticoReto ?? raw?.es_automatico_reto ?? (item as any)?.esAutomaticoReto,
+        activo: raw?.activo ?? (item as any)?.activo,
+        cargo: raw?.cargo ?? (item as any)?.cargo,
+        tiempoEstimadoSegReto: Number(raw?.tiempoEstimadoSegReto ?? item.tiempoEstimadoSegReto ?? 0),
+        fechaInicioReto: raw?.fechaInicioReto ?? raw?.fecha_inicio_reto ?? item.fechaInicioReto,
+        fechaFinReto: raw?.fechaFinReto ?? raw?.fecha_fin_reto ?? item.fechaFinReto,
+        descripcionReto: raw?.descripcionReto ?? raw?.descripcion_reto ?? item.descripcionReto,
+        nombreReto: raw?.nombreReto ?? raw?.nombre_reto ?? item.nombreReto,
+      };
+
+      router.push({
+        pathname: '/(modals)/reto/crear-reto',
+        params: { mode: 'edit', item: JSON.stringify(merged) },
+      });
+    } catch {
+      router.push({
+        pathname: '/(modals)/reto/crear-reto',
+        params: { mode: 'edit', item: JSON.stringify(item) },
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const borrar = async (item: RetoDTO) => {
+    Alert.alert('Confirmar', `¿Borrar el reto "${item.nombreReto}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
-        text: 'Borrar', style: 'destructive', onPress: async () => {
+        text: 'Borrar',
+        style: 'destructive',
+        onPress: async () => {
           try {
-            setCargando(true);
-            await apiBorrarReto(fetchJson, id);
-            await listarRetos();
-            Alert.alert('Listo', 'Reto eliminado');
+            setLoading(true);
+            await deleteReto(fetchJson, item.codReto);
+            await cargar();
           } catch (e: any) {
-            const msg = String(e?.message || '');
-            if (/401/.test(msg)) Alert.alert('Sesión expirada', 'Vuelve a iniciar sesión.');
-            else if (/403/.test(msg)) Alert.alert('Sin permisos', 'El servidor rechazó el borrado (403).');
-            else Alert.alert('Error', msg || 'No se pudo borrar');
-          } finally { setCargando(false); }
+            Alert.alert('Error', String(e?.message || 'No se pudo borrar'));
+          } finally {
+            setLoading(false);
+          }
         }
       }
     ]);
   };
 
-  const abrirCrearModal = () => {
-    router.push('/(modals)/reto/crear-reto');
-  };
-
-  const editar = (item: RetoDTO) => {
-    router.push({
-      pathname: '/(modals)/reto/crear-reto',
-      params: { mode: 'edit', item: JSON.stringify(item) },
-    });
-  };
-
-  const retosFiltrados = useMemo(() => {
-    const q = query.toLowerCase();
-    return retos.filter(r => (r.nombreReto || '').toLowerCase().includes(q));
-  }, [query, retos]);
-
   return (
-    <FadeWrapper>
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* Header */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={[g.text.h2, { flex: 1 }]}>Retos</Text>
 
-        <ScrollView
-          ref={scrollRef}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: FOOTER_HEIGHT + 80 }}
-          keyboardShouldPersistTaps="handled"
+        <Pressable
+          onPress={abrirCrear}
+          style={{
+            height: 40, paddingHorizontal: 12, borderRadius: 10,
+            flexDirection: 'row', alignItems: 'center',
+            backgroundColor: colors.primary
+          }}
         >
-          {/* Header */}
-          <View style={{ paddingHorizontal: 18, paddingTop: insets.top + 8, paddingBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={[g.text.h2, { flex: 1 }]}>Retos</Text>
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={[g.text.onPrimary, { marginLeft: 6, fontWeight: '700' }]}>Crear reto</Text>
+        </Pressable>
+      </View>
 
-            {isAdmin && (
-              <Pressable
-                onPress={abrirCrearModal}
+      {/* Filtro + buscador */}
+      <View style={{ paddingHorizontal: 16 }}>
+        <View style={{ marginTop: 6, position: 'relative' }}>
+          <Pressable
+            onPress={() => setOpenFiltro(v => !v)}
+            style={{
+              height: 40, borderRadius: 10, borderWidth: 1, borderColor: colors.inputBorder,
+              backgroundColor: colors.card, paddingHorizontal: 10,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {filtro !== 'all' && <Ionicons name={iconFor[filtro as TipoReto]} size={16} color={colors.text} />}
+              <Text style={g.text.bodyStrong}>{labelFor[filtro]}</Text>
+            </View>
+            <Ionicons name={openFiltro ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedText} />
+          </Pressable>
+
+          {openFiltro && (
+            <View
+              style={{
+                position: 'absolute', left: 0, right: 0, top: 46,
+                borderRadius: 10, borderWidth: 1, borderColor: colors.inputBorder,
+                backgroundColor: colors.card, overflow: 'hidden', zIndex: 50
+              }}
+            >
+              {(['all', 'quiz', 'form', 'archivo'] as TipoUI[]).map((t, idx, arr) => (
+                <Pressable
+                  key={t}
+                  onPress={() => { setFiltro(t); setOpenFiltro(false); }}
+                  style={{
+                    paddingHorizontal: 12, height: 42, flexDirection: 'row',
+                    alignItems: 'center', justifyContent: 'space-between',
+                    borderBottomWidth: idx < arr.length - 1 ? 1 : 0,
+                    borderBottomColor: colors.tabBorder
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {t !== 'all' && <Ionicons name={iconFor[t as TipoReto]} size={16} color={colors.text} />}
+                    <Text style={g.text.body}>{labelFor[t]}</Text>
+                  </View>
+                  {filtro === t && <Ionicons name="checkmark" size={16} color={colors.primary} />}
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View
+          style={{
+            flexDirection: 'row', gap: 8, marginTop: 10,
+            borderWidth: 1, borderColor: colors.inputBorder, borderRadius: 10,
+            backgroundColor: colors.card, paddingHorizontal: 10, height: 40, alignItems: 'center'
+          }}
+        >
+          <Ionicons name="search" size={16} color={colors.mutedText} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Buscar reto…"
+            placeholderTextColor={colors.mutedText}
+            style={{ flex: 1, color: colors.text }}
+          />
+        </View>
+      </View>
+
+      {/* Lista */}
+      {loading ? (
+        <View style={{ padding: 16 }}>
+          <ActivityIndicator />
+        </View>
+      ) : (
+        <FlatList
+          data={dataFiltrada}
+          keyExtractor={(item) => String(item.codReto)}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100, paddingTop: 10 }}
+          ListEmptyComponent={
+            <Text style={{ textAlign: 'center', color: colors.mutedText, marginTop: 20 }}>
+              No hay retos
+            </Text>
+          }
+          renderItem={({ item }) => {
+            const tipo = tipoUIFrom(item);
+            return (
+              <View
                 style={{
-                  height: 40,
-                  paddingHorizontal: 12,
-                  borderRadius: 10,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: colors.primary,
+                  borderRadius: 12, borderWidth: 1, borderColor: colors.tabBorder,
+                  backgroundColor: colors.card, padding: 12, marginBottom: 10
                 }}
               >
-                <Ionicons name="add" size={18} color="#fff" />
-                <Text style={[g.text.onPrimary, { marginLeft: 6, fontWeight: '700' }]}>Crear reto</Text>
-              </Pressable>
-            )}
-          </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[g.text.bodyStrong, { flex: 1 }]} numberOfLines={1}>
+                    {item.nombreReto}
+                  </Text>
+                  {tipo ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name={iconFor[tipo]} size={16} color={colors.mutedText} />
+                      <Text style={{ color: colors.mutedText, fontSize: 12 }}>
+                        {labelFor[tipo]}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
 
-          {/* Historial */}
-          <View style={[s.card, { marginTop: 8 }]}>
-            <Text style={g.text.h3}>Historial de retos</Text>
-
-            <View style={[s.searchWrap, { marginTop: 10 }]}>
-              <Ionicons name="search" size={16} color={colors.mutedText} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Buscar…"
-                placeholderTextColor={colors.mutedText}
-                style={s.searchInput}
-              />
-            </View>
-
-            {cargando ? (
-              <View style={{ marginTop: 12 }}><ActivityIndicator /></View>
-            ) : retos.length > 0 ? (
-              <FlatList
-                data={retosFiltrados}
-                keyExtractor={(item) => String(item.codReto)}
-                renderItem={({ item }) => (
-                  <RetoItem
-                    item={item}
-                    onEdit={() => editar(item)}
-                    onDelete={() => borrar(item.codReto)}
-                    c={colors}
-                    g={g}
-                    isAdmin={isAdmin}
-                  />
+                {!!item.descripcionReto && (
+                  <Text style={{ color: colors.mutedText, marginTop: 4 }} numberOfLines={2}>
+                    {item.descripcionReto}
+                  </Text>
                 )}
-                ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-                scrollEnabled={false}
-                style={{ marginTop: 10 }}
-              />
-            ) : (
-              <FlatList
-                data={[]}
-                keyExtractor={(item) => String(item)}
-                renderItem={null as any}
-                ListEmptyComponent={
-                  <View style={{ paddingVertical: 16 }}>
-                    <Text style={{ textAlign: 'center', color: colors.mutedText }}>
-                      Sin retos
-                    </Text>
-                  </View>
-                }
-                scrollEnabled={false}
-                style={{ marginTop: 10 }}
-              />
-            )}
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    </FadeWrapper>
+
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                  <Pressable
+                    onPress={() => abrirEditar(item)}
+                    style={{ paddingHorizontal: 12, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.cardTint, borderWidth: 1, borderColor: colors.tabBorder }}
+                  >
+                    <Text style={g.text.bodyStrong}>Editar</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => borrar(item)}
+                    style={{ paddingHorizontal: 12, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.cardTint, borderWidth: 1, borderColor: colors.tabBorder, flexDirection: 'row', gap: 6 }}
+                  >
+                    <Ionicons name="trash" size={16} color={colors.danger} />
+                    <Text style={[g.text.bodyStrong, { color: colors.danger }]}>Borrar</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          }}
+        />
+      )}
+
+      {/* FAB crear */}
+      <Pressable
+        onPress={abrirCrear}
+        style={{
+          position: 'absolute', right: 16, bottom: 20, width: 56, height: 56, borderRadius: 28,
+          backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+          shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3
+        }}
+      >
+        <Ionicons name="add" size={24} color="#fff" />
+      </Pressable>
+    </SafeAreaView>
   );
 }
-
-/* ---------- Subcomponentes ---------- */
-function Square({ onPress, danger = false, c, title }: { onPress?: () => void; danger?: boolean; c: any; title?: string }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityLabel={title}
-      style={{
-        width: 32, height: 32, borderRadius: 8,
-        backgroundColor: danger ? c.danger : c.mutedBg,
-        alignItems: 'center', justifyContent: 'center',
-        borderWidth: 1, borderColor: danger ? c.danger : c.outline
-      }}
-    >
-      <Ionicons name={danger ? 'trash' : 'create'} size={16} color={danger ? '#fff' : c.text} />
-    </Pressable>
-  );
-}
-
-function RetoItem({
-  item, onEdit, onDelete, c, g, isAdmin
-}: {
-  item: RetoDTO;
-  onEdit: () => void;
-  onDelete: () => void;
-  c: any;
-  g: ReturnType<typeof makeGlobalStyles>;
-  isAdmin: boolean;
-}) {
-  return (
-    <View style={{
-      backgroundColor: c.cardTint, borderRadius: 12, paddingHorizontal: 12, minHeight: 56,
-      flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: c.tabBorder
-    }}>
-      <Text style={[g.text.bodyStrong, { flex: 1 }]} numberOfLines={1} ellipsizeMode="tail">
-        {item.nombreReto}
-      </Text>
-      <View style={{ flexDirection: 'row', gap: 8, marginLeft: 10 }}>
-        {isAdmin && <Square onPress={onEdit} c={c} title="Editar" />}
-        {isAdmin && <Square onPress={onDelete} danger c={c} title="Borrar" />}
-      </View>
-    </View>
-  );
-}
-
-/* ---------- Estilos base ---------- */
-function getStyles(c: import('../../theme/ThemeProvider').Palette) {
-  return StyleSheet.create({
-    card: {
-      marginHorizontal: 18,
-      padding: 14,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: c.tabBorder,
-      backgroundColor: c.card,
-      shadowOpacity: 0.06,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 2,
-    },
-    searchWrap: {
-      flexDirection: 'row', alignItems: 'center', gap: 8,
-      borderWidth: 1, borderColor: c.inputBorder, borderRadius: 10,
-      backgroundColor: c.card, paddingHorizontal: 10, height: 40,
-    },
-    searchInput: { flex: 1, color: c.text },
-  });
-}
-
-/* ---------- Estilos locales ---------- */
-const styles = StyleSheet.create({
-  fab: {
-    position: 'absolute',
-    right: 18,
-    bottom: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    height: 48,
-    borderRadius: 14,
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-  },
-});

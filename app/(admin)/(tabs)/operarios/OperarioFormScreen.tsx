@@ -5,8 +5,9 @@ import {
   ActivityIndicator, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import FadeWrapper from '../../../../components/FadeWrapper';
-import { colors } from '../../../../styles/globalStyles1';
+import FadeWrapper from '../../../../components/admin/FadeWrapper';
+// ⬇️ Usa el ThemeProvider (adiós globalstyles1/globalStyles)
+import { useTheme } from '../../../../theme/ThemeProvider';
 import { useAuth } from '../../../../auth/AuthContext';
 
 type Mode = 'create' | 'edit';
@@ -50,6 +51,10 @@ export default function OperarioFormScreen() {
   const mode: Mode = modeParam === 'edit' ? 'edit' : 'create';
   const editingId = id ? Number(id) : undefined;
 
+  // 🎨 Tema
+  const { colors } = useTheme();
+  const ui = useMemo(() => getUI(colors), [colors]);
+
   // ⬇️ Seguridad
   const { user, loading: authLoading, fetchJson } = useAuth();
   const isAdmin = useMemo(() => hasAdminRole(user), [user]);
@@ -82,8 +87,8 @@ export default function OperarioFormScreen() {
     return (
       <FadeWrapper>
         <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <Text style={{ fontSize: 20, fontWeight: '800', color: colors.navy, marginBottom: 8 }}>403 · Sin permisos</Text>
-          <Text style={{ textAlign: 'center', color: '#333' }}>Esta acción requiere rol administrador.</Text>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 8 }}>403 · Sin permisos</Text>
+          <Text style={{ textAlign: 'center', color: colors.mutedText }}>Esta acción requiere rol administrador.</Text>
           <TouchableOpacity onPress={() => router.back()} style={[ui.primaryBtn, { marginTop: 18 }]} activeOpacity={0.9}>
             <Text style={ui.primaryTxt}>Volver</Text>
           </TouchableOpacity>
@@ -209,7 +214,7 @@ export default function OperarioFormScreen() {
 
   return (
     <FadeWrapper>
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#F6F7FB' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
         {/* Header simple */}
         <View style={ui.header}>
           <TouchableOpacity onPress={() => router.back()} style={ui.backBtn} activeOpacity={0.8}>
@@ -237,13 +242,13 @@ export default function OperarioFormScreen() {
                       onPress={() => mode === 'create' && setCodRol(r.value)}
                       style={[
                         ui.chip,
-                        active && { backgroundColor: colors.blue, borderColor: colors.blue },
+                        active && { backgroundColor: colors.primary, borderColor: colors.primary },
                         mode !== 'create' && { opacity: 0.6 },
                       ]}
                       disabled={mode !== 'create'}
                       activeOpacity={0.85}
                     >
-                      <Text style={[ui.chipTxt, active && { color: colors.white }]}>{r.label}</Text>
+                      <Text style={[ui.chipTxt, active && { color: '#fff' }]}>{r.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -256,7 +261,7 @@ export default function OperarioFormScreen() {
                 value={nombre}
                 onChangeText={setNombre}
                 placeholder="Juan Carlos"
-                placeholderTextColor="#9aa4ad"
+                placeholderTextColor={colors.mutedText}
                 autoCapitalize="words"
               />
 
@@ -266,7 +271,7 @@ export default function OperarioFormScreen() {
                 value={apellido}
                 onChangeText={setApellido}
                 placeholder="Pérez García"
-                placeholderTextColor="#9aa4ad"
+                placeholderTextColor={colors.mutedText}
                 autoCapitalize="words"
               />
 
@@ -277,7 +282,7 @@ export default function OperarioFormScreen() {
                 value={nickname}
                 onChangeText={setNickname}
                 placeholder="jperez"
-                placeholderTextColor="#9aa4ad"
+                placeholderTextColor={colors.mutedText}
                 autoCapitalize="none"
               />
 
@@ -290,7 +295,7 @@ export default function OperarioFormScreen() {
                 value={correo}
                 onChangeText={setCorreo}
                 placeholder="nombre@empresa.com"
-                placeholderTextColor="#9aa4ad"
+                placeholderTextColor={colors.mutedText}
                 autoComplete="email"
               />
 
@@ -304,7 +309,7 @@ export default function OperarioFormScreen() {
                 value={contrasena}
                 onChangeText={setContrasena}
                 placeholder={mode === 'edit' ? '••••••••' : 'Mínimo 8 caracteres'}
-                placeholderTextColor="#9aa4ad"
+                placeholderTextColor={colors.mutedText}
                 autoComplete="password-new"
               />
 
@@ -315,7 +320,7 @@ export default function OperarioFormScreen() {
                 value={cedula}
                 onChangeText={setCedula}
                 placeholder="12345678"
-                placeholderTextColor="#9aa4ad"
+                placeholderTextColor={colors.mutedText}
                 keyboardType="numeric"
               />
 
@@ -338,41 +343,44 @@ export default function OperarioFormScreen() {
   );
 }
 
-/* ---------- Estilos UI ---------- */
-const ui = StyleSheet.create({
-  header: {
-    paddingTop: 10, paddingHorizontal: 12, paddingBottom: 6,
-    flexDirection: 'row', alignItems: 'center',
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#E8ECF3',
-  },
-  backTxt: { fontSize: 20, fontWeight: '800', color: colors.navy },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '800', color: colors.navy },
+/* ---------- Estilos UI (dependen del tema) ---------- */
+function getUI(c: any) {
+  return StyleSheet.create({
+    header: {
+      paddingTop: 10, paddingHorizontal: 12, paddingBottom: 6,
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: c.bg,
+    },
+    backBtn: {
+      width: 36, height: 36, borderRadius: 10,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: c.mutedBg, borderWidth: 1, borderColor: c.outline,
+    },
+    backTxt: { fontSize: 20, fontWeight: '800', color: c.text },
+    headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '800', color: c.text },
 
-  card: {
-    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#E6E9ED',
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
-  },
+    card: {
+      backgroundColor: c.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: c.tabBorder,
+      shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+    },
 
-  label: { marginTop: 10, fontWeight: '700', color: '#111' },
-  input: {
-    height: 44, borderWidth: 1, borderColor: '#D2D8DE', borderRadius: 10,
-    paddingHorizontal: 12, backgroundColor: '#F8FAFC', color: '#1F2937',
-  },
+    label: { marginTop: 10, fontWeight: '700', color: c.text },
+    input: {
+      height: 44, borderWidth: 1, borderColor: c.outline, borderRadius: 10,
+      paddingHorizontal: 12, backgroundColor: (c.cardTint ?? c.mutedBg), color: c.text,
+    },
 
-  chipsRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
-  chip: {
-    paddingHorizontal: 12, height: 34, borderRadius: 999, borderWidth: 1,
-    backgroundColor: '#EEF2F7', justifyContent: 'center',
-  },
-  chipTxt: { color: '#1F2937', fontWeight: '700' },
+    chipsRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
+    chip: {
+      paddingHorizontal: 12, height: 34, borderRadius: 999, borderWidth: 1,
+      backgroundColor: c.mutedBg, borderColor: c.outline, justifyContent: 'center',
+    },
+    chipTxt: { color: c.text, fontWeight: '700' },
 
-  primaryBtn: {
-    marginTop: 18, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.blue,
-  },
-  primaryTxt: { color: '#fff', fontWeight: '800' },
-});
+    primaryBtn: {
+      marginTop: 18, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: c.primary,
+    },
+    primaryTxt: { color: '#fff', fontWeight: '800' },
+  });
+}

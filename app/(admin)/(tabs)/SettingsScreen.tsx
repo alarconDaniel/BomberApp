@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import FadeWrapper from '../../../components/FadeWrapper';
+import FadeWrapper from '../../../components/admin/FadeWrapper';
 import { useAuth } from '../../../auth/AuthContext';
 import { router } from 'expo-router';
 import { useTheme } from '../../../theme/ThemeProvider';
