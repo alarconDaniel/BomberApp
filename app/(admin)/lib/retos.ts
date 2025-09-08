@@ -1,29 +1,45 @@
+// app/(admin)/lib/retos.ts
 import { API } from '../../../config/api';
 
 /** ===== Tipos compartidos ===== */
-export type Cargo = 'Operario' | 'Mantenimiento' | 'Supervisor';
+export type Cargo = string;
+
+// *** Importante: mapeo real de tu backend ***
+export type TipoReto = 'quiz' | 'form' | 'archivo';
+
+// Tipo de PREGUNTA (para config de quiz)
 export type TipoKey = 'multiple' | 'match' | 'fill';
 
-/** ===== DTO normalizado ===== */
 export type RetoDTO = {
   codReto: number;
   nombreReto: string;
-  descripcionReto: string;      // NOT NULL → string
+  descripcionReto: string;
   tiempoEstimadoSegReto: number;
-  fechaInicioReto: string;      // YYYY-MM-DD
-  fechaFinReto: string;         // YYYY-MM-DD
+  fechaInicioReto: string; // YYYY-MM-DD
+  fechaFinReto: string;    // YYYY-MM-DD
   cargo?: Cargo;
-  tipo?: TipoKey;
+  tipo?: TipoReto;         // <- ahora sí coincide con tu backend
+  esAutomaticoReto?: boolean | number;
+  activo?: boolean | number;
+  // Para edición podemos portar la config/metadata si viene del listar o del detalle
+  config?: any;
+  metadataReto?: any;
 };
 
 type AnyObj = Record<string, any>;
 
-function normalizeTipo(v: any): TipoKey | undefined {
+/** Normaliza el tipo desde varias variantes y sinónimos */
+function normalizeTipoReto(v: any): TipoReto | undefined {
   const s = String(v ?? '').toLowerCase().trim();
   if (!s) return undefined;
-  if (['multiple', 'opcion multiple', 'opción múltiple'].includes(s)) return 'multiple';
-  if (['match', 'emparejar', 'emparejado'].includes(s)) return 'match';
-  if (['fill', 'rellenar', 'completar'].includes(s)) return 'fill';
+
+  // sinónimos comunes
+  if (['quiz', 'cuestionario', 'test'].includes(s)) return 'quiz';
+  if (['form', 'formulario', 'checklist', 'lista', 'lista de verificacion', 'lista de verificación'].includes(s)) return 'form';
+  if (['archivo', 'file', 'upload', 'archivos'].includes(s)) return 'archivo';
+
+  // exactos
+  if (s === 'quiz' || s === 'form' || s === 'archivo') return s as TipoReto;
   return undefined;
 }
 
@@ -35,7 +51,11 @@ export const normalizeReto = (x: AnyObj): RetoDTO => ({
   fechaInicioReto: String(x?.fechaInicioReto ?? x?.fecha_inicio_reto ?? x?.fechaInicio ?? ''),
   fechaFinReto: String(x?.fechaFinReto ?? x?.fecha_fin_reto ?? x?.fechaFin ?? ''),
   cargo: (x?.cargo ?? x?.destinoCargo ?? x?.destino_cargo) as Cargo | undefined,
-  tipo: normalizeTipo(x?.tipo ?? x?.tipoReto ?? x?.tipo_reto),
+  tipo: normalizeTipoReto(x?.tipo ?? x?.tipoReto ?? x?.tipo_reto),
+  esAutomaticoReto: x?.esAutomaticoReto ?? x?.es_automatico_reto,
+  activo: x?.activo,
+  config: x?.config ?? x?.metadataReto ?? x?.metadata_reto,
+  metadataReto: x?.metadataReto ?? x?.metadata_reto ?? x?.config,
 });
 
 function pickArray(payload: any): any[] {
@@ -48,7 +68,6 @@ function pickArray(payload: any): any[] {
 
 /* ===== Helpers de rutas con fallback ===== */
 const R: any = API.reto ?? {};
-
 const URL = {
   listar: String(R.listar ?? '/reto/listar'),
   listarAdmin: String(R.listarAdmin ?? R.listar ?? '/reto/listar'),
@@ -63,7 +82,6 @@ const URL = {
       : (typeof R.borrar === 'function' ? R.borrar(id) : `/reto/borrar/${id}`)),
 };
 
-/** Quita claves undefined del body */
 function stripUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
   const out: Record<string, any> = {};
   Object.keys(obj).forEach(k => {
@@ -84,7 +102,6 @@ export async function fetchRetos(
   return pickArray(json).map(normalizeReto).filter((r: RetoDTO) => !!r.codReto);
 }
 
-/** Versión admin: usa /listar-admin si existe; si no, cae a /listar */
 export async function fetchRetosAdmin(
   fetchJson: <T = any>(url: string, opts?: any) => Promise<T>
 ): Promise<RetoDTO[]> {
@@ -95,7 +112,6 @@ export async function fetchRetosAdmin(
   return pickArray(json).map(normalizeReto).filter((r: RetoDTO) => !!r.codReto);
 }
 
-/** Solo títulos (útil para Home) */
 export async function fetchRetoTitles(
   fetchJson: <T = any>(url: string, opts?: any) => Promise<T>,
   admin = false
@@ -104,7 +120,7 @@ export async function fetchRetoTitles(
   return retos.map(r => r.nombreReto).filter(Boolean);
 }
 
-/* ======================= CREAR ======================= */
+/* ======================= CREAR / MODIFICAR ======================= */
 export async function createReto(
   fetchJson: <T = any>(url: string, opts?: any) => Promise<T>,
   payload: Partial<RetoDTO> & Record<string, any>
@@ -116,8 +132,11 @@ export async function createReto(
     fechaInicioReto: String(payload.fechaInicioReto ?? ''),
     fechaFinReto: String(payload.fechaFinReto ?? ''),
     cargo: payload.cargo,
-    tipo: payload.tipo,
-    config: payload.config,
+    tipoReto: payload.tipo as TipoReto | undefined, // *** coincide con backend
+    esAutomaticoReto: payload.esAutomaticoReto ? 1 : 0,
+    activo: payload.activo ? 1 : 0,
+    config: payload.config ?? payload.metadataReto,
+    metadataReto: payload.config ?? payload.metadataReto,
   };
 
   return fetchJson(URL.crear, {
@@ -127,7 +146,6 @@ export async function createReto(
   });
 }
 
-/* ======================= MODIFICAR ======================= */
 export async function updateReto(
   fetchJson: <T = any>(url: string, opts?: any) => Promise<T>,
   id: number | string,
@@ -136,14 +154,16 @@ export async function updateReto(
   const clean = stripUndefined({
     codReto: Number(id),
     nombreReto: payload.nombreReto?.trim(),
-    descripcionReto:
-      payload.descripcionReto === undefined ? undefined : String(payload.descripcionReto),
+    descripcionReto: payload.descripcionReto === undefined ? undefined : String(payload.descripcionReto),
     tiempoEstimadoSegReto: payload.tiempoEstimadoSegReto,
     fechaInicioReto: payload.fechaInicioReto,
     fechaFinReto: payload.fechaFinReto,
     cargo: payload.cargo,
-    tipo: payload.tipo,
-    config: payload.config,
+    tipoReto: payload.tipo as TipoReto | undefined,
+    esAutomaticoReto: payload.esAutomaticoReto ? 1 : 0,
+    activo: payload.activo ? 1 : 0,
+    config: payload.config ?? payload.metadataReto,
+    metadataReto: payload.config ?? payload.metadataReto,
   });
 
   return fetchJson(URL.modificar, {
@@ -153,25 +173,14 @@ export async function updateReto(
   });
 }
 
-/** Versión admin (usa /modificar-admin si existe) */
 export async function updateRetoAdmin(
   fetchJson: <T = any>(url: string, opts?: any) => Promise<T>,
   id: number | string,
   payload: Partial<RetoDTO> & Record<string, any>
 ) {
-  const clean = stripUndefined({
-    codReto: Number(id),
-    nombreReto: payload.nombreReto?.trim(),
-    descripcionReto:
-      payload.descripcionReto === undefined ? undefined : String(payload.descripcionReto),
-    tiempoEstimadoSegReto: payload.tiempoEstimadoSegReto,
-    fechaInicioReto: payload.fechaInicioReto,
-    fechaFinReto: payload.fechaFinReto,
-    cargo: payload.cargo,
-    tipo: payload.tipo,
-    config: payload.config,
-  });
-
+  const clean = {
+    ...await updateReto(async () => ({} as any), id, payload)
+  } as any; // no se usa realmente, mantenemos solo firma
   return fetchJson(URL.modificarAdmin, {
     method: 'PUT',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -185,12 +194,4 @@ export async function deleteReto(
   id: number | string
 ) {
   return fetchJson(URL.borrar(id), { method: 'DELETE' });
-}
-
-/** Versión admin (usa /borrar-admin si existe) */
-export async function deleteRetoAdmin(
-  fetchJson: <T = any>(url: string, opts?: any) => Promise<T>,
-  id: number | string
-) {
-  return fetchJson(URL.borrarAdmin(id), { method: 'DELETE' });
 }

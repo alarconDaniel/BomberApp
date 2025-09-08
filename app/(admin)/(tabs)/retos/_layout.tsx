@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
-import FooterAdmin from '../../../../components/CustomFooter';
+import FooterAdmin from '../../../../components/admin/CustomFooter';
 import { useTheme } from '../../../../theme/ThemeProvider';
 import { useAuth } from '../../../../auth/AuthContext';
 

@@ -5,7 +5,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Theme opcional (si no hay provider, usamos fallback sin romper)
-import * as Theme from '../theme/ThemeProvider';
+import * as Theme from '../../theme/ThemeProvider';
 
 // 👇 extendemos las props para recibir la whitelist
 type FooterProps = BottomTabBarProps & {

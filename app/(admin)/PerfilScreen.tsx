@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect } from '@react-navigation/native';
 
-import FadeWrapper from '../../components/FadeWrapper';
+import FadeWrapper from '../../components/admin/FadeWrapper';
 import { useAuth } from '../../auth/AuthContext';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';

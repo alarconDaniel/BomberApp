@@ -8,7 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import FadeWrapper from '../../components/FadeWrapper';
+import FadeWrapper from '../../components/admin/FadeWrapper';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { useAuth } from '../../auth/AuthContext';
