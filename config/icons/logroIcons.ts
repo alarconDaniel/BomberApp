@@ -19,9 +19,21 @@ export const LOGRO_ICONS: Record<string, any> = {
     'velocista':           require('../../assets/icons/logros/velocista.png'),
 };
 
-// si en el futuro agregas *_dark.png para logros, mapea aquí:
 export const LOGRO_ICONS_DARK: Record<string, any> = {
-    // 'avaro-feliz': require('../../assets/icons/logros/avaro-feliz_dark.png'),
+    'avaro-feliz':          require('../../assets/icons/logros/avaro-feliz_dark.png'),
+    'bandera-al-viento':   require('../../assets/icons/logros/bandera-al-viento_dark.png'),
+    'bolsillo-sonando':    require('../../assets/icons/logros/bolsillo-sonando_dark.png'),
+    'cofre-abierto':       require('../../assets/icons/logros/cofre-abierto_dark.png'),
+    'explorador':          require('../../assets/icons/logros/explorador_dark.png'),
+    'perfecto':            require('../../assets/icons/logros/perfecto_dark.png'),
+    'primer-encendido':    require('../../assets/icons/logros/primer-encendido_dark.png'),
+    'racha-3':             require('../../assets/icons/logros/racha-3_dark.png'),
+    'racha-7':             require('../../assets/icons/logros/racha-7_dark.png'),
+    'racha-30':            require('../../assets/icons/logros/racha-30_dark.png'),
+    'reloj-de-arena':      require('../../assets/icons/logros/reloj-de-arena_dark.png'),
+    'subiste-de-nivel-i':  require('../../assets/icons/logros/subiste-de-nivel-i_dark.png'),
+    'subiste-de-nivel-ii': require('../../assets/icons/logros/subiste-de-nivel-ii_dark.png'),
+    'velocista':           require('../../assets/icons/logros/velocista_dark.png'),
 };
 
 export function iconSlugFromBd(value?: string | null): string {

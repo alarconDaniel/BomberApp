@@ -78,7 +78,7 @@ export default function LogrosModalScreen() {
             <Pressable style={s.gridItem} onPress={() => setSelected(item)}>
                 <View style={s.iconWrap}>
                     <Image
-                        source={resolveLogroIconFromBd(item.icono)}
+                        source={resolveLogroIconFromBd(item.icono, isDark)}
                         style={[s.icon, item.bloqueado && s.iconLocked]}
                         resizeMode="cover"
                     />
@@ -133,7 +133,7 @@ export default function LogrosModalScreen() {
                             {/* 👇 NUEVO: icono grande del logro */}
                             <View style={s.popIconWrap}>
                                 <Image
-                                    source={resolveLogroIconFromBd(selected.icono)}
+                                    source={resolveLogroIconFromBd(selected.icono, isDark)}
                                     style={s.popIcon}
                                     resizeMode="contain"
                                 />
