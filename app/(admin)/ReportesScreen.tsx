@@ -100,7 +100,6 @@ export default function ReportesScreen() {
             const items = await loadFiles();
             setFiles(items);
         } catch (e: any) {
-            Alert.alert('Archivos', e?.message ?? 'No se pudieron cargar los archivos.');
         } finally {
             setLoading(false);
         }
