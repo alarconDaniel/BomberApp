@@ -255,17 +255,29 @@ export default function ProfileScreen() {
 
                     {/* Avatar */}
                     <View style={{ alignItems: 'center' }}>
-                        <View
-                            style={{
-                                width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2,
-                                backgroundColor: P.avatarBg, alignItems: 'center', justifyContent: 'center',
-                                borderWidth: 3, borderColor: P.avatarBorder
-                            }}
+                        <Pressable
+                            onPress={() => router.push('/(modals)/vestir-avatar')}
+                            android_ripple={{ color: isDark ? '#444' : '#e5e7eb', borderless: true }}
+                            style={{ borderRadius: AVATAR_SIZE / 2 }}
                         >
-                            <Text style={{ fontSize: 40, fontWeight: '800', color: P.avatarInitials }}>
-                                {initials(data.usuario.nombre, data.usuario.apellido)}
-                            </Text>
-                        </View>
+                            <View
+                                style={{
+                                    width: AVATAR_SIZE,
+                                    height: AVATAR_SIZE,
+                                    borderRadius: AVATAR_SIZE / 2,
+                                    backgroundColor: P.avatarBg,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderWidth: 3,
+                                    borderColor: P.avatarBorder,
+                                }}
+                            >
+                                <Text style={{ fontSize: 40, fontWeight: '800', color: P.avatarInitials }}>
+                                    {initials(data.usuario.nombre, data.usuario.apellido)}
+                                </Text>
+
+                            </View>
+                        </Pressable>
 
                         {/* Nickname animado */}
                         <View style={{ marginTop: 12, alignItems: 'center', position: 'relative' }}>
