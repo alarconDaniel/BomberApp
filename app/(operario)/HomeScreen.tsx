@@ -216,30 +216,50 @@ export default function HomeRetosScreen() {
                         setHeaderBottom(y + height);
                     }}
                     style={{
-                        paddingHorizontal: 18, paddingTop: 8, paddingBottom: 12,
-                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
+                        marginHorizontal: 20,
+                        paddingTop: 8,
+                        paddingBottom: 12,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        // opcional: gap visual entre texto y botón (RN 0.71+ lo soporta)
+                        // gap: 12,
                     }}
                 >
-                    <View>
-                        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>
+                    {/* Columna izquierda: título y subtítulo */}
+                    <View style={{ flexShrink: 1, minWidth: 0, paddingRight: 12, flex: 1 }}>
+                        <Text
+                            numberOfLines={2}
+                            ellipsizeMode="tail"
+                            style={{ color: colors.text, fontSize: 18, fontWeight: '700', lineHeight: 22, flexWrap: 'wrap' }}
+                        >
                             {headerStr}
                         </Text>
                         <Text style={{ color: colors.mutedText, fontSize: 13 }}>
                             {retos.length} reto{retos.length === 1 ? '' : 's'} para este día
                         </Text>
                     </View>
+
+                    {/* Botón derecha: no se encoge */}
                     <Pressable
                         onPress={togglePicker}
                         style={{
-                            paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10,
-                            backgroundColor: colors.card, borderWidth: 1, borderColor: colors.divider,
-                            flexDirection: 'row', alignItems: 'center', gap: 8
+                            paddingVertical: 8,
+                            paddingHorizontal: 12,
+                            borderRadius: 10,
+                            backgroundColor: colors.card,
+                            borderWidth: 1,
+                            borderColor: colors.divider,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            // importantísimo: el botón NO se encoge
+                            flexShrink: 0,
+                            // si tu versión de RN soporta gap, deja esto; si no, reemplaza por marginRight en el icono
+                            gap: 8,
                         }}
                     >
                         <FontAwesome5 name="calendar-alt" size={18} color={colors.primary} />
-                        <Text style={{ color: colors.text, fontWeight: '600' }}>
-                            Fecha
-                        </Text>
+                        <Text style={{ color: colors.text, fontWeight: '600' }}>Fecha</Text>
                     </Pressable>
                 </View>
 

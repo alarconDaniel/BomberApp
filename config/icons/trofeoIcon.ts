@@ -13,7 +13,7 @@ export const TROFEO_ICONS: Record<string, any> = {
     'escudo-invisible':          require('../../assets/icons/trofeos/escudo-invisible.png'),
     'jefe-zen':                  require('../../assets/icons/trofeos/jefe-zen.png'),
     'maraton-de-hierro':         require('../../assets/icons/trofeos/maraton-de-hierro.png'),
-    'modo-upload-ON':            require('../../assets/icons/trofeos/modo-upload-ON.png'),
+    'modo-upload-on':            require('../../assets/icons/trofeos/modo-upload-ON.png'),
     'racha-imparable':           require('../../assets/icons/trofeos/racha-imparable.png'),
     'relampago-en-la-cabeza':    require('../../assets/icons/trofeos/relampago-en-la-cabeza.png'),
 };
@@ -26,7 +26,7 @@ export const TROFEO_ICONS_DARK: Record<string, any> = {
     'escudo-invisible':          require('../../assets/icons/trofeos/escudo-invisible_dark.png'),
     'jefe-zen':                  require('../../assets/icons/trofeos/jefe-zen_dark.png'),
     'maraton-de-hierro':         require('../../assets/icons/trofeos/maraton-de-hierro_dark.png'),
-    'modo-upload-ON':            require('../../assets/icons/trofeos/modo-upload-ON_dark.png'),
+    'modo-upload-on':            require('../../assets/icons/trofeos/modo-upload-ON_dark.png'),
     'racha-imparable':           require('../../assets/icons/trofeos/racha-imparable_dark.png'),
     'relampago-en-la-cabeza':    require('../../assets/icons/trofeos/relampago-en-la-cabeza_dark.png'),
 };

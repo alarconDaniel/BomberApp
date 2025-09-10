@@ -167,17 +167,17 @@ export default function DetalleRetoScreen() {
             ) : !resolviendo ? (
                 <ScrollView style={{paddingHorizontal:16}}>
                     <Text style={[g.text.h1, {marginTop:20}]}>{data.reto.nombreReto}</Text>
-                    <Text style={[g.text.body, g.text.secondary, {marginTop:8, fontSize:16}]}>{data.reto.descripcionReto}</Text>
+                    <Text style={[g.text.h4, g.text.secondary, {marginTop:20, fontSize:16}]}>{data.reto.descripcionReto}</Text>
 
-                    <View style={{marginTop:12}}>
+                    <View style={{marginTop:20}}>
                         <Text style={g.text.body}>
                             <Text style={g.text.bodyStrong}>Tipo: </Text>{(data.tipoReto ?? 'form').toUpperCase()} ·{' '}
                             <Text style={g.text.bodyStrong}>Tiempo estimado:</Text> {Math.round((data.reto.tiempoEstimadoSegReto ?? 0)/60)} min
                         </Text>
                     </View>
 
-                    <View style={[styles.pill, {backgroundColor: colors.card, borderWidth:1, borderColor: colors.divider}]}>
-                        <Text style={g.text.caption}>
+                    <View style={[styles.pill, {backgroundColor: colors.card, borderWidth: 1, borderColor: colors.divider, marginTop:20}]}>
+                        <Text style={[g.text.h4,  g.text.secondary]}>
                             Ventana: {ur?.fechaObjetivo ? s10(ur.fechaObjetivo) : `${s10(ur?.ventanaInicio)}  →  ${s10(ur?.ventanaFin)}`}
                         </Text>
                     </View>
@@ -190,7 +190,7 @@ export default function DetalleRetoScreen() {
                             borderColor: estadoVisible==='Disponible' ? '#a5d6a7' : estadoVisible==='Aún no disponible' ? '#ffd8a8' : estadoVisible==='Vencido' ? '#f5c6cb' : colors.divider
                         }
                     ]}>
-                        <Text style={{color: estadoVisible==='Disponible' ? '#1b5e20' : estadoVisible==='Aún no disponible' ? '#8a4b08' : estadoVisible==='Vencido' ? '#842029' : colors.text}}>
+                        <Text style={[g.text.h4,  g.text.secondary, {color: estadoVisible==='Disponible' ? '#1b5e20' : estadoVisible==='Aún no disponible' ? '#8a4b08' : estadoVisible==='Vencido' ? '#842029' : colors.text}]}>
                             Estado del reto (hoy): {estadoVisible}
                         </Text>
                     </View>

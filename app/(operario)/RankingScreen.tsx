@@ -61,8 +61,10 @@ export default function RankingScreen() {
         setTrophyOpen(true);
     };
     const closeTrophy = () => {
-        setTrophyOpen(false);
-        setTimeout(() => setSelectedTrophy(null), 200);
+        setTrophyOpen(false); // solo pedimos cerrar; NO limpiamos aquí
+    };
+    const handleTrophyClosed = () => {
+        setSelectedTrophy(null); // limpiamos CUANDO el Modal ya terminó de cerrarse
     };
 
     const cargar = useCallback(async () => {
@@ -277,6 +279,7 @@ export default function RankingScreen() {
                 visible={trophyOpen}
                 trophy={selectedTrophy}
                 onClose={closeTrophy}
+                onClosed={handleTrophyClosed}
             />
         </FadeWrapper>
     );

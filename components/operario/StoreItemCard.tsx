@@ -44,7 +44,7 @@ export default function StoreItemCard({ item, onPress, accentColor = '#3B5BDB', 
                 </View>
 
                 <View style={[styles.iconWrap, { marginVertical: 10 }]}>
-                    <Image source={imgSrc} style={{ width: 98, height: 98 }} contentFit="contain" cachePolicy="memory-disk" transition={120} />
+                    <Image source={imgSrc} style={{ width: 110, height: 110 }} contentFit="contain" cachePolicy="memory-disk" transition={120} />
                 </View>
 
                 {ropaDisabled && (
@@ -129,7 +129,7 @@ const s = (c: import('../../theme/ThemeProvider').Palette) =>
         cardPotenciador: { width: SCREEN_W * 0.28, borderRadius: 16, backgroundColor: c.card, paddingTop: 10, paddingHorizontal: 10, paddingBottom: 10, borderWidth: 2 },
         shadow: { shadowColor: '#000', shadowOpacity: 0.12, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 4 },
         ribbon: { alignSelf: 'stretch', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 10 },
-        iconWrap: { height: 72, alignItems: 'center', justifyContent: 'center' },
+        iconWrap: { height: 100, alignItems: 'center', justifyContent: 'center' },
         badge: { alignSelf: 'center', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, borderWidth: 1.5, marginTop: 2 },
         footer: { marginTop: 5, borderTopWidth: 1, borderTopColor: c.imageBg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     });
