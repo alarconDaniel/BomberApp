@@ -152,15 +152,21 @@ export default function RetosScreen() {
         text: 'Borrar',
         style: 'destructive',
         onPress: async () => {
+          let exito = false;
           try {
             setLoading(true);
-            await deleteReto(fetchJson, item.codReto);
+            await deleteReto(fetchJson, item.codReto, item.nombreReto);
             await cargar();
+            exito = true;
           } catch (e: any) {
             Alert.alert('Error','No se pudo borrar');
           } finally {
             setLoading(false);
+            if(exito){
+              Alert.alert('Información', `El reto "${item.nombreReto}" se eliminó exitosamente.`);
+            }
           }
+
         }
       }
     ]);

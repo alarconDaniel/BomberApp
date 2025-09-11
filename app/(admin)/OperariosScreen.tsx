@@ -89,7 +89,7 @@ export default function OperariosScreen() {
       const arr = Array.isArray(json) ? json.map(mapUsuarioToUI) : [];
       setData(arr);
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'No se pudo cargar la lista');
+      Alert.alert('Error', 'No se pudo cargar la lista');
     } finally {
       setCargando(false);
     }
@@ -132,11 +132,13 @@ export default function OperariosScreen() {
         text: 'Borrar',
         style: 'destructive',
         onPress: async () => {
+          let exito = false;
           try {
             setCargando(true);
             await fetchJson(`/usuario/borrar/${Number(id)}`, { method: 'DELETE' });
             await listar();
             await cargarMe();
+            exito = true;
           } catch (e: any) {
             const msg = '';
             if (/403/.test(msg) || /propi/i.test(msg)) {
@@ -150,6 +152,9 @@ export default function OperariosScreen() {
             }
           } finally {
             setCargando(false);
+            if(exito){
+              Alert.alert('Información', `El usuario se eliminó exitosamente.`);
+            }
           }
         },
       },

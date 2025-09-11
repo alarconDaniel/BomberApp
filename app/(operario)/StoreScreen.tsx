@@ -87,7 +87,7 @@ export default function StoreScreen() {
             const mapeados: ItemTienda[] = (arr ?? []).map(toItemTienda);
             setItems(mapeados);
         } catch (e: any) {
-            setError(e?.message || 'Error cargando tienda');
+            setError('Error cargando tienda');
         } finally {
             setCargando(false);
         }

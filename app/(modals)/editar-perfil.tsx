@@ -101,7 +101,7 @@ export default function EditarPerfilModal() {
       setPerfil(r);
       setNickname(r.usuario.nickname || '');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo cargar el perfil');
+      Alert.alert('Error', 'No se pudo cargar el perfil');
     } finally {
       setCargando(false);
     }
@@ -123,7 +123,7 @@ export default function EditarPerfilModal() {
       Alert.alert('Listo', 'Tu nickname fue actualizado.');
       router.back();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo actualizar el nickname');
+      Alert.alert('Error',  'No se pudo actualizar el nickname');
     } finally {
       setSavingNick(false);
     }
@@ -147,7 +147,7 @@ export default function EditarPerfilModal() {
       Alert.alert('Hecho', 'Contraseña cambiada. Puede que debas iniciar sesión de nuevo.');
       router.back();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo cambiar la contraseña');
+      Alert.alert('Error', 'No se pudo cambiar la contraseña');
     } finally {
       setSavingPw(false);
     }

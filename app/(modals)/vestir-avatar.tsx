@@ -68,8 +68,8 @@ export default function VestirAvatarModal() {
     const SLOT_FRAMES: Record<Slot, { x: number; y: number; w: number; h: number }> = {
         cabeza: { x: 0.1535, y: 0.00000001, w: 0.67, h: 0.4 },
         torso:  { x: 0.29, y: 0.33, w: 0.40, h: 0.30 },
-        piernas:{ x: 0.28, y: 0.62, w: 0.44, h: 0.28 },
-        pies:   { x: 0.32, y: 0.88, w: 0.36, h: 0.12 },
+        piernas:{ x: 0.27, y: 0.52, w: 0.44, h: 0.33 },
+        pies:   { x: 0.31, y: 0.56, w: 0.35, h: 0.5 },
         extra:  { x: 0.70, y: 0.25, w: 0.26, h: 0.26 },
     };
 
@@ -146,6 +146,8 @@ export default function VestirAvatarModal() {
             marginTop: 18, marginHorizontal: 16, padding: 12, borderRadius: 14,
             backgroundColor: isDark ? colors.card : '#f3f4f6',
             borderWidth: 1, borderColor: isDark ? colors.divider : 'rgba(15,23,42,0.08)',
+            flex: 1,            // 👈 ocupa el espacio restante
+            minHeight: 0,       // 👈 importantísimo para permitir que el hijo (FlatList) scrollee
         },
         gridThumb: {
             width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center',

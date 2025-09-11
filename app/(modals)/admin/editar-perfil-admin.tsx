@@ -123,7 +123,7 @@ export default function EditarPerfilAdminModal() {
       );
       setNickname(nz(u?.nickname) || '');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo cargar el perfil');
+      Alert.alert('Error', 'No se pudo cargar el perfil');
     } finally {
       setLoading(false);
     }
@@ -167,7 +167,7 @@ export default function EditarPerfilAdminModal() {
         { text: 'OK', onPress: () => { markModalClosed(); router.back(); } },
       ]);
     } catch (e: any) {
-      const msg = String(e?.message || '');
+      const msg = '';
       if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
         Alert.alert('Sesión expirada', 'Vuelve a iniciar sesión.');
       } else if (msg.includes('403') || msg.toLowerCase().includes('forbidden')) {
@@ -195,7 +195,7 @@ export default function EditarPerfilAdminModal() {
       });
       Alert.alert('Listo', 'Tu nickname fue actualizado.');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo actualizar el nickname');
+      Alert.alert('Error', 'No se pudo actualizar el nickname');
     } finally {
       setSavingNick(false);
     }
@@ -219,7 +219,7 @@ export default function EditarPerfilAdminModal() {
       Alert.alert('Hecho', 'Contraseña cambiada. Puede que debas iniciar sesión de nuevo.');
       setCurrentPw(''); setNewPw('');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo cambiar la contraseña');
+      Alert.alert('Error', 'No se pudo cambiar la contraseña');
     } finally {
       setSavingPw(false);
     }

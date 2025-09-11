@@ -18,22 +18,22 @@ const SETS = [
     {
         label: 'items',
         // IMPORTANTE: patrones POSIX (con /), relativos a ROOT
-        srcPattern: 'assets/_originals/items/*.png',
+        srcPattern: 'assets/_originals/items/*converce_dark.png',
         destDir: 'assets/icons/items',
         basePointSize: 64,
     },
     {
-        label: 'logros',
-        srcPattern: 'assets/_originals/logros/*.png',
-        destDir: 'assets/icons/logros',
-        basePointSize: 76,
-    },
-    {
-        label: 'trofeos',
-        srcPattern: 'assets/_originals/trofeos/*.png',
-        destDir: 'assets/icons/trofeos',
-        basePointSize: 76,
-    },
+           label: 'logros',
+            srcPattern: 'assets/_originals/logros/!*.png',
+            destDir: 'assets/icons/logros',
+            basePointSize: 76,
+        },
+        {
+            label: 'trofeos',
+            srcPattern: 'assets/_originals/trofeos/!*.png',
+            destDir: 'assets/icons/trofeos',
+            basePointSize: 76,
+        },
 ];
 
 const SCALES = [1, 2, 3];

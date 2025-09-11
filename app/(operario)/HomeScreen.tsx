@@ -139,7 +139,7 @@ export default function HomeRetosScreen() {
             });
             setRetos(mapeados);
         } catch (e: any) {
-            setError(e?.message || 'Error cargando retos');
+            setError('Error cargando retos');
         } finally { setCargando(false); }
     };
 

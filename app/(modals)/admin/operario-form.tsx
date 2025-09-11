@@ -108,7 +108,7 @@ export default function OperarioFormModal() {
                 setCodRol(u?.codRol ?? ROLES[1].value);
                 setContrasena('');
             } catch (e: any) {
-                Alert.alert('Error', e?.message ?? 'No se pudo cargar el usuario');
+                Alert.alert('Error','No se pudo cargar el usuario');
             } finally {
                 setLoading(false);
             }

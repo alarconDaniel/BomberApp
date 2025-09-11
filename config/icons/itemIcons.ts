@@ -22,6 +22,9 @@ export const ITEM_ICONS: Record<string, any> = {
     'gafas-de-sol':        require('../../assets/icons/items/gafas-de-sol.png'),
     'casco-pickelhaube':   require('../../assets/icons/items/casco-pickelhaube.png'),
     'jaws':                require('../../assets/icons/items/jaws.png'),
+    'falda':               require('../../assets/icons/items/falda.png'),
+    'pantalon-cargo':      require('../../assets/icons/items/pantalon-cargo.png'),
+    'converce':            require('../../assets/icons/items/converce.png'),
 };
 
 // Mapa slug -> imagen local (tema oscuro). Solo agrega los que realmente tengas *_dark.png

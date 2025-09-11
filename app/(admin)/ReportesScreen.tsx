@@ -165,7 +165,7 @@ export default function ReportesScreen() {
             Alert.alert('Subido', objectKey);
             onRefresh();
         } catch (e: any) {
-            Alert.alert('Subida', e?.message ?? 'No se pudo subir el archivo.');
+            Alert.alert('Subida', 'No se pudo subir el archivo.');
         }
     }, [fetchJson, codUsuario, onRefresh, selectedTipo]);
 
@@ -181,7 +181,7 @@ export default function ReportesScreen() {
             const abs = url.startsWith('http') ? url : `${BASE_URL.replace(/\/+$/,'')}/${url.replace(/^\/+/,'')}`;
             await Linking.openURL(abs);
         } catch (e: any) {
-            Alert.alert('Descarga', e?.message ?? 'No se pudo descargar.');
+            Alert.alert('Descarga', 'No se pudo descargar.');
         }
     }, []);
 
@@ -198,7 +198,7 @@ export default function ReportesScreen() {
                         await fetchJson(`/uploads?key=${encodeURIComponent(key)}`, { method: 'DELETE' });
                         setFiles(prev => prev.filter(x => x.key !== key));
                     } catch (e: any) {
-                        Alert.alert('Eliminar', e?.message ?? 'No se pudo eliminar.');
+                        Alert.alert('Eliminar', 'No se pudo eliminar.');
                     }
                 }
             }

@@ -127,7 +127,7 @@ export default function DetalleRetoScreen() {
 
             setResolviendo(true);
         } catch (e:any) {
-            Alert.alert('Ups', e?.message || 'No fue posible abrir el reto');
+            Alert.alert('Ups',  'No fue posible abrir el reto');
         }
     };
 
@@ -138,7 +138,7 @@ export default function DetalleRetoScreen() {
             const extra = r.nuevaRacha ? `\n🔥 Racha: ${r.nuevaRacha} día${r.nuevaRacha===1?'':'s'}` : '';
             Alert.alert('Reto completado', `+${r.xpGanada} XP, +${r.coins} monedas${extra}`);
             markModalClosed(); router.back();
-        } catch (e:any) { Alert.alert('Ups', e?.message || 'No pudimos finalizar'); }
+        } catch (e:any) { Alert.alert('Ups',  'No pudimos finalizar'); }
     };
 
     return (

@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "icons:build": "node scripts/generate-icons.mjs"
+    "icons:build": "node scripts/generate-icons.mjs",
+    "avatars:build": "node scripts/generate-avatars.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",

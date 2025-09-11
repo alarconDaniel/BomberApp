@@ -143,7 +143,7 @@ export default function InventoryScreen() {
                 // Actualizar inventario (cantidad baja, nuevas recompensas, etc)
                 await listarInventario();
             } catch (e: any) {
-                Alert.alert('No se pudo abrir', e?.message ?? 'Error al abrir cofre');
+                Alert.alert('No se pudo abrir', 'Error al abrir cofre');
             } finally {
                 setOpening(false);
             }
