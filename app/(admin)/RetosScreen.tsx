@@ -67,7 +67,6 @@ export default function RetosScreen() {
 
       setRetos(arr);
     } catch (e: any) {
-      Alert.alert('Error', String(e?.message || 'No se pudo cargar la lista de retos'));
     } finally {
       setLoading(false);
     }
@@ -184,7 +183,7 @@ export default function RetosScreen() {
 
             await cargar();
           } catch (e: any) {
-            Alert.alert('Error', String(e?.message || 'No se pudo borrar'));
+            Alert.alert('Error', 'No se pudo borrar');
           } finally {
             setLoading(false);
             if (exito) {

@@ -184,7 +184,7 @@ export default function OperariosScreen() {
             await cargarMe();
             exito = true;
           } catch (e: any) {
-            const msg = String(e?.message || '');
+            const msg = '';
             if (/403/.test(msg) || /propi/i.test(msg)) {
               Alert.alert('Acción no permitida', 'No puedes eliminar tu propio usuario');
             } else if (/409/.test(msg) || /1451|referenciad/i.test(msg)) {
