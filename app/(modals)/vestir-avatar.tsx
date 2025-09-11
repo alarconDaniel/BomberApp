@@ -123,7 +123,7 @@ export default function VestirAvatarModal() {
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         },
         backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-        actions: { flexDirection: 'row', gap: 8 },
+        actions: { flexDirection: 'row', gap: 8, marginTop: 13},
         actionBtn: {
             paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
             borderWidth: 1.5, borderColor: colors.inputBorder, backgroundColor: colors.card,
