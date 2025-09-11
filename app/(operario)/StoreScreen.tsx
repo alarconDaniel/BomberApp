@@ -12,6 +12,8 @@ import PurchaseSuccessOverlay from '../../components/operario/PurchaseSuccessOve
 import { useToast } from '../../components/operario/ToastProvider';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
+// 👇 Sonido al comprar
+import { play } from '../../utils/sound';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -102,8 +104,13 @@ export default function StoreScreen() {
             // Refresca stats e items para que 'yaPosee' se vea en caliente
             await Promise.all([listarStats(), listarItems()]);
 
+            // Refresca stats e items para que 'yaPosee' se vea en caliente
+            await Promise.all([listarStats(), listarItems()]);
+
+            // Cierra el modal y, tras el fade, muestra overlay + SONIDO de monedas (único sonido aquí)
             closeDetails();
             setTimeout(() => {
+                play('monedas'); // 🎵 único sonido al comprar
                 setSuccessInfo({ name: it.nombreItem, qty: cantidad });
                 setShowSuccess(true);
             }, 240);
