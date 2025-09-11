@@ -22,7 +22,7 @@ const CONFIG = {
     // Tamaño base @1x (ajústalo según tu UI real)
     basePointSize: 128,
     // 'cover' recorta y garantiza cuadrado; 'contain' conserva todo y rellena con transparencia
-    fitMode: 'cover', // 'cover' | 'contain'
+    fitMode: 'contain', // 'cover' | 'contain'
     // Si deseas avatares en círculo: true. De lo contrario, quedan cuadrado/rectangulares
     makeCircle: false,
     // Fuerza salida a PNG para consistencia de canal alfa y peso

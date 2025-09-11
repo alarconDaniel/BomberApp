@@ -89,7 +89,6 @@ export default function OperariosScreen() {
       const arr = Array.isArray(json) ? json.map(mapUsuarioToUI) : [];
       setData(arr);
     } catch (e: any) {
-      Alert.alert('Error', 'No se pudo cargar la lista');
     } finally {
       setCargando(false);
     }

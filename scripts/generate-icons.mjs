@@ -18,7 +18,7 @@ const SETS = [
     {
         label: 'items',
         // IMPORTANTE: patrones POSIX (con /), relativos a ROOT
-        srcPattern: 'assets/_originals/items/*converce_dark.png',
+        srcPattern: 'assets/_originals/items/*.png',
         destDir: 'assets/icons/items',
         basePointSize: 64,
     },
