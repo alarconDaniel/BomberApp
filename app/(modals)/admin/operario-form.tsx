@@ -108,7 +108,7 @@ export default function OperarioFormModal() {
                 setCodRol(u?.codRol ?? ROLES[1].value);
                 setContrasena('');
             } catch (e: any) {
-                Alert.alert('Error', e?.message ?? 'No se pudo cargar el usuario');
+                Alert.alert('Error','No se pudo cargar el usuario');
             } finally {
                 setLoading(false);
             }
@@ -178,7 +178,7 @@ export default function OperarioFormModal() {
                 { text: 'OK', onPress: () => { markModalClosed(); router.back(); } },
             ]);
         } catch (e: any) {
-            const msg = String(e?.message || '');
+            const msg = '';
             if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
                 Alert.alert('Sesión expirada', 'Vuelve a iniciar sesión.');
             } else if (msg.includes('403') || msg.toLowerCase().includes('forbidden')) {

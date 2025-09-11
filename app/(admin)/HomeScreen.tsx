@@ -7,9 +7,8 @@ import { useAuth } from '../../auth/AuthContext';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { useFocusEffect } from 'expo-router';
-
-import { fetchReporteTitles } from './lib/reportes';
 import { fetchFullNameFromUsuariosList } from './lib/perfil';
+import FadeWrapper from "../../components/admin/FadeWrapper";
 
 /* ===== Tipos UI ===== */
 type OperarioStat = { id: string; nombre: string; retosCompletados: number; reportesSubidos: boolean };
@@ -205,18 +204,6 @@ export default function HomeScreen() {
     }
   }, [fetchJson]);
 
-  const loadReportes = useCallback(async () => {
-    setRepLoading(true);
-    try {
-      const titulos = await fetchReporteTitles(fetchJson, baseUrl);
-      setRepTitles(titulos);
-    } catch {
-      setRepTitles([]);
-    } finally {
-      setRepLoading(false);
-    }
-  }, [fetchJson, baseUrl]);
-
   const loadFullName = useCallback(async () => {
     try {
       const name = await fetchFullNameFromUsuariosList(fetchJson, user);
@@ -274,16 +261,14 @@ export default function HomeScreen() {
     setRefreshing(true);
     await Promise.all([
       loadOperarios(fechaKey),
-      loadReportes(),
       loadFullName(),
       loadProgreso(fechaKey),
       loadParticipacionSemanal(fechaKey),
     ]);
     setRefreshing(false);
-  }, [loadOperarios, loadReportes, loadFullName, loadProgreso, loadParticipacionSemanal, fechaKey]);
+  }, [loadOperarios, loadFullName, loadProgreso, loadParticipacionSemanal, fechaKey]);
 
   /** === Montaje y cambios de fecha === */
-  useEffect(() => { loadReportes(); }, [loadReportes]);
   useEffect(() => { loadFullName(); }, [loadFullName]);
   useEffect(() => {
     if (fechaKey) {
@@ -300,7 +285,6 @@ export default function HomeScreen() {
         if (nowKey !== todayKey) setTodayKey(nowKey);
 
         loadOperarios(fechaKey);
-        loadReportes();
         loadFullName();
         loadProgreso(fechaKey);
         loadParticipacionSemanal(fechaKey);
@@ -310,7 +294,7 @@ export default function HomeScreen() {
           loadOperarios(fechaKey);
         }, 20000);
         return () => clearInterval(t);
-      }, [todayKey, fechaKey, loadOperarios, loadReportes, loadFullName, loadProgreso, loadParticipacionSemanal])
+      }, [todayKey, fechaKey, loadOperarios, loadFullName, loadProgreso, loadParticipacionSemanal])
   );
 
   // === Gráfica semanal ===
@@ -318,6 +302,7 @@ export default function HomeScreen() {
   const maxValue = useMemo(() => Math.max(1, ...semanaSeries.map(s => s.value)), [semanaSeries]);
 
   return (
+      <FadeWrapper>
       <SafeAreaView style={[s.container, { paddingTop: insets.top || 8 }]}>
         <ScrollView
             contentContainerStyle={{ paddingBottom: 120 }}
@@ -325,7 +310,7 @@ export default function HomeScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refetchAll} />}
         >
           {/* ===== Bienvenida ===== */}
-          <Text style={[g.text.h2, { marginHorizontal: 16, marginBottom: 10 }]}>
+          <Text style={[g.text.h2, { marginHorizontal: 16, marginBottom: 10, marginTop:10 }]}>
             ¡Bienvenido, {fullName}!
           </Text>
 
@@ -474,5 +459,6 @@ export default function HomeScreen() {
 
         </ScrollView>
       </SafeAreaView>
+        </FadeWrapper>
   );
 }

@@ -1,19 +1,27 @@
 // app/(operario)/StoreScreen.tsx
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, ActivityIndicator, Pressable, StyleSheet, FlatList, ScrollView, Dimensions } from 'react-native';
+import {
+    View,
+    Text,
+    ActivityIndicator,
+    Pressable,
+    StyleSheet,
+    FlatList,
+    ScrollView,
+    Dimensions,
+    InteractionManager
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ItemTienda } from '../../models/ItemTienda';
 import FadeWrapper from '../../components/operario/FadeWrapper';
 import StoreItemCard from '../../components/operario/StoreItemCard';
-import DetailsStoreItemModal from '../../components/operario/DetailsStoreItemModal';
 import { useAuth } from '../../auth/AuthContext';
 import { StatsUsuario } from '../../models/StatsUsuario';
-import PurchaseSuccessOverlay from '../../components/operario/PurchaseSuccessOverlay';
 import { useToast } from '../../components/operario/ToastProvider';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
-// 👇 Sonido al comprar
 import { play } from '../../utils/sound';
+import StoreModal from '../../components/operario/StoreModal';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -22,8 +30,7 @@ type Section = { key: SectionKey; title: string; items: ItemTienda[] };
 
 function toItemTienda(raw: any): ItemTienda {
     const meta = typeof raw.metadataItem === 'string' ? JSON.parse(raw.metadataItem) : (raw.metadataItem ?? {});
-    const iconoPath = raw.iconoPath; // 👈 toma la ruta/slug de la BD
-
+    const iconoPath = raw.iconoPath;
     return new ItemTienda(
         raw.codItem ?? raw.cod ?? 0,
         raw.nombreItem ?? raw.nombre ?? 'Item',
@@ -32,17 +39,17 @@ function toItemTienda(raw: any): ItemTienda {
         String(raw.tipoItem ?? raw.tipo ?? '').toUpperCase(),
         meta,
         !!raw.yaPosee,
-        iconoPath, // 👈 NUEVO
+        iconoPath,
     );
 }
+
+type Mode = 'hidden' | 'details' | 'success';
 
 export default function StoreScreen() {
     const { colors } = useTheme();
     const g = useMemo(() => makeGlobalStyles(colors), [colors]);
 
     const toast = useToast();
-    const [successInfo, setSuccessInfo] = useState<{ name: string; qty: number } | null>(null);
-    const [showSuccess, setShowSuccess] = useState(false);
     const [stats, setStats] = useState<StatsUsuario>({ codUsuario: 0, racha: 0, monedas: 0, xp: 0, nivel: 0 });
     const { fetchJson } = useAuth();
     const [comprando, setComprando] = useState(false);
@@ -52,11 +59,18 @@ export default function StoreScreen() {
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // MODAL STATE (uno solo para todo)
+    const [modalMode, setModalMode] = useState<Mode>('hidden');
     const [selected, setSelected] = useState<ItemTienda | null>(null);
-    const [detailsOpen, setDetailsOpen] = useState(false);
+    const [successInfo, setSuccessInfo] = useState<{ name: string; qty: number } | null>(null);
+    const modalVisible = modalMode !== 'hidden';
 
-    const openDetails = (it: ItemTienda) => { setSelected(it); setDetailsOpen(true); };
-    const closeDetails = () => { setDetailsOpen(false); setTimeout(() => setSelected(null), 200); };
+    const openDetails = (it: ItemTienda) => { setSelected(it); setModalMode('details'); };
+    const closeModal = () => {   InteractionManager.runAfterInteractions(() => {
+        setModalMode('hidden');
+        setSelected(null);
+        setSuccessInfo(null);
+    }); };
 
     const listarStats = useCallback(async () => {
         try {
@@ -70,26 +84,20 @@ export default function StoreScreen() {
             setCargando(true);
             setError(null);
             const resultado = await fetchJson<any>('/item-tienda/listar');
-            console.log('[tienda] raw:', JSON.stringify(resultado)?.slice(0, 1200));
             const arr = Array.isArray(resultado) ? resultado : resultado?.items ?? [];
             const mapeados: ItemTienda[] = (arr ?? []).map(toItemTienda);
-            console.log('mapeados:', JSON.stringify(mapeados)?.slice(0, 1200));
             setItems(mapeados);
         } catch (e: any) {
-            setError(e?.message || 'Error cargando tienda');
+            setError('Error cargando tienda');
         } finally {
             setCargando(false);
         }
     }, [fetchJson]);
 
-    // 🔁 Igual que ProfileScreen: recarga al enfocar la pantalla
     useFocusEffect(
         useCallback(() => {
-            let isActive = true;
-            (async () => {
-                await Promise.all([listarItems(), listarStats()]);
-            })();
-            return () => { isActive = false; };
+            (async () => { await Promise.all([listarItems(), listarStats()]); })();
+            return () => {};
         }, [listarItems, listarStats])
     );
 
@@ -101,19 +109,21 @@ export default function StoreScreen() {
 
             await fetchJson('/item-tienda/comprar', { method: 'POST', body: JSON.stringify({ codItem: it.codItem, cantidad }) });
 
-            // Refresca stats e items para que 'yaPosee' se vea en caliente
+            // Refrescar antes de mostrar éxito (para yaPosee, monedas, etc.)
             await Promise.all([listarStats(), listarItems()]);
 
             // Refresca stats e items para que 'yaPosee' se vea en caliente
             await Promise.all([listarStats(), listarItems()]);
 
-            // Cierra el modal y, tras el fade, muestra overlay + SONIDO de monedas (único sonido aquí)
-            closeDetails();
-            setTimeout(() => {
-                play('monedas'); // 🎵 único sonido al comprar
-                setSuccessInfo({ name: it.nombreItem, qty: cantidad });
-                setShowSuccess(true);
-            }, 240);
+            // Cambiamos el CONTENIDO del MISMO modal a "success"
+            setSuccessInfo({ name: it.nombreItem, qty: cantidad });
+            setModalMode('success'); // sigue el mismo <Modal>, solo cambia el contenido
+
+                  try {
+        play('monedas'); // 🎵 sonido de monedas al comprar
+      } catch {
+        // si falla el sonido, seguimos felices como un tum tum sahur
+      }
         } catch (e: any) {
             alert(e?.message ?? 'No se pudo completar la compra');
         } finally {
@@ -126,7 +136,7 @@ export default function StoreScreen() {
         return [
             { key: 'POTENCIADOR', title: 'Artículos', items: by('POTENCIADOR') },
             { key: 'COFRE', title: 'Cofres', items: by('COFRE') },
-            { key: 'ROPA', title: 'Ropa', items: by('ROPA') }, // ya viene limitada a 3 desde backend
+            { key: 'ROPA', title: 'Ropa', items: by('ROPA') },
         ];
     }, [items]);
 
@@ -243,10 +253,13 @@ export default function StoreScreen() {
                     })}
                 </ScrollView>
 
-                <DetailsStoreItemModal
-                    visible={detailsOpen}
-                    item={selected}
-                    onClose={closeDetails}
+                {/* UN SOLO MODAL para todo el flujo */}
+                <StoreModal
+                    visible={modalVisible}
+                    mode={modalMode === 'success' ? 'success' : 'details'}
+                    item={selected ?? undefined}
+                    successInfo={successInfo ?? undefined}
+                    onRequestClose={closeModal}
                     onBuy={handleBuy}
                     userCoins={stats.monedas}
                     buying={comprando}
@@ -259,13 +272,6 @@ export default function StoreScreen() {
                                     : colors.storeAccentRopa)
                             : colors.storeAccentPotenciador
                     }
-                />
-
-                <PurchaseSuccessOverlay
-                    visible={showSuccess}
-                    itemName={successInfo?.name ?? ''}
-                    qty={successInfo?.qty ?? 1}
-                    onClose={() => setShowSuccess(false)}
                     autoCloseMs={1800}
                 />
             </View>

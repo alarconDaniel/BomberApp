@@ -38,7 +38,21 @@ function AuthGate() {
     // Ya estás en el grupo correcto → nada
   }, [user, loading, navState?.key, segments]);
 
-  return <Stack screenOptions={{headerShown: false}}/>;
+  return (
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen
+            name="(modals)"
+            options={{
+              headerShown: false,
+              contentStyle: { backgroundColor: '#fff' },
+              animation: "default",
+              gestureEnabled: false,                 // 🔒 bloquea swipe-back/dismiss
+              fullScreenGestureEnabled: false,       // 🔒 evita gesto a pantalla completa
+            }}
+        />
+        {/* No necesitas deHolclarar los otros grupos aquí salvo que quieras opciones especiales */}
+      </Stack>
+  );
 }
 
 export default function RootLayout() {

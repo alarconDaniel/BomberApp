@@ -1,7 +1,7 @@
 // components/FadeWrapper.tsx
-import React, { ReactNode, useEffect, useRef } from 'react';
+import React, { ReactNode, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { wasModalClosedRecently } from '../../navigation/ModalTracker';
 
@@ -11,7 +11,7 @@ interface FadeWrapperProps {
     delay?: number;    // override opcional
 }
 
-const DEFAULT_DURATION = 500;
+const DEFAULT_DURATION = 400;
 
 export default function FadeWrapper({
                                         children,
@@ -19,7 +19,6 @@ export default function FadeWrapper({
                                         delay,
                                     }: FadeWrapperProps) {
     const { colors } = useTheme();
-    const isFocused = useIsFocused();
 
     const DURATION = duration ?? DEFAULT_DURATION;
     const DELAY = delay ?? 0;
@@ -29,55 +28,99 @@ export default function FadeWrapper({
     const contentScale = useRef(new Animated.Value(0.995)).current;
     const scrimOpacity = useRef(new Animated.Value(1)).current;
 
-    const hasRun = useRef(false);
+    // Refs para controlar ciclos/limpieza
+    const animRef = useRef<Animated.CompositeAnimation | null>(null);
+    const safetyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    useEffect(() => {
-        if (isFocused) {
-            if (wasModalClosedRecently()) {
-                // Sin animar si vienes de cerrar un modal
-                contentOpacity.setValue(1);
-                contentScale.setValue(1);
-                scrimOpacity.setValue(0);
-                hasRun.current = true;
-                return;
-            }
-            if (!hasRun.current) {
-                // Estado inicial
-                contentOpacity.setValue(0);
-                contentScale.setValue(0.995);
-                scrimOpacity.setValue(1);
-
-                Animated.parallel([
-                    Animated.timing(contentOpacity, {
-                        toValue: 1,
-                        duration: DURATION,
-                        delay:   DELAY,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(contentScale, {
-                        toValue: 1,
-                        duration: Math.max(220, DURATION - 180),
-                        delay:   DELAY,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(scrimOpacity, {
-                        toValue: 0,
-                        duration: DURATION,
-                        delay:   DELAY,
-                        useNativeDriver: true,
-                    }),
-                ]).start(() => {
-                    hasRun.current = true;
-                });
-            }
-        } else {
-            // Prepárate para la próxima entrada
-            hasRun.current = false;
-            contentOpacity.setValue(0);
-            contentScale.setValue(0.995);
-            scrimOpacity.setValue(1);
+    const clearSafetyTimer = () => {
+        if (safetyTimer.current) {
+            clearTimeout(safetyTimer.current);
+            safetyTimer.current = null;
         }
-    }, [isFocused, DURATION, DELAY, contentOpacity, contentScale, scrimOpacity]);
+    };
+
+    const stopAllAnimations = () => {
+        animRef.current?.stop();
+        contentOpacity.stopAnimation();
+        contentScale.stopAnimation();
+        scrimOpacity.stopAnimation();
+    };
+
+    const toInitial = () => {
+        // Detén cualquier animación en curso y vuelve a estado inicial
+        stopAllAnimations();
+        clearSafetyTimer();
+
+        contentOpacity.setValue(0);
+        contentScale.setValue(0.995);
+        scrimOpacity.setValue(1);
+    };
+
+    const toFinal = () => {
+        stopAllAnimations();
+        clearSafetyTimer();
+
+        contentOpacity.setValue(1);
+        contentScale.setValue(1);
+        scrimOpacity.setValue(0);
+    };
+
+    useFocusEffect(
+        React.useCallback(() => {
+            // Al ganar foco, prepara estado inicial
+            toInitial();
+
+            // ✅ Validación: si acabas de cerrar un modal, no animes nada
+            if (wasModalClosedRecently()) {
+                toFinal();
+                // Limpieza al perder foco
+                return () => {
+                    toInitial();
+                };
+            }
+
+            // Arranca animaciones en paralelo
+            const parallel = Animated.parallel([
+                Animated.timing(contentOpacity, {
+                    toValue: 1,
+                    duration: DURATION,
+                    delay:   DELAY,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(contentScale, {
+                    toValue: 1,
+                    duration: Math.max(220, DURATION - 180),
+                    delay:   DELAY,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(scrimOpacity, {
+                    toValue: 0,
+                    duration: DURATION,
+                    delay:   DELAY,
+                    useNativeDriver: true,
+                }),
+            ]);
+
+            animRef.current = parallel;
+
+            parallel.start(({ finished }) => {
+                // Si se interrumpe (navegaste a otro screen), asegura estado final visible
+                if (!finished) {
+                    toFinal();
+                }
+            });
+
+            // Fail-safe extra por si algo se queda colgado (timers/animaciones)
+            safetyTimer.current = setTimeout(() => {
+                toFinal();
+            }, DURATION + DELAY + 120);
+
+            // Limpieza al perder foco
+            return () => {
+                toInitial();
+            };
+        }, [DURATION, DELAY])
+    );
 
     return (
         <View style={styles.container}>
@@ -86,9 +129,10 @@ export default function FadeWrapper({
                 pointerEvents="none"
                 style={[
                     StyleSheet.absoluteFillObject,
-                    { backgroundColor: colors.bg },
+                    { backgroundColor: colors.bg}, // , opacity: scrimOpacity
                 ]}
             />
+
             {/* Contenido */}
             <Animated.View
                 style={{

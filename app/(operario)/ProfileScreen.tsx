@@ -362,7 +362,7 @@ export default function ProfileScreen() {
                             <FontAwesome5 name="coins" size={24} color={P.coinIcon} />
                         </View>
                         <Text style={[g.text.body, { marginLeft: 12, color: P.sectionTitle }]}>
-                            <Text style={{ fontWeight: '700', color: P.sectionTitle }}>{stats.monedas}</Text> denigues
+                            <Text style={{ fontWeight: '700', color: P.sectionTitle }}>{stats.monedas}</Text> GeCoins
                         </Text>
                     </View>
                 </View>

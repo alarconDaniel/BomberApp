@@ -344,7 +344,7 @@ export default function QuizReto({
             } catch (e: any) {
                 setInv(prev => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
                 if (key !== 'x2') setUsedPowerupForQuestion(null);
-                Alert.alert('Comodines', e?.message || 'No se pudo usar el comodín.');
+                Alert.alert('Comodines', 'No se pudo usar el comodín.');
                 return false;
             }
         } finally {

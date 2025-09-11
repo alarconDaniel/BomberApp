@@ -1,5 +1,6 @@
 // app/(admin)/lib/retos.ts
 import { API } from '../../../config/api';
+import {Alert} from "react-native";
 
 /** ===== Tipos compartidos ===== */
 export type Cargo = string;
@@ -191,7 +192,8 @@ export async function updateRetoAdmin(
 /* ======================= BORRAR ======================= */
 export async function deleteReto(
   fetchJson: <T = any>(url: string, opts?: any) => Promise<T>,
-  id: number | string
+  id: number | string, nombre: string
+
 ) {
   return fetchJson(URL.borrar(id), { method: 'DELETE' });
 }

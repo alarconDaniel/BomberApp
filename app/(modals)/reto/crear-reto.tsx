@@ -38,6 +38,9 @@ export default function CrearRetoModal() {
   const router = useRouter();
   const { fetchJson } = useAuth();
 
+  // Color de error (fallback si el tema no trae uno)
+  const ERROR_COLOR = (colors as any).error ?? '#ef4444';
+
   // Base
   const [tipo, setTipo] = useState<TipoReto>('quiz');
   const [nombre, setNombre] = useState('');
@@ -75,16 +78,18 @@ export default function CrearRetoModal() {
     }
   }, [tipo, touchedAuto]);
 
-  function validarFechas(): boolean {
-    if (!isYYYYMMDD(inicio) || !isYYYYMMDD(fin)) {
-      Alert.alert('Fecha inválida', 'Usa el formato YYYY-MM-DD.');
-      return false;
+  function validarFechas(): { ok: boolean; errs: string[]; flags: Record<'inicio'|'fin', boolean> } {
+    const flags = { inicio: false, fin: false as boolean };
+    const errs: string[] = [];
+    let ok = true;
+
+    if (!isYYYYMMDD(inicio)) { ok = false; flags.inicio = true; errs.push('Fecha de inicio (formato YYYY-MM-DD)'); }
+    if (!isYYYYMMDD(fin))    { ok = false; flags.fin = true; errs.push('Fecha de fin (formato YYYY-MM-DD)'); }
+
+    if (isYYYYMMDD(inicio) && isYYYYMMDD(fin) && new Date(inicio) > new Date(fin)) {
+      ok = false; flags.inicio = true; flags.fin = true; errs.push('Rango de fechas válido (inicio ≤ fin)');
     }
-    if (new Date(inicio) > new Date(fin)) {
-      Alert.alert('Rango inválido', 'La fecha de inicio no puede ser mayor a la de fin.');
-      return false;
-    }
-    return true;
+    return { ok, errs, flags };
   }
 
   // Refs a editores
@@ -108,7 +113,7 @@ export default function CrearRetoModal() {
         // Si quieres, selecciona todos por defecto:
         // setSelCargoIds((rows || []).map(r => r.id));
       } catch (e: any) {
-        Alert.alert('Error', String(e?.message || 'No se pudieron cargar los cargos'));
+        Alert.alert('Error', 'No se pudieron cargar los cargos');
       } finally {
         setCargandoCargos(false);
       }
@@ -123,6 +128,16 @@ export default function CrearRetoModal() {
   // Guardado
   const [cargando, setCargando] = useState(false);
 
+  // === NUEVO: Estado de errores por campo ===
+  const [fieldErrors, setFieldErrors] = useState<{
+    nombre?: boolean;
+    inicio?: boolean;
+    fin?: boolean;
+    cargos?: boolean;
+    editor?: boolean;
+  }>({});
+  const [editorErrors, setEditorErrors] = useState<string[]>([]);
+
   function buildPayload(config: any) {
     const tiempoEstimadoSegReto = Math.max(0, Math.floor(Number(tiempoEstimadoMin) * 60));
     const tipoApi: TipoReto = tipo;
@@ -135,7 +150,7 @@ export default function CrearRetoModal() {
       fechaFinReto: fin,
 
       // NUEVO: asignación por cargos (multi)
-      cargoIds: selCargoIds,     // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+      cargoIds: selCargoIds,
 
       esAutomaticoReto: !!esAutomatico,
       activo,
@@ -148,22 +163,85 @@ export default function CrearRetoModal() {
   }
 
   const crear = async () => {
-    if (!nombre.trim()) return Alert.alert('Falta información', 'El nombre del reto es obligatorio');
-    if (!validarFechas()) return;
-    if (!selCargoIds.length) {
-      Alert.alert('Asignación requerida', 'Selecciona al menos un cargo para asignar el reto.');
-      return;
+    // Limpia errores previos
+    setFieldErrors({});
+    setEditorErrors([]);
+
+    const missing: string[] = [];
+    const nextFlags: typeof fieldErrors = {};
+
+    // Nombre
+    if (!nombre.trim()) {
+      missing.push('Nombre del tema');
+      nextFlags.nombre = true;
     }
 
+    // Fechas
+    const vf = validarFechas();
+    if (!vf.ok) {
+      missing.push(...vf.errs);
+      if (vf.flags.inicio) nextFlags.inicio = true;
+      if (vf.flags.fin) nextFlags.fin = true;
+    }
+
+    // Cargos
+    if (!selCargoIds.length) {
+      missing.push('Asignar a cargos (elige al menos uno)');
+      nextFlags.cargos = true;
+    }
+
+    // Editor según tipo
     let handle = quizRef.current as EditorHandle | null;
     if (tipo === 'form') handle = checklistRef.current;
     if (tipo === 'archivo') handle = archivoRef.current;
 
-    if (!handle?.validate()) {
-      Alert.alert('Revisa el contenido', 'Faltan datos en la sección del reto.');
+    const editorDetail: string[] = [];
+    let editorOk = true;
+
+    if (!handle || typeof handle.validate !== 'function') {
+      // Si no hay handle o no implementa validate, lo marcamos como error para no pasar en falso positivo
+      editorOk = false;
+    } else {
+      try {
+        const result: any = handle.validate();
+        if (result === true) {
+          editorOk = true;
+        } else if (Array.isArray(result)) {
+          editorOk = result.length === 0;
+          if (!editorOk) editorDetail.push(...result);
+        } else if (typeof result === 'object' && result) {
+          editorOk = !!result.ok;
+          if (result.errors && Array.isArray(result.errors)) editorDetail.push(...result.errors);
+        } else {
+          editorOk = false;
+        }
+      } catch {
+        editorOk = false;
+      }
+    }
+
+    if (!editorOk) {
+      nextFlags.editor = true;
+      missing.push('Contenido del reto');
+      if (editorDetail.length) {
+        // agrega subdetalles al alert como viñetas
+        editorDetail.forEach(d => missing.push(`• ${d}`));
+      }
+    }
+
+    // ¿Hay faltantes?
+    if (missing.length) {
+      setFieldErrors(nextFlags);
+      setEditorErrors(editorDetail);
+
+      // Construye mensaje con viñetas limpias (sin duplicar bullets)
+      const bullets = missing.map(m => (m.startsWith('• ') ? m : `• ${m}`)).join('\n');
+      Alert.alert('Revisa el contenido', `Faltan datos en la selección del reto:\n\n${bullets}`);
       return;
     }
-    const config = handle.getConfig();
+
+    // Si todo ok, armamos config y enviamos
+    const config = handle!.getConfig();
 
     try {
       setCargando(true);
@@ -175,11 +253,22 @@ export default function CrearRetoModal() {
       Alert.alert('OK', 'Reto creado correctamente 🎉');
       router.back();
     } catch (e: any) {
-      Alert.alert('Error', String(e?.message || 'No se pudo crear el reto'));
+      Alert.alert('Error','No se pudo crear el reto');
     } finally {
       setCargando(false);
     }
   };
+
+  // Helpers para estilos con error
+  const labelStyle = (flag?: boolean) => [g.text.smallStrong, flag ? { color: ERROR_COLOR } : null];
+  const inputStyle = (flag?: boolean) => [
+    s.input,
+    { marginTop: 6, borderColor: flag ? ERROR_COLOR : (colors.inputBorder ?? colors.outline) }
+  ];
+  const chipWrapStyle = (flag?: boolean) => ({
+    borderColor: flag ? ERROR_COLOR : colors.outline,
+  });
+  const sectionTitleStyle = (flag?: boolean) => [g.text.smallStrong, { marginTop: 12, color: flag ? ERROR_COLOR : g.text.smallStrong.color }];
 
   return (
       <FadeWrapper>
@@ -205,12 +294,25 @@ export default function CrearRetoModal() {
               <View style={{ height: 8 }} />
 
               {/* Nombre / Descripción */}
-              <Text style={g.text.smallStrong}>Nombre del tema</Text>
-              <TextInput value={nombre} onChangeText={setNombre} placeholder="Nombre de tema" placeholderTextColor={colors.mutedText} style={[s.input, { marginTop: 6 }]} />
+              <Text style={labelStyle(fieldErrors.nombre)}>Nombre del tema</Text>
+              <TextInput
+                  value={nombre}
+                  onChangeText={(v) => { setNombre(v); if (fieldErrors.nombre && v.trim()) setFieldErrors(f => ({ ...f, nombre: false })); }}
+                  placeholder="Nombre de tema"
+                  placeholderTextColor={colors.mutedText}
+                  style={inputStyle(fieldErrors.nombre)}
+              />
 
               <Text style={[g.text.smallStrong, { marginTop: 12 }]}>Descripción del tema</Text>
               <View style={[s.textAreaWrap, { marginTop: 6 }]}>
-                <TextInput value={descripcion} onChangeText={(t) => t.length <= MAX_DESC && setDescripcion(t)} placeholder="Sobre qué trata el tema" placeholderTextColor={colors.mutedText} multiline style={s.textArea} />
+                <TextInput
+                    value={descripcion}
+                    onChangeText={(t) => t.length <= MAX_DESC && setDescripcion(t)}
+                    placeholder="Sobre qué trata el tema"
+                    placeholderTextColor={colors.mutedText}
+                    multiline
+                    style={s.textArea}
+                />
                 <Text style={[g.text.caption, { position: 'absolute', right: 8, bottom: 6 }]}>{Math.max(0, MAX_DESC - descripcion.length)}</Text>
               </View>
 
@@ -226,21 +328,33 @@ export default function CrearRetoModal() {
               />
 
               {/* Fechas */}
-              <Text style={[g.text.smallStrong, { marginTop: 12 }]}>Fechas</Text>
+              <Text style={sectionTitleStyle(fieldErrors.inicio || fieldErrors.fin)}>Fechas</Text>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-                <Pressable style={[s.dateBtn, { borderColor: colors.inputBorder, backgroundColor: colors.card }]} onPress={() => openPicker('inicio')}>
+                <Pressable
+                    style={[
+                      s.dateBtn,
+                      { borderColor: (fieldErrors.inicio ? ERROR_COLOR : colors.inputBorder), backgroundColor: colors.card }
+                    ]}
+                    onPress={() => openPicker('inicio')}
+                >
                   <Ionicons name="calendar" size={16} color={colors.mutedText} />
                   <View style={{ marginLeft: 8 }}>
                     <Text style={g.text.caption}>Inicio</Text>
-                    <Text style={g.text.bodyStrong}>{pretty(inicio)}</Text>
+                    <Text style={[g.text.bodyStrong, fieldErrors.inicio ? { color: ERROR_COLOR } : null]}>{pretty(inicio)}</Text>
                   </View>
                 </Pressable>
 
-                <Pressable style={[s.dateBtn, { borderColor: colors.inputBorder, backgroundColor: colors.card }]} onPress={() => openPicker('fin')}>
+                <Pressable
+                    style={[
+                      s.dateBtn,
+                      { borderColor: (fieldErrors.fin ? ERROR_COLOR : colors.inputBorder), backgroundColor: colors.card }
+                    ]}
+                    onPress={() => openPicker('fin')}
+                >
                   <Ionicons name="calendar" size={16} color={colors.mutedText} />
                   <View style={{ marginLeft: 8 }}>
                     <Text style={g.text.caption}>Fin</Text>
-                    <Text style={g.text.bodyStrong}>{pretty(fin)}</Text>
+                    <Text style={[g.text.bodyStrong, fieldErrors.fin ? { color: ERROR_COLOR } : null]}>{pretty(fin)}</Text>
                   </View>
                 </Pressable>
               </View>
@@ -257,17 +371,22 @@ export default function CrearRetoModal() {
               />
 
               {/* CARGOS (multi) */}
-              <Text style={[g.text.smallStrong, { marginTop: 12 }]}>Asignar a cargos</Text>
+              <Text style={sectionTitleStyle(fieldErrors.cargos)}>Asignar a cargos</Text>
               {cargandoCargos ? (
                   <View style={{ paddingVertical: 10 }}><ActivityIndicator color={colors.text} /></View>
               ) : (
                   <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
                     {cargos.map(cg => {
                       const selected = selCargoIds.includes(cg.id);
+                      const borderColor = selected ? colors.primary : (fieldErrors.cargos ? ERROR_COLOR : colors.outline);
+                      const bgColor = selected ? (colors.primary + '20') : colors.mutedBg;
                       return (
                           <Pressable
                               key={cg.id}
-                              onPress={() => toggleCargo(cg.id)}
+                              onPress={() => {
+                                toggleCargo(cg.id);
+                                if (fieldErrors.cargos) setFieldErrors(f => ({ ...f, cargos: false }));
+                              }}
                               style={{
                                 flexDirection: 'row',
                                 alignItems: 'center',
@@ -275,8 +394,8 @@ export default function CrearRetoModal() {
                                 height: 36,
                                 borderRadius: 999,
                                 borderWidth: 1,
-                                borderColor: selected ? colors.primary : colors.outline,
-                                backgroundColor: selected ? colors.primary + '20' : colors.mutedBg,
+                                borderColor,
+                                backgroundColor: bgColor,
                                 gap: 8,
                               }}
                           >
@@ -287,6 +406,11 @@ export default function CrearRetoModal() {
                     })}
                     {!cargos.length && <Text style={g.text.caption}>No hay cargos configurados</Text>}
                   </View>
+              )}
+              {fieldErrors.cargos && (
+                  <Text style={[g.text.caption, { color: ERROR_COLOR, marginTop: 6 }]}>
+                    Debes seleccionar al menos un cargo.
+                  </Text>
               )}
 
               {/* Activo */}
@@ -313,6 +437,9 @@ export default function CrearRetoModal() {
               </View>
 
               {/* ===== Sección modular según tipo ===== */}
+              <Text style={sectionTitleStyle(fieldErrors.editor)}>
+                {tipo === 'quiz' ? 'Contenido del Quiz' : tipo === 'form' ? 'Contenido del Checklist' : 'Contenido del Archivo'}
+              </Text>
               {tipo === 'quiz' && (
                   <QuizRetoEditor key="crear" ref={quizRef} colors={colors} g={g} />
               )}
@@ -321,9 +448,24 @@ export default function CrearRetoModal() {
               )}
               {tipo === 'archivo' && <ArchivoRetoEditor ref={archivoRef} colors={colors} g={g} />}
 
+              {fieldErrors.editor && (
+                  <View style={{ marginTop: 6 }}>
+                    <Text style={[g.text.caption, { color: ERROR_COLOR }]}>
+                      Revisa el contenido. {editorErrors.length ? 'Faltan:' : ''}
+                    </Text>
+                    {editorErrors.map((e, i) => (
+                        <Text key={i} style={[g.text.caption, { color: ERROR_COLOR }]}>• {e}</Text>
+                    ))}
+                  </View>
+              )}
+
               {/* Acciones */}
               <View style={{ marginTop: 16, gap: 10 }}>
-                <Pressable style={[s.primaryBtn, { backgroundColor: colors.primary, alignItems:'center', justifyContent:'center' }]} onPress={crear} disabled={cargando}>
+                <Pressable
+                    style={[s.primaryBtn, { backgroundColor: colors.primary, alignItems:'center', justifyContent:'center' }]}
+                    onPress={crear}
+                    disabled={cargando}
+                >
                   {cargando ? <ActivityIndicator color="#fff" /> : <Text style={g.text.onPrimary}>Guardar reto</Text>}
                 </Pressable>
               </View>

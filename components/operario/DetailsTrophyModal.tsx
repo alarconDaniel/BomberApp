@@ -1,6 +1,6 @@
 // components/operario/DetailsTrophyModal.tsx
 import React from 'react';
-import { Modal, View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
+import { Modal, View, Text, Pressable, StyleSheet, Dimensions, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { FontAwesome5 } from '@expo/vector-icons';
@@ -15,7 +15,7 @@ type Holder = { codUsuario: number; nombre: string; nickname: string | null };
 export type Trophy = {
     codTrofeo: number;
     nombre: string;
-    icono: string;      // slug o ruta relativa (se resuelve a asset local)
+    icono: string;
     descripcion: string;
     holder: Holder | null;
 };
@@ -23,15 +23,33 @@ export type Trophy = {
 type Props = {
     visible: boolean;
     trophy?: Trophy | null;
-    onClose: () => void;
-    baseUrl?: string; // <- ya no se usa (quedó por compatibilidad si tu tipo lo trae)
+    onClose: () => void;       // se dispara cuando el usuario pide cerrar (tap backdrop/botón)
+    onClosed?: () => void;     // se dispara cuando la animación nativa terminó y el Modal ya se desmontó
 };
 
-export default function DetailsTrophyModal({ visible, trophy, onClose }: Props) {
+export default function DetailsTrophyModal({ visible, trophy, onClose, onClosed }: Props) {
     const { colors, isDark } = useTheme();
     const g = makeGlobalStyles(colors);
 
-    if (!visible || !trophy) return null;
+    // 👉 Truco anti-flicker:
+    // - "mounted" mantiene el <Modal> montado mientras hay una animación en curso.
+    // - Lo activamos en cuanto visible pase a true.
+    // - Lo apagamos recién en onDismiss (cuando la animación de cierre terminó).
+    const [mounted, setMounted] = React.useState(visible);
+
+    React.useEffect(() => {
+        if (visible && !mounted) setMounted(true);
+    }, [visible, mounted]);
+
+    const handleDismiss = () => {
+        // iOS/Android llaman esto al terminar la animación de cerrar
+        setMounted(false);
+        onClosed?.();
+    };
+
+    // Si nunca se abrió/no hay contenido, no montes nada.
+    // OJO: ya no dependemos de "visible" aquí; el Modal queda montado hasta onDismiss.
+    if (!mounted || !trophy) return null;
 
     const holderName = trophy.holder
         ? (trophy.holder.nickname?.trim() || trophy.holder.nombre)
@@ -90,15 +108,25 @@ export default function DetailsTrophyModal({ visible, trophy, onClose }: Props) 
     const localImg = resolveTrofeoIconFromBd(trophy.icono, isDark);
 
     return (
-        <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-            {/* Backdrop + blur */}
+        <Modal
+            visible={visible}
+            transparent
+            animationType="fade"
+            // Estas 3 props ayudan a que no "salte" contenido anterior:
+            presentationStyle="overFullScreen"
+            statusBarTranslucent
+            hardwareAccelerated
+            onDismiss={handleDismiss}
+            onRequestClose={onClose} // Android back
+        >
+            {/* Backdrop + blur (tap para cerrar) */}
             <Pressable style={s.backdrop} onPress={onClose}>
-                <BlurView intensity={40} tint="dark" style={s.backdropBlur} />
+                <BlurView intensity={40} tint={isDark ? 'dark' : 'light'} style={s.backdropBlur} />
             </Pressable>
 
             <View style={s.centerWrap} pointerEvents="box-none">
                 <Pressable style={[s.card, s.shadow]} onPress={() => {}}>
-                    {/* Header: icono + título */}
+                    {/* Header */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                         <View style={s.iconBox}>
                             <Image
@@ -119,7 +147,7 @@ export default function DetailsTrophyModal({ visible, trophy, onClose }: Props) 
                         {trophy.descripcion || 'Sin descripción.'}
                     </Text>
 
-                    {/* Holder (si aplica) */}
+                    {/* Holder */}
                     <View style={s.footer}>
                         {holderName ? (
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -136,7 +164,7 @@ export default function DetailsTrophyModal({ visible, trophy, onClose }: Props) 
                         )}
                     </View>
 
-                    {/* Botón cerrar */}
+                    {/* Cerrar */}
                     <Pressable onPress={onClose} style={s.closeBtn}>
                         <Text style={[g.text.smallStrong, g.text.onPrimary]}>Cerrar</Text>
                     </Pressable>
