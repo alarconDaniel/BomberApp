@@ -1,4 +1,3 @@
-// app/(operario)/InventoryScreen.tsx
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
     ActivityIndicator,
@@ -10,23 +9,24 @@ import {
     View,
     useWindowDimensions,
     Alert,
+    InteractionManager,
 } from 'react-native';
 
 import {useAuth} from '../../auth/AuthContext';
 import {ItemInventario, InventarioResponse} from '../../models/ItemInventario';
 import FadeWrapper from '../../components/operario/FadeWrapper';
-import DetailsInventoryItemModal from '../../components/operario/DetailsInventoryItemModal';
 import {useTheme} from '../../theme/ThemeProvider';
 import {makeGlobalStyles} from '../../theme/GlobalStyles';
-import ChestOpenModal from '../../components/operario/ChestOpenModal';
 import {Image} from 'expo-image';
 import {resolveItemIconFromBd} from '../../config/icons/itemIcons';
+import InventoryModal from '../../components/operario/InventoryModal';
 
 type SectionKey = 'POTENCIADOR' | 'COFRE' | 'ROPA';
 type Section = { key: SectionKey; title: string; items: ItemInventario[] };
-
-// Cada fila de la grilla es un arreglo de ítems (máx COLS)
 type Row = ItemInventario[];
+
+type Mode = 'hidden' | 'details' | 'chest';
+type ChestPayload = { size: 'pequeno' | 'medio' | 'grande'; rewards: { codItem: number; nombre: string; tipo: string; cantidad: number }[] };
 
 export default function InventoryScreen() {
     const {fetchJson} = useAuth();
@@ -39,24 +39,13 @@ export default function InventoryScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const mounted = useRef(true);
 
-    const [selected, setSelected] = useState<ItemInventario | null>(null);
-    const [detailsOpen, setDetailsOpen] = useState(false);
-
     const [opening, setOpening] = useState(false);
-    const [openModal, setOpenModal] = useState<{
-        visible: boolean;
-        size: 'pequeno' | 'medio' | 'grande';
-        rewards: { codItem: number; nombre: string; tipo: string; cantidad: number }[];
-    }>({visible: false, size: 'pequeno', rewards: []});
 
-    const openDetails = (it: ItemInventario) => {
-        setSelected(it);
-        setDetailsOpen(true);
-    };
-    const closeDetails = () => {
-        setDetailsOpen(false);
-        setTimeout(() => setSelected(null), 200);
-    };
+    // UN SOLO MODAL
+    const [modalMode, setModalMode] = useState<Mode>('hidden');
+    const [selected, setSelected] = useState<ItemInventario | null>(null);
+    const [chest, setChest] = useState<ChestPayload | null>(null);
+    const modalVisible = modalMode !== 'hidden';
 
     const {width, height} = useWindowDimensions();
 
@@ -87,9 +76,7 @@ export default function InventoryScreen() {
 
             const resp = await fetchJson<InventarioResponse>('/item-inventario/listar');
             const arr = Array.isArray((resp as any)?.items) ? resp.items : [];
-            if (mounted.current) {
-                setItems(arr);
-            }
+            if (mounted.current) setItems(arr);
         } catch (e: any) {
             if (mounted.current) setError(e?.message || 'Error de red cargando inventario');
         } finally {
@@ -111,7 +98,22 @@ export default function InventoryScreen() {
         setRefreshing(false);
     }, [listarInventario]);
 
-    // 🧩 COFRES: handler de apertura
+    // Abrir detalles
+    const openDetails = (it: ItemInventario) => {
+        setSelected(it);
+        setChest(null);
+        setModalMode('details');
+    };
+
+    const closeModal = () => {
+        InteractionManager.runAfterInteractions(() => {
+            setModalMode('hidden');
+            setSelected(null);
+            setChest(null);
+        });
+    };
+
+    // Abrir cofre -> cambiar contenido del mismo modal a CHESSSTTT
     const handleOpenChest = useCallback(
         async (it: ItemInventario) => {
             try {
@@ -123,21 +125,22 @@ export default function InventoryScreen() {
                     Alert.alert('Sin cofres', 'No te queda cantidad de este cofre.');
                     return;
                 }
+
                 setOpening(true);
+
                 const resp = await fetchJson<any>('/item-inventario/abrir-cofre', {
                     method: 'POST',
-                    body: JSON.stringify({codItemInventario: it.cod}),
+                    body: JSON.stringify({ codItemInventario: it.cod }),
                 });
 
-                setDetailsOpen(false);
-                setTimeout(() => {
-                    setOpenModal({
-                        visible: true,
-                        size: resp?.chest?.size ?? 'pequeno',
-                        rewards: Array.isArray(resp?.rewards) ? resp.rewards : [],
-                    });
-                }, 180);
+                // Cambiar contenido del MISMO modal a chest (sin desmontar backdrop)
+                setChest({
+                    size: resp?.chest?.size ?? 'pequeno',
+                    rewards: Array.isArray(resp?.rewards) ? resp.rewards : [],
+                });
+                setModalMode('chest');
 
+                // Actualizar inventario (cantidad baja, nuevas recompensas, etc)
                 await listarInventario();
             } catch (e: any) {
                 Alert.alert('No se pudo abrir', e?.message ?? 'Error al abrir cofre');
@@ -167,7 +170,7 @@ export default function InventoryScreen() {
             paddingHorizontal: H_PADDING,
             paddingTop: 12,
             paddingBottom: 4,
-            backgroundColor: colors.bg, // para sticky
+            backgroundColor: colors.bg,
         },
         row: {
             flexDirection: 'row',
@@ -180,9 +183,7 @@ export default function InventoryScreen() {
             marginRight: GAP,
             alignItems: 'center',
         },
-        cellLast: {
-            marginRight: 0,
-        },
+        cellLast: { marginRight: 0 },
         imageBox: {
             backgroundColor: colors.imageBg,
             borderRadius: 8,
@@ -208,38 +209,32 @@ export default function InventoryScreen() {
             zIndex: 10,
             elevation: 3,
         },
-        cardLabel: {marginTop: 6, textAlign: 'center', color: colors.text},
-        empty: {textAlign: 'center', marginTop: 40},
+        cardLabel: { marginTop: 6, textAlign: 'center', color: colors.text },
+        empty: { textAlign: 'center', marginTop: 40 },
     });
 
-    // --- Secciones base ---
+    // Secciones
     const sectionsBase: Section[] = useMemo(() => {
         const by = (tipo: SectionKey) =>
             items.filter((it) => String(it.item.tipo).toUpperCase() === tipo);
         return [
-            {key: 'POTENCIADOR', title: 'Artículos', items: by('POTENCIADOR')},
-            {key: 'COFRE', title: 'Cofres', items: by('COFRE')},
-            {key: 'ROPA', title: 'Ropa', items: by('ROPA')}, // limitada a 3 desde backend
+            { key: 'POTENCIADOR', title: 'Artículos', items: by('POTENCIADOR') },
+            { key: 'COFRE', title: 'Cofres', items: by('COFRE') },
+            { key: 'ROPA', title: 'Ropa', items: by('ROPA') },
         ];
     }, [items]);
 
-    // --- Util: partir un array en filas de tamaño n ---
     const chunk = (arr: ItemInventario[], n: number): Row[] => {
         const out: Row[] = [];
         for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
         return out;
     };
 
-    // --- Secciones para SectionList: filtra vacías y arma filas ---
     const sectionsForList = useMemo(
         () =>
             sectionsBase
-                .filter((s) => s.items.length > 0) // ⬅️ no mostrar secciones vacías
-                .map((s) => ({
-                    key: s.key,
-                    title: s.title,
-                    data: chunk(s.items, COLS), // Row[]
-                })),
+                .filter((s) => s.items.length > 0)
+                .map((s) => ({ key: s.key, title: s.title, data: chunk(s.items, COLS) })),
         [sectionsBase, COLS],
     );
 
@@ -257,17 +252,10 @@ export default function InventoryScreen() {
     if (error) {
         return (
             <View style={styles.centerBox}>
-                <Text
-                    style={[
-                        g.text.bodyStrong,
-                        g.text.danger,
-                        {textAlign: 'center', marginBottom: 12, paddingHorizontal: 60},
-                    ]}>
+                <Text style={[g.text.bodyStrong, g.text.danger, { textAlign: 'center', marginBottom: 12, paddingHorizontal: 60 }]}>
                     Uy, se cayó esto: {error}
                 </Text>
-                <Pressable
-                    onPress={listarInventario}
-                    style={{padding: 12, backgroundColor: colors.mutedBg, borderRadius: 8}}>
+                <Pressable onPress={listarInventario} style={{ padding: 12, backgroundColor: colors.mutedBg, borderRadius: 8 }}>
                     <Text style={g.text.body}>Reintentar</Text>
                 </Pressable>
             </View>
@@ -282,7 +270,7 @@ export default function InventoryScreen() {
                 stickySectionHeadersEnabled
                 ListHeaderComponent={
                     <View style={styles.titleWrap}>
-                        <Text style={[g.text.h1, {textAlign: 'center', marginTop: TITLE_TOP}]}>
+                        <Text style={[g.text.h1, { textAlign: 'center', marginTop: TITLE_TOP }]}>
                             Inventario {items.length ? `(${items.length})` : ''}
                         </Text>
                     </View>
@@ -293,7 +281,6 @@ export default function InventoryScreen() {
                     </View>
                 )}
                 renderItem={({item: row}) => {
-                    // row es ItemInventario[] (máx COLS)
                     const fillers = Array(Math.max(0, COLS - row.length)).fill(null);
                     return (
                         <View style={styles.row}>
@@ -303,11 +290,12 @@ export default function InventoryScreen() {
                                     <Pressable
                                         key={it.cod}
                                         style={[styles.cell, isLast && styles.cellLast]}
-                                        onPress={() => openDetails(it)}>
+                                        onPress={() => openDetails(it)}
+                                    >
                                         <View style={styles.imageBox}>
                                             <Image
                                                 source={resolveItemIconFromBd(it.item.icon, isDark)}
-                                                style={{width: '70%', height: '70%'}}
+                                                style={{ width: '70%', height: '70%' }}
                                                 contentFit="contain"
                                                 cachePolicy="memory-disk"
                                                 transition={120}
@@ -323,26 +311,19 @@ export default function InventoryScreen() {
                                     </Pressable>
                                 );
                             })}
-                            {/* “fillers” invisibles para completar la fila y que las tarjetas mantengan el espaciado */}
                             {fillers.map((_, i) => (
-                                <View
-                                    // eslint-disable-next-line react/no-array-index-key
-                                    key={`filler-${i}`}
-                                    style={[styles.cell, i === fillers.length - 1 && styles.cellLast]}
-                                    pointerEvents="none"
-                                />
+                                <View key={`filler-${i}`} style={[styles.cell, i === fillers.length - 1 && styles.cellLast]} pointerEvents="none" />
                             ))}
                         </View>
                     );
                 }}
-                contentContainerStyle={{paddingBottom: 8, backgroundColor: colors.bg}}
+                contentContainerStyle={{ paddingBottom: 8, backgroundColor: colors.bg }}
                 ListEmptyComponent={
                     allEmpty ? (
                         <Text style={[g.text.body, g.text.muted, styles.empty]}>
                             Todavía no tienes items, ¡cómpralos en la tienda!
                         </Text>
                     ) : (
-                        // Esto no debería mostrarse, pero lo dejamos por si alguna sección queda sin filas renderizables
                         <Text style={[g.text.body, g.text.muted, styles.empty]}>Sin ítems todavía</Text>
                     )
                 }
@@ -350,27 +331,19 @@ export default function InventoryScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             />
 
-            {/* 👇 Modal de inventario */}
-            <DetailsInventoryItemModal
-                visible={detailsOpen}
+            {/* 🔥 Un solo modal para todo el flujo */}
+            <InventoryModal
+                visible={modalVisible}
+                mode={modalMode === 'chest' ? 'chest' : 'details'}
                 item={selected ?? undefined}
-                onClose={closeDetails}
-                accentColor={colors.primary}
-                showDate={true}
-                // @ts-ignore
-                onOpenChest={
-                    selected && String(selected.item?.tipo).toUpperCase() === 'COFRE'
-                        ? () => handleOpenChest(selected)
-                        : undefined
-                }
+                chest={chest ?? undefined}
+                onRequestClose={closeModal}
+                onOpenChest={selected && String(selected.item?.tipo).toUpperCase() === 'COFRE'
+                    ? () => handleOpenChest(selected)
+                    : undefined}
                 opening={opening}
-            />
-
-            <ChestOpenModal
-                visible={openModal.visible}
-                size={openModal.size}
-                rewards={openModal.rewards}
-                onClose={() => setOpenModal((s) => ({...s, visible: false}))}
+                accentColor={colors.primary}
+                showDate
             />
         </FadeWrapper>
     );

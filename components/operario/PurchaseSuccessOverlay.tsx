@@ -1,19 +1,17 @@
-// src/components/PurchaseSuccessOverlay.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, Pressable, Modal, StyleSheet as RNStyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
 import { makeGlobalStyles } from '../../theme/GlobalStyles';
 
 type Props = {
-    visible: boolean;
+    visible: boolean;         // controlado por el padre
     itemName: string;
     qty: number;
-    onClose: () => void;          // el padre pone visible=false
-    onClosed?: () => void;        // NUEVO: se llama cuando termina la salida
+    onClose: () => void;      // el padre pondrá visible=false
+    onClosed?: () => void;    // callback cuando terminamos la salida
     autoCloseMs?: number;
-    zIndex?: number;
 };
 
 export default function PurchaseSuccessOverlay({
@@ -22,34 +20,38 @@ export default function PurchaseSuccessOverlay({
                                                    qty,
                                                    onClose,
                                                    onClosed,
-                                                   autoCloseMs,
-                                                   zIndex = 9999,
+                                                   autoCloseMs = 1800,
                                                }: Props) {
     const { colors } = useTheme();
     const g = makeGlobalStyles(colors);
 
-    // 🔒 Mantener montado durante la salida (patrón unificado)
-    const [mounted, setMounted] = useState(visible);
+    // Animaciones
+    const back  = useRef(new Animated.Value(0)).current;  // 0..1
+    const card  = useRef(new Animated.Value(0)).current;  // 0..1
+    const pulse = useRef(new Animated.Value(0)).current;  // 0..1
 
-    // 🎬 Animaciones
-    const back = useRef(new Animated.Value(0)).current;  // 0..1
-    const card = useRef(new Animated.Value(0)).current;  // 0..1
-    const pulse = useRef(new Animated.Value(0)).current; // 0..1
-    const loopRef = useRef<Animated.CompositeAnimation | null>(null);
+    const loopRef  = useRef<Animated.CompositeAnimation | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Estado interno para controlar el <Modal> sin depender del parpadeo del padre
+    const [rendered, setRendered] = useState(false);      // si renderizamos contenido
+    const [modalVisible, setModalVisible] = useState(false); // se pasa al <Modal visible={...}>
+
+    const cleanup = () => {
+        loopRef.current?.stop();
+        if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    };
+
+    // Efecto principal: reacciona a props.visible
     useEffect(() => {
         if (visible) {
-            // Montamos y reseteamos todo para la entrada
-            setMounted(true);
+            // ENTRADA
+            setRendered(true);
+            setModalVisible(true);
+            cleanup();
             back.setValue(0);
             card.setValue(0);
             pulse.setValue(0);
-            loopRef.current?.stop();
-            if (timerRef.current) {
-                clearTimeout(timerRef.current);
-                timerRef.current = null;
-            }
 
             Animated.parallel([
                 Animated.timing(back, { toValue: 1, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }),
@@ -65,40 +67,34 @@ export default function PurchaseSuccessOverlay({
                 loop.start();
 
                 if (autoCloseMs && autoCloseMs > 0) {
-                    timerRef.current = setTimeout(handleClose, autoCloseMs);
+                    // No cerramos el Modal aquí; pedimos al padre que ponga visible=false
+                    timerRef.current = setTimeout(() => { onClose(); }, autoCloseMs);
                 }
             });
-        } else if (mounted) {
-            // Salida con animación; desmontamos al terminar y avisamos con onClosed
-            loopRef.current?.stop();
-            Animated.parallel([
-                Animated.timing(back, { toValue: 0, duration: 180, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-                Animated.timing(card, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
-            ]).start(() => {
-                setMounted(false);
-                onClosed?.();
-            });
+        } else {
+            // SALIDA (solo si estaba renderizado)
+            if (!rendered) return;
+
+            cleanup();
+            // Card-first exit (no toques 'back', mantenlo opaco hasta ocultar el Modal)
+            Animated.timing(card, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true })
+                .start(() => {
+                    // Ocultamos el Modal de golpe y reseteamos
+                    setModalVisible(false);
+                    setRendered(false);
+                    back.setValue(0);
+                    onClosed?.();
+                });
         }
+
+        // Limpieza al desmontar este componente (cambio de pantalla, etc.)
+        return () => { cleanup(); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [visible]);
+    }, [visible]); // 👈 clave: solo reacciona a cambios de props.visible
 
-    useEffect(() => {
-        return () => {
-            loopRef.current?.stop();
-            if (timerRef.current) clearTimeout(timerRef.current);
-        };
-    }, []);
+    if (!rendered) return null;
 
-    const handleClose = () => {
-        if (timerRef.current) {
-            clearTimeout(timerRef.current);
-            timerRef.current = null;
-        }
-        onClose(); // el padre pondrá visible=false y disparamos la salida arriba
-    };
-
-    if (!mounted) return null;
-
+    // Interpolaciones
     const cardOpacity   = card;
     const cardScale     = card.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] });
     const cardTranslate = card.interpolate({ inputRange: [0, 1], outputRange: [12, 0] });
@@ -106,7 +102,7 @@ export default function PurchaseSuccessOverlay({
     const ringOpacity   = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] });
 
     const s = StyleSheet.create({
-        center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 16 },
+        center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
         card: {
             width: '86%',
             borderRadius: 16,
@@ -124,12 +120,22 @@ export default function PurchaseSuccessOverlay({
         btn: { marginTop: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.success },
     });
 
+    const requestClose = () => { onClose(); }; // dispara salida controlada vía props.visible=false
+
     return (
-        <View pointerEvents="box-none" style={[StyleSheet.absoluteFillObject, { zIndex }]}>
-            {/* Backdrop con blur y fade */}
-            <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: back }]}>
-                <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                <Pressable style={StyleSheet.absoluteFillObject} onPress={handleClose} />
+        <Modal
+            visible={modalVisible}           // 👈 AHORA sí, controlado
+            transparent
+            animationType="none"             // animamos manualmente
+            presentationStyle="overFullScreen"
+            statusBarTranslucent
+            hardwareAccelerated
+            onRequestClose={requestClose}    // Android back
+        >
+            {/* Backdrop con blur: solo animamos de ENTRADA; en salida permanece opaco hasta ocultar el Modal */}
+            <Animated.View style={[RNStyleSheet.absoluteFillObject, { opacity: back }]}>
+                <BlurView intensity={30} tint="dark" style={RNStyleSheet.absoluteFill} />
+                <Pressable style={RNStyleSheet.absoluteFillObject} onPress={requestClose} />
             </Animated.View>
 
             {/* Card */}
@@ -145,11 +151,11 @@ export default function PurchaseSuccessOverlay({
                     <Text style={[g.text.body, g.text.secondary, { textAlign: 'center', marginBottom: 12 }]}>
                         Se ha comprado {qty} × <Text style={g.text.bodyStrong}>{itemName}</Text>
                     </Text>
-                    <Pressable onPress={handleClose} style={s.btn}>
+                    <Pressable onPress={requestClose} style={s.btn}>
                         <Text style={[g.text.smallStrong, g.text.onPrimary]}>Listo</Text>
                     </Pressable>
                 </Animated.View>
             </View>
-        </View>
+        </Modal>
     );
 }

@@ -11,6 +11,7 @@ import { makeGlobalStyles } from '../../theme/GlobalStyles';
 import { useAuth } from '../../auth/AuthContext';
 
 import { fetchRetos, deleteReto, type RetoDTO, type TipoReto } from './lib/retos';
+import FadeWrapper from "../../components/admin/FadeWrapper";
 
 type TipoUI = 'all' | TipoReto; // 'all' | 'quiz' | 'form' | 'archivo'
 
@@ -45,7 +46,6 @@ export default function RetosScreen() {
       const data = await fetchRetos(fetchJson);
       setRetos(Array.isArray(data) ? data : []);
     } catch (e: any) {
-      Alert.alert('Error', String(e?.message || 'No se pudo cargar la lista de retos'));
     } finally {
       setLoading(false);
     }
@@ -157,7 +157,7 @@ export default function RetosScreen() {
             await deleteReto(fetchJson, item.codReto);
             await cargar();
           } catch (e: any) {
-            Alert.alert('Error', String(e?.message || 'No se pudo borrar'));
+            Alert.alert('Error','No se pudo borrar');
           } finally {
             setLoading(false);
           }
@@ -167,10 +167,11 @@ export default function RetosScreen() {
   };
 
   return (
+      <FadeWrapper>
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       {/* Header */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={[g.text.h1, { flex: 1 }]}>Retos</Text>
+      <View style={{ paddingHorizontal: 16, marginTop: 15, paddingBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={[g.text.h1, { flex: 1}]}>Retos</Text>
 
         <Pressable
           onPress={abrirCrear}
@@ -318,5 +319,6 @@ export default function RetosScreen() {
 
 
     </SafeAreaView>
+        </FadeWrapper>
   );
 }

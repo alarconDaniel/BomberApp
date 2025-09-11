@@ -9,7 +9,8 @@ export default function ModalLayout() {
                 presentation: 'modal',          // iOS modal; en Android es full-screen
                 headerShown: false,             // pondremos nuestro botón “Volver”
                 contentStyle: { backgroundColor: '#fff' },
-                animation: 'slide_from_bottom', // agradable en ambos SO
+                gestureEnabled: false,
+                fullScreenGestureEnabled: false,
             }}
         />
     );

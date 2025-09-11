@@ -138,7 +138,7 @@ export default function OperariosScreen() {
             await listar();
             await cargarMe();
           } catch (e: any) {
-            const msg = String(e?.message || '');
+            const msg = '';
             if (/403/.test(msg) || /propi/i.test(msg)) {
               Alert.alert('Acción no permitida', 'No puedes eliminar tu propio usuario');
             } else if (/409/.test(msg) || /1451|referenciad/i.test(msg)) {
@@ -314,6 +314,7 @@ function getStyles(c: import('../../theme/ThemeProvider').Palette) {
       alignItems: 'center',
       paddingHorizontal: 16,
       paddingBottom: 10,
+      marginTop: 3,
     },
     primaryBtn: {
       flexDirection: 'row',

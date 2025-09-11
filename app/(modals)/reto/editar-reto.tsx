@@ -182,7 +182,7 @@ export default function EditarRetoModal() {
 
                 setSelCargoIds(ids);
             } catch (e: any) {
-                Alert.alert('Error', String(e?.message || 'No se pudieron cargar los cargos'));
+                Alert.alert('Error', 'No se pudieron cargar los cargos');
             } finally {
                 setCargandoCargos(false);
             }
@@ -277,7 +277,7 @@ export default function EditarRetoModal() {
             Alert.alert('OK', 'Reto actualizado ✅');
             router.back();
         } catch (e: any) {
-            Alert.alert('Error', String(e?.message || 'No se pudo actualizar el reto'));
+            Alert.alert('Error','No se pudo actualizar el reto');
         } finally {
             setCargando(false);
         }

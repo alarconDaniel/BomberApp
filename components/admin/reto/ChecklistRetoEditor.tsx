@@ -1,6 +1,6 @@
 // components/admin/reto/ChecklistRetoEditor.tsx
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View, StyleSheet, ScrollView, Alert } from 'react-native';
+import {Pressable, Text, TextInput, View, StyleSheet, ScrollView, Alert, StyleProp, TextStyle} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { makeGlobalStyles } from '../../../theme/GlobalStyles';
 import { EditorHandle, cryptoRandomId } from './types';
@@ -483,9 +483,27 @@ const ChecklistRetoEditor = forwardRef<EditorHandle, ChecklistEditorProps>(
 
                     <Text style={g.text.smallStrong}>Preferencias de UI</Text>
                     <View style={{ marginTop: 6, gap: 8 }}>
-                        <ToggleRow label="Ocultar número de ítem" value={!!ui.hideItemNumber} onToggle={() => setUi((p) => ({ ...p, hideItemNumber: !p.hideItemNumber }))} />
-                        <ToggleRow label="Permitir borradores (allowDraft)" value={!!ui.allowDraft} onToggle={() => setUi((p) => ({ ...p, allowDraft: !p.allowDraft }))} />
-                        <ToggleRow label="Auto guardado (autoSave)" value={!!ui.autoSave} onToggle={() => setUi((p) => ({ ...p, autoSave: !p.autoSave }))} />
+                        <View style={{ marginTop: 6, gap: 8 }}>
+                            <ToggleRow
+                                label="Ocultar número de ítem"
+                                value={!!ui.hideItemNumber}
+                                onToggle={() => setUi((p) => ({ ...p, hideItemNumber: !p.hideItemNumber }))}
+                                colors={colors}
+                            />
+                            <ToggleRow
+                                label="Permitir borradores (allowDraft)"
+                                value={!!ui.allowDraft}
+                                onToggle={() => setUi((p) => ({ ...p, allowDraft: !p.allowDraft }))}
+                                colors={colors}
+                            />
+                            <ToggleRow
+                                label="Auto guardado (autoSave)"
+                                value={!!ui.autoSave}
+                                onToggle={() => setUi((p) => ({ ...p, autoSave: !p.autoSave }))}
+                                colors={colors}
+                            />
+                        </View>
+
                     </View>
 
                     <Text style={[g.text.smallStrong, { marginTop: 10 }]}>Nota informativa (opcional)</Text>
@@ -558,8 +576,12 @@ const ChecklistRetoEditor = forwardRef<EditorHandle, ChecklistEditorProps>(
                                 <ToggleRow
                                     label="Requerido"
                                     value={!!f.required}
-                                    onToggle={() => setHeader((p) => ({ ...p, [key]: { ...f, required: !f.required } }))}
+                                    onToggle={() =>
+                                        setHeader((p) => ({ ...p, [key]: { ...f, required: !f.required } }))
+                                    }
+                                    colors={colors}
                                 />
+
                             </View>
                         </View>
                     ))}
@@ -703,14 +725,28 @@ const ChecklistRetoEditor = forwardRef<EditorHandle, ChecklistEditorProps>(
                                 <ToggleRow
                                     label="Requerido"
                                     value={!!it.required}
-                                    onToggle={() => setItems((prev) => prev.map((x) => (x.n === it.n ? { ...x, required: !x.required } : x)))}
+                                    onToggle={() =>
+                                        setItems((prev) =>
+                                            prev.map((x) => (x.n === it.n ? { ...x, required: !x.required } : x))
+                                        )
+                                    }
+                                    colors={colors}
+                                    // Ejemplo opcional de estilo: texto normal del tema
+                                    labelStyle={{ color: colors.text }}
                                 />
+
                                 <ToggleRow
                                     label='Forzar columna "Estado (A/C)" requerida'
                                     value={!!it.estado}
-                                    onToggle={() => setItems((prev) => prev.map((x) => (x.n === it.n ? { ...x, estado: !x.estado } : x)))}
+                                    onToggle={() =>
+                                        setItems((prev) =>
+                                            prev.map((x) => (x.n === it.n ? { ...x, estado: !x.estado } : x))
+                                        )
+                                    }
+                                    colors={colors}
                                 />
                             </View>
+
                         </View>
                     ))}
                 </View>
@@ -817,18 +853,23 @@ const ChecklistRetoEditor = forwardRef<EditorHandle, ChecklistEditorProps>(
                                         />
                                     )}
                                     <ToggleRow
-                                        label="Requerido"
+                                        label="Requerida"
                                         value={!!fdef?.required}
                                         onToggle={() =>
                                             setFirmas((prev) => ({
                                                 ...prev,
                                                 [bk]: {
                                                     ...(prev[bk] || {}),
-                                                    fields: { ...(prev[bk]?.fields || {}), [fk]: { ...(fdef || {}), required: !fdef?.required } },
+                                                    fields: {
+                                                        ...(prev[bk]?.fields || {}),
+                                                        [fk]: { ...(fdef || {}), required: !fdef?.required },
+                                                    },
                                                 },
                                             }))
                                         }
+                                        colors={colors}
                                     />
+
                                 </View>
                             ))}
                         </View>
@@ -903,13 +944,65 @@ function RowSelect({
     );
 }
 
-function ToggleRow({ label, value, onToggle }: { label: string; value: boolean; onToggle: () => void }) {
+type ToggleRowProps = {
+    label: string;
+    value: boolean;
+    onToggle: () => void;
+    colors: {
+        text: string;
+        primary: string;
+        card?: string;
+        inputBorder?: string;
+        mutedText?: string;
+        onPrimary?: string;    // opcional, si tu theme lo trae
+    };
+    labelStyle?: StyleProp<TextStyle>;
+    disabled?: boolean;
+};
+
+function ToggleRow({
+                       label,
+                       value,
+                       onToggle,
+                       colors,
+                       labelStyle,
+                       disabled,
+                   }: ToggleRowProps) {
+    const borderColor = colors.inputBorder ?? '#999';
+    const bgChecked = colors.primary ?? '#0d6efd';
+    const bgUnchecked = colors.card ?? '#FFFFFF';
+    const iconColor = colors.onPrimary ?? '#FFFFFF';
+    const textColor = colors.text;
+
     return (
-        <Pressable onPress={onToggle} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 32, marginTop: 6 }}>
-            <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#999', alignItems: 'center', justifyContent: 'center' }}>
-                {value ? <Ionicons name="checkmark" size={16} color="#0d6efd" /> : null}
+        <Pressable
+            onPress={disabled ? undefined : onToggle}
+            style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                height: 32,
+                marginTop: 6,
+                opacity: disabled ? 0.6 : 1,
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ disabled, checked: value }}
+        >
+            <View
+                style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    borderWidth: 1,
+                    borderColor,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: value ? bgChecked : bgUnchecked,
+                }}
+            >
+                {value ? <Ionicons name="checkmark" size={16} color={iconColor} /> : null}
             </View>
-            <Text>{label}</Text>
+            <Text style={[{ color: textColor }, labelStyle]}>{label}</Text>
         </Pressable>
     );
 }
@@ -1076,7 +1169,7 @@ function ColumnsEditor({
                         >
                             {c.required ? <Ionicons name="checkmark" size={16} color={colors.primary} /> : null}
                         </Pressable>
-                        <Text>Requerida</Text>
+                        <Text style={g.text.secondary}>Requerida</Text>
                     </View>
 
                     <View style={{ marginTop: 6 }}>
